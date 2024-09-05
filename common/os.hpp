@@ -6,39 +6,39 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
-namespace tom::os {
+namespace scuff::os {
 
 [[nodiscard]] static
 auto get_process_id() -> int {
 	return GetCurrentProcessId();
 }
 
-} // tom::os
+} // scuff::os
 
 #elif defined(__APPLE__)
 
 #include <unistd.h>
 
-namespace tom::os {
+namespace scuff::os {
 
 [[nodiscard]] static
 auto get_process_id() -> int {
 	return getpid();
 }
 
-} // tom::os
+} // scuff::os
 
 #elif defined(__linux__)
 
 #include <unistd.h>
 
-namespace tom::os {
+namespace scuff::os {
 
 [[nodiscard]] static
 auto get_process_id() -> int {
 	return getpid();
 }
 
-} // tom::os
+} // scuff::os
 
 #endif

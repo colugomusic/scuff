@@ -4,7 +4,7 @@
 #include <limits>
 #include <string>
 
-namespace tom::idx {
+namespace scuff::idx {
 
 static constexpr auto INVALID = std::numeric_limits<size_t>::max();
 
@@ -14,9 +14,9 @@ struct param {
 	[[nodiscard]] auto operator<=>(const param& rhs) const = default;
 };
 
-} // tom::idx
+} // scuff::idx
 
-namespace tom::id {
+namespace scuff::id {
 
 static constexpr auto INVALID = -1;
 
@@ -26,21 +26,21 @@ struct group    { int64_t value = INVALID; explicit operator bool() const { retu
 struct plugin   { int64_t value = INVALID; explicit operator bool() const { return value != INVALID; } auto operator<=>(const plugin& rhs) const = default; };
 struct plugfile { int64_t value = INVALID; explicit operator bool() const { return value != INVALID; } auto operator<=>(const plugfile& rhs) const = default; };
 
-} // tom::id
+} // scuff::id
 
-namespace tom::ext::id {
+namespace scuff::ext::id {
 
 struct param  { std::string value; [[nodiscard]] auto operator<=>(const param& rhs) const = default; };
 struct plugin { std::string value; [[nodiscard]] auto operator<=>(const plugin& rhs) const = default; };
 
-} // tom::ext::id
+} // scuff::ext::id
 
 namespace std {
 
-template <> struct hash<tom::id::device>   { size_t operator()(const tom::id::device& d) const { return std::hash<int64_t>{}(d.value); } };
-template <> struct hash<tom::id::group>    { size_t operator()(const tom::id::group& d) const { return std::hash<int64_t>{}(d.value); } };
-template <> struct hash<tom::id::plugfile> { size_t operator()(const tom::id::plugfile& d) const { return std::hash<int64_t>{}(d.value); } };
-template <> struct hash<tom::id::plugin>   { size_t operator()(const tom::id::plugin& d) const { return std::hash<int64_t>{}(d.value); } };
-template <> struct hash<tom::id::sandbox>  { size_t operator()(const tom::id::sandbox& d) const { return std::hash<int64_t>{}(d.value); } };
+template <> struct hash<scuff::id::device>   { size_t operator()(const scuff::id::device& d) const { return std::hash<int64_t>{}(d.value); } };
+template <> struct hash<scuff::id::group>    { size_t operator()(const scuff::id::group& d) const { return std::hash<int64_t>{}(d.value); } };
+template <> struct hash<scuff::id::plugfile> { size_t operator()(const scuff::id::plugfile& d) const { return std::hash<int64_t>{}(d.value); } };
+template <> struct hash<scuff::id::plugin>   { size_t operator()(const scuff::id::plugin& d) const { return std::hash<int64_t>{}(d.value); } };
+template <> struct hash<scuff::id::sandbox>  { size_t operator()(const scuff::id::sandbox& d) const { return std::hash<int64_t>{}(d.value); } };
 
 } // std

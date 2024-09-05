@@ -17,7 +17,7 @@
 namespace bc  = boost::container;
 namespace bip = boost::interprocess;
 
-namespace tom::shm {
+namespace scuff::shm {
 
 static constexpr auto OBJECT_AUDIO_IN          = "+audio+in";
 static constexpr auto OBJECT_AUDIO_OUT         = "+audio+out";
@@ -36,12 +36,12 @@ struct segment {
 };
 
 struct sbox_messages_in {
-	bc::static_vector<tom::msg::in::msg, 100> list;
+	bc::static_vector<scuff::msg::in::msg, 100> list;
 	bip::interprocess_mutex mutex;
 };
 
 struct sbox_messages_out {
-	bc::static_vector<tom::msg::out::msg, 100> list;
+	bc::static_vector<scuff::msg::out::msg, 100> list;
 	bip::interprocess_mutex mutex;
 };
 
@@ -80,7 +80,7 @@ struct item_buffer : segment {
 [[nodiscard]] static
 auto calc_item_buffer_seg_size(size_t capacity, size_t item_size) -> size_t {
 	size_t size = 0;
-	size += sizeof(tom::shm::buffer_cb);
+	size += sizeof(scuff::shm::buffer_cb);
 	size += capacity * sizeof(size_t);
 	size += capacity * item_size;
 	return size;
@@ -279,7 +279,7 @@ auto open(sandbox* sbox, std::string_view id) -> bool {
 }
 
 using audio_buffer = std::array<float, TOM_VECTOR_SIZE * TOM_CHANNEL_COUNT>;
-using event_buffer = bc::static_vector<tom::events::event, TOM_EVENT_PORT_SIZE>;
+using event_buffer = bc::static_vector<scuff::events::event, TOM_EVENT_PORT_SIZE>;
 
 struct device {
 	bip::managed_shared_memory seg;
@@ -348,4 +348,4 @@ private:
 	std::string id;
 };
 
-} // tom::shm
+} // scuff::shm

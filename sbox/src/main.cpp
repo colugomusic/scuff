@@ -85,83 +85,83 @@ auto destroy(sbox::app** app) -> void {
 }
 
 static
-auto process_input_msg_(const tom::msg::in::close_all_editors& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::close_all_editors& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::commit_changes& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::commit_changes& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::device_add& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::device_add& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::device_connect& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::device_connect& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::device_disconnect& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::device_disconnect& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::device_erase& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::device_erase& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::device_gui_hide& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::device_gui_hide& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::device_gui_show& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::device_gui_show& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::device_set_render_mode& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::device_set_render_mode& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::event& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::event& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::find_param& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::find_param& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::get_param_value& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::get_param_value& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::get_param_value_text& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::get_param_value_text& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg_(const tom::msg::in::set_sample_rate& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::set_sample_rate& msg) -> void {
 	// TODO:
 }
 
 static
-auto process_input_msg(const tom::msg::in::msg& msg) -> void {
+auto process_input_msg(const scuff::msg::in::msg& msg) -> void {
 	fast_visit([](const auto& msg) { process_input_msg_(msg); }, msg);
 }
 
 static
 auto update(sbox::app* app, const real64_t prtime, const real64_t ctime) -> void {
-	static std::vector<tom::msg::in::msg> input_msgs;
+	static std::vector<scuff::msg::in::msg> input_msgs;
 	input_msgs.clear();
 	shm::receive_input_messages(&input_msgs);
 	for (const auto& msg : input_msgs) {

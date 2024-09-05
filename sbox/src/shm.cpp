@@ -14,8 +14,8 @@ namespace bip = boost::interprocess;
 namespace sbox::shm {
 
 struct model {
-	tom::shm::group group;
-	tom::shm::sandbox sandbox;
+	scuff::shm::group group;
+	scuff::shm::sandbox sandbox;
 };
 
 static std::unique_ptr<model> M_;
@@ -23,10 +23,10 @@ static std::unique_ptr<model> M_;
 auto open(std::string_view group, std::string_view sandbox) -> bool {
 	try {
 		M_ = std::make_unique<model>();
-		if (!tom::shm::open(&M_->group, group)) {
+		if (!scuff::shm::open(&M_->group, group)) {
 			throw std::runtime_error(std::format("Failed to open shared memory segment: '{}'", group.data()));
 		}
-		if (!tom::shm::open(&M_->sandbox, sandbox)) {
+		if (!scuff::shm::open(&M_->sandbox, sandbox)) {
 			throw std::runtime_error(std::format("Failed to open shared memory segment: '{}'", sandbox.data()));
 		}
 	}
@@ -41,7 +41,7 @@ auto destroy() -> void {
 	M_.reset();
 }
 
-auto receive_input_messages(std::vector<tom::msg::in::msg>* msgs) -> void {
+auto receive_input_messages(std::vector<scuff::msg::in::msg>* msgs) -> void {
 	auto lock = std::unique_lock(M_->sandbox.msgs_in->mutex);
 	for (const auto& msg : M_->sandbox.msgs_in->list) {
 		msgs->push_back(msg);

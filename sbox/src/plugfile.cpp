@@ -44,7 +44,7 @@ struct file {
 
 struct model {
 	std::vector<file> files;
-	std::unordered_map<fs::path, tom::id::plugfile> lookup;
+	std::unordered_map<fs::path, scuff::id::plugfile> lookup;
 };
 
 static std::unique_ptr<model> M_;
@@ -80,7 +80,7 @@ auto load_dll(fs::path path) -> std::optional<boost::dll::shared_library> {
 }
 
 static
-auto set_error(tom::id::plugfile idx, std::string error) -> void {
+auto set_error(scuff::id::plugfile idx, std::string error) -> void {
 	M_->files[idx.value].error = plugfile::error{std::move(error)};
 }
 
@@ -116,7 +116,7 @@ auto could_maybe_be_a_vst2_file(const fs::path& path) -> bool {
 }
 
 static
-auto try_load_clap(tom::id::plugfile idx) -> void {
+auto try_load_clap(scuff::id::plugfile idx) -> void {
 	const auto& path = get_path(idx);
 	const auto dll   = load_dll(path);
 	if (!dll) {
@@ -141,17 +141,17 @@ auto try_load_clap(tom::id::plugfile idx) -> void {
 }
 
 static
-auto try_load_vst2(tom::id::plugfile idx) -> void {
+auto try_load_vst2(scuff::id::plugfile idx) -> void {
 	set_error(idx, "VST2 support is not implemented yet.");
 }
 
 static
-auto try_load_vst3(tom::id::plugfile idx) -> void {
+auto try_load_vst3(scuff::id::plugfile idx) -> void {
 	set_error(idx, "VST3 support is not implemented yet.");
 }
 
 static
-auto try_load(tom::id::plugfile idx) -> void {
+auto try_load(scuff::id::plugfile idx) -> void {
 	const auto& path = get_path(idx);
 	if (looks_like_a_clap_file(path)) {
 		try_load_clap(idx);
@@ -177,10 +177,10 @@ auto destroy() -> void {
 }
 
 [[nodiscard]] static
-auto add(const fs::path& path) -> tom::id::plugfile {
+auto add(const fs::path& path) -> scuff::id::plugfile {
 	// TODO:
 	return {};
-	//auto idx = tom::plugfile{M_->files.size()};
+	//auto idx = scuff::plugfile{M_->files.size()};
 	//M_->files.resize(idx.value + 1);
 	//M_->files[idx.value].path = path;
 	//try_load(idx);
@@ -188,13 +188,13 @@ auto add(const fs::path& path) -> tom::id::plugfile {
 }
 
 [[nodiscard]]
-auto get_path(tom::id::plugfile idx) -> const fs::path& {
+auto get_path(scuff::id::plugfile idx) -> const fs::path& {
 	// TODO:
 	return {};//M_->files[idx.value].path;
 }
 
 [[nodiscard]]
-auto find(const fs::path& path) -> tom::id::plugfile {
+auto find(const fs::path& path) -> scuff::id::plugfile {
 	if (const auto pos = M_->lookup.find(path); pos != M_->lookup.end()) {
 		return pos->second;
 	}

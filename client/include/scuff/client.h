@@ -2,6 +2,7 @@
 
 #include "../../../common/c_constants.h"
 #include "../../../common/c_events.h"
+#include "../../../common/c_render_mode.h"
 #include "../../../common/c_string_options.h"
 #include <stdint.h>
 
@@ -32,7 +33,6 @@ typedef const char* scuff_param_id;
 typedef const char* scuff_plugin_id;
 
 enum scuff_plugin_type { clap, vst };
-enum scuff_render_mode { realtime, offline };
 
 typedef struct scuff_audio_writer_t {
 	void* ctx;

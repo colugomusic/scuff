@@ -3,7 +3,7 @@
 #include "c_events.h"
 #include <variant>
 
-namespace tom::events {
+namespace scuff::events {
 
 using event = std::variant<
 	scuff_event_param_gesture_begin,
@@ -11,4 +11,4 @@ using event = std::variant<
 	scuff_event_param_value
 >;
 
-} // tom::events
+} // scuff::events
