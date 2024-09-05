@@ -19,7 +19,7 @@ Here is the interface of the client library in its current state: [client/includ
 An instance of a CLAP or VST plugin. A device can be connected to other devices, even if they are in different processes, as long as they exist within the same **sandbox group**.
 
 ### Sandbox
-A process consisting of one or more **devices**. The hairy problem of communicating with the sandbox processes is encapsulated by the client library. A sandbox always part of a **sandbox group**.
+A process consisting of one or more **devices**. The hairy problem of communicating with the sandbox processes is encapsulated by the client library. A sandbox is always part of a **sandbox group**.
 
 ### Sandbox Group
 A collection of sandboxes which can be processed as a group. Audio and event data can flow between sandboxes within the same group.
