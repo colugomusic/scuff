@@ -36,11 +36,13 @@ enum scuff_plugin_type { clap, vst };
 
 typedef struct scuff_audio_writer_t {
 	void* ctx;
+	size_t port_index;
 	void (*fn)(const struct scuff_audio_writer_t* ctx, float* floats);
 } scuff_audio_writer;
 
 typedef struct scuff_audio_reader_t {
 	void* ctx;
+	size_t port_index;
 	void (*fn)(const struct scuff_audio_reader_t* ctx, const float* floats);
 } scuff_audio_reader;
 
@@ -55,21 +57,17 @@ typedef struct scuff_event_reader_t {
 	void (*push)(const struct scuff_event_reader_t* ctx, const scuff_event_header* event);
 } scuff_event_reader;
 
-typedef struct scuff_audio_input_port_t  { scuff_device dev; size_t port_index; scuff_audio_writer writer; } scuff_audio_input_port;
-typedef struct scuff_audio_output_port_t { scuff_device dev; size_t port_index; scuff_audio_reader reader; } scuff_audio_output_port;
-typedef struct scuff_event_input_port_t  { scuff_device dev; scuff_event_writer writer; } scuff_event_input_port;
-typedef struct scuff_event_output_port_t { scuff_device dev; scuff_event_reader reader; } scuff_event_output_port;
+typedef struct scuff_audio_writers_t  { size_t count; const scuff_audio_writer* writers; } scuff_audio_writers; 
+typedef struct scuff_audio_readers_t  { size_t count; const scuff_audio_reader* readers; } scuff_audio_readers; 
+typedef struct scuff_input_device_t   { scuff_device dev; scuff_audio_writers audio_writers; scuff_event_writer event_writer; } scuff_input_device;
+typedef struct scuff_output_device_t  { scuff_device dev; scuff_audio_readers audio_readers; scuff_event_reader event_reader; } scuff_output_device;
+typedef struct scuff_input_devices_t  { size_t count; const scuff_input_device* devices; } scuff_input_devices;
+typedef struct scuff_output_devices_t { size_t count; const scuff_output_device* devices; } scuff_output_devices;
 
 typedef struct scuff_group_process_t {
 	scuff_group group;
-	const scuff_audio_input_port* input_audio_ports;
-	const scuff_audio_output_port* output_audio_ports;
-	const scuff_event_input_port_t* input_events;
-	const scuff_event_output_port_t* output_events;
-	size_t audio_input_ports_count;
-	size_t audio_output_ports_count;
-	size_t event_input_ports_count;
-	size_t event_output_ports_count;
+	scuff_input_devices input_devices;
+	scuff_output_devices output_devices;
 } scuff_group_process;
 
 typedef struct scuff_on_plugfile_scanned_t { void* ctx; void (*fn)(const struct scuff_on_plugfile_scanned_t* ctx, scuff_plugfile plugfile); } scuff_on_plugfile_scanned;
