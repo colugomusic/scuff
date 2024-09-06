@@ -142,6 +142,7 @@ struct data {
 	std::string                           instance_id;
 	std::string                           sandbox_exe_path;
 	scuff_callbacks                       callbacks;
+	std::jthread                          gc_thread;
 
 	// Copy of the model shared by non-audio threads. If a thread modifies
 	// the model in a way that affects the audio thread then it should publish
@@ -285,13 +286,14 @@ auto wait_for_output_ready(const scuff::group& group, size_t frontside) -> bool 
 		return cb->sandboxes_processing.value[frontside].load(std::memory_order_acquire) < 1;
 	};
 	if (ready()) {
-		return;
+		return true;
 	}
 	// Spin-wait until the sandboxes have finished processing.
 	// If a sandbox is misbehaving then this might time out
 	// and the buffer would be missed.
 	auto success = speen::wait_for_a_bit(ready);
 	assert (success && "Sandbox timed out");
+	return false;
 }
 
 static
@@ -371,6 +373,14 @@ auto signal_sandbox_processing(const scuff::group& group) -> void {
 	cb.epoch.store(epoch, std::memory_order_release);
 }
 
+static
+auto garbage_collector(std::stop_token stop_token) -> void {
+	while (!stop_token.stop_requested()) {
+		DATA_->published_model.garbage_collect();
+		std::this_thread::sleep_for(std::chrono::seconds(1));
+	}
+}
+
 } // scuff
 
 auto scuff_audio_process(scuff_group_process process) -> void {
@@ -393,12 +403,15 @@ auto scuff_init(const scuff_config* config) -> void {
 	scuff::DATA_->instance_id         = "scuff+" + std::to_string(scuff::os::get_process_id());
 	scuff::DATA_->sandbox_exe_path    = config->sandbox_exe_path;
 	scuff::DATA_->shm_strings_remover = {scuff::DATA_->shm_strings.id};
+	scuff::DATA_->gc_thread           = std::jthread{scuff::garbage_collector};
 	scuff::shm::create(&scuff::DATA_->shm_strings, scuff::DATA_->instance_id + "+string", config->string_options);
 	scuff::initialized_ = true;
 }
 
 auto scuff_shutdown() -> void {
 	if (!scuff::initialized_) { return; }
+	scuff::DATA_->gc_thread.request_stop();
+	scuff::DATA_->gc_thread.detach();
 	scuff::DATA_.reset();
 	scuff::initialized_ = false;
 }
