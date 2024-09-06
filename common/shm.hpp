@@ -23,8 +23,6 @@ static constexpr auto OBJECT_AUDIO_IN          = "+audio+in";
 static constexpr auto OBJECT_AUDIO_OUT         = "+audio+out";
 static constexpr auto OBJECT_EVENTS_IN         = "+events+in";
 static constexpr auto OBJECT_EVENTS_OUT        = "+events+out";
-static constexpr auto OBJECT_READY_EPOCH_IN    = "+epoch+in";
-static constexpr auto OBJECT_READY_EPOCH_OUT   = "+epoch+out";
 static constexpr auto OBJECT_CONTROL_BLOCK     = "+cb";
 static constexpr auto OBJECT_ITEMS             = "+items";
 static constexpr auto OBJECT_INDICES           = "+indices";
@@ -287,8 +285,6 @@ auto open(sandbox* sbox, std::string_view id) -> bool {
 
 using audio_buffer = std::array<float, TOM_VECTOR_SIZE * TOM_CHANNEL_COUNT>;
 using event_buffer = bc::static_vector<scuff::events::event, TOM_EVENT_PORT_SIZE>;
-
-struct atomic_epoch { std::atomic<uint64_t> value = 0; };
 
 struct device : segment {
 	ab<event_buffer>* events_in  = nullptr;
