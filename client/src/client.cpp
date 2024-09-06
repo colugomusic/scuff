@@ -140,6 +140,7 @@ struct data {
 	shm::string_buffer                    shm_strings;
 	shm::segment_remover                  shm_strings_remover;
 	std::string                           instance_id;
+	std::string                           sandbox_exe_path;
 	scuff_callbacks                       callbacks;
 
 	// Copy of the model shared by non-audio threads. If a thread modifies
@@ -387,11 +388,12 @@ auto scuff_audio_process(scuff_group_process process) -> void {
 
 auto scuff_init(const scuff_config* config) -> void {
 	if (scuff::initialized_) { return; }
-	scuff::DATA_ = std::make_unique<scuff::data>();
-	scuff::DATA_->callbacks   = config->callbacks;
-	scuff::DATA_->instance_id = "scuff+" + std::to_string(scuff::os::get_process_id());
-	scuff::shm::create(&scuff::DATA_->shm_strings, scuff::DATA_->instance_id + "+string", config->string_options);
+	scuff::DATA_                      = std::make_unique<scuff::data>();
+	scuff::DATA_->callbacks           = config->callbacks;
+	scuff::DATA_->instance_id         = "scuff+" + std::to_string(scuff::os::get_process_id());
+	scuff::DATA_->sandbox_exe_path    = config->sandbox_exe_path;
 	scuff::DATA_->shm_strings_remover = {scuff::DATA_->shm_strings.id};
+	scuff::shm::create(&scuff::DATA_->shm_strings, scuff::DATA_->instance_id + "+string", config->string_options);
 	scuff::initialized_ = true;
 }
 
@@ -624,14 +626,12 @@ auto scuff_sandbox_create(scuff_group group_id) -> scuff_sbox {
 		const auto& group          = m->groups.at({group_id});
 		const auto group_shmid     = group.external->shm.id;
 		const auto sandbox_shmid   = scuff::DATA_->instance_id + "+sbox+" + std::to_string(sbox.id.value);
-		const auto exe             = "scuff-sbox.exe";
 		const auto exe_args        = scuff::make_sbox_exe_args(group_shmid, sandbox_shmid);
 		sbox.group                 = {group_id};
 		sbox.external              = std::make_shared<scuff::sandbox_external>();
 		sbox.external->shm         = scuff::make_sandbox_shm(sandbox_shmid);
 		sbox.external->shm_remover = {sbox.external->shm.id};
-		// TODO: make sure shm processing flag is set back to false if the sandbox process crashes or exits.
-		sbox.external->proc        = std::make_unique<bp::child>(exe, exe_args);
+		sbox.external->proc        = std::make_unique<bp::child>(scuff::DATA_->sandbox_exe_path, exe_args);
 		// Add sandbox to group
 		*m = add_sandbox(std::move(*m), {group_id}, sbox.id);
 	}

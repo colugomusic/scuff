@@ -91,6 +91,7 @@ typedef struct scuff_callbacks_t {
 typedef struct scuff_config_t {
 	scuff_callbacks callbacks;
 	scuff_string_options string_options;
+	const char* sandbox_exe_path;
 } scuff_config;
 
 extern "C" {
