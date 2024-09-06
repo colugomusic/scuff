@@ -7,7 +7,7 @@ I am working on a cross-platform CLAP/VST audio plugin sandboxing system, design
 
 I've never done anything like this before so my ideas are all theoretical at the moment. If you have expertise in this area and want to help then please get in touch.
 
-I am targeting Windows, macOS and Linux. My immediate plan is to start by implementing CLAP support only and then add VST support later. I am planning to use [nsappgui](https://github.com/frang75/nappgui_src) to handle opening editor windows within the sandbox processes.
+I am targeting Windows, macOS and Linux. My immediate plan is to start by implementing CLAP support only and then add VST support later. I am planning to use [nappgui](https://github.com/frang75/nappgui_src) to handle opening editor windows within the sandbox processes.
 
 Here is a blog post about this project: https://www.patreon.com/posts/plugin-110821252
 
