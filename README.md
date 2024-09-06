@@ -23,3 +23,12 @@ A process consisting of one or more **devices**. The hairy problem of communicat
 
 ### Sandbox Group
 A collection of sandboxes which can be processed as a group. Audio and event data can flow between sandboxes within the same group.
+
+## Usage
+
+The idea is for this system to support any configuration of plugin sandboxing. For example, many DAWs will create a separate sandbox process per plugin instance, so if the plugin crashes then it doesn't affect anything else. Another option is to create one giant sandbox process containing every plugin instance, meaning if one plugin crashes then it takes down the entire sandbox, but doesn't take down the DAW. Between these two extremes are many other possible configurations, e.g.
+- One sandbox per track.
+- One sandbox per plugin (could be useful for plugins which can interact with other instances of the same plugin, but make the assumption that all instances are running in the same process.)
+- One sandbox per plugin developer.
+
+The system I am proposing will support all of these configurations and anything in between. In cases where data has to travel between devices that exist in different sandboxes, approximately one buffer of latency will be introduced per sandbox-switch. I think this will be an acceptable tradeoff in practice (and I assume this is what proprietary sandboxing systems do too). I need to actually finish writing this thing first to find out how well it performs.
