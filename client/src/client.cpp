@@ -374,10 +374,10 @@ auto signal_sandbox_processing(const scuff::group& group) -> void {
 }
 
 static
-auto garbage_collector(std::stop_token stop_token) -> void {
+auto garbage_collector(std::stop_token stop_token, size_t interval_ms) -> void {
 	while (!stop_token.stop_requested()) {
 		DATA_->published_model.garbage_collect();
-		std::this_thread::sleep_for(std::chrono::seconds(1));
+		std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
 	}
 }
 
@@ -403,7 +403,7 @@ auto scuff_init(const scuff_config* config) -> void {
 	scuff::DATA_->instance_id         = "scuff+" + std::to_string(scuff::os::get_process_id());
 	scuff::DATA_->sandbox_exe_path    = config->sandbox_exe_path;
 	scuff::DATA_->shm_strings_remover = {scuff::DATA_->shm_strings.id};
-	scuff::DATA_->gc_thread           = std::jthread{scuff::garbage_collector};
+	scuff::DATA_->gc_thread           = std::jthread{scuff::garbage_collector, config->gc_interval_ms};
 	scuff::shm::create(&scuff::DATA_->shm_strings, scuff::DATA_->instance_id + "+string", config->string_options);
 	scuff::initialized_ = true;
 }
