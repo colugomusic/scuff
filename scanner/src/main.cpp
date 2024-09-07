@@ -110,7 +110,7 @@ auto find_plugfiles(const std::filesystem::path& search_path) -> std::vector<plu
 
 static
 auto add(nlohmann::json* j, const plugfile& pf) -> void {
-	(*j)["plugfile_type"] = to_string(pf.type);
+	(*j)["plugfile-type"] = to_string(pf.type);
 	(*j)["path"]          = pf.path;
 }
 

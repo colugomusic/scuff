@@ -28,6 +28,7 @@ CPMAddPackage(NAME clog              GITHUB_REPOSITORY colugomusic/clog         
 CPMAddPackage(NAME cs_libguarded     GITHUB_REPOSITORY copperspice/cs_libguarded    GIT_TAG libguarded-1.4.1 DOWNLOAD_ONLY YES)
 CPMAddPackage(NAME ent               GITHUB_REPOSITORY colugomusic/ent              GIT_TAG main                              )
 CPMAddPackage(NAME immer             GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                            )
+CPMAddPackage(NAME json              GITHUB_REPOSITORY nlohmann/json                GIT_TAG v3.11.3                           )
 CPMAddPackage(NAME readerwriterqueue GITHUB_REPOSITORY cameron314/readerwriterqueue GIT_TAG v1.0.6                            )
 add_library(${PROJECT_NAME} STATIC ${src})
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -44,5 +45,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 	Boost::boost
 	ent
 	immer
+	nlohmann_json::nlohmann_json
 	readerwriterqueue
 )

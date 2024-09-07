@@ -14,6 +14,7 @@
 #include <immer/set.hpp>
 #include <immer/table.hpp>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <readerwriterqueue.h>
 #include <string>
 #include <variant>
@@ -120,9 +121,11 @@ struct plugfile {
 struct scanner_proc {
 	using uptr = std::unique_ptr<scanner_proc>;
 	basio::io_context io_context;
-	basio::streambuf buffer;
+	basio::streambuf stdout_buffer;
+	basio::streambuf stderr_buffer;
 	basio::steady_timer check_exit_timer{io_context, basio::chrono::seconds(1)};
-	bp::async_pipe pipe{io_context};
+	bp::async_pipe stderr_pipe{io_context};
+	bp::async_pipe stdout_pipe{io_context};
 	bp::child child;
 };
 
@@ -141,6 +144,7 @@ struct data {
 	shm::segment_remover                  shm_strings_remover;
 	std::string                           instance_id;
 	std::string                           sandbox_exe_path;
+	std::string                           scanner_exe_path;
 	scuff_callbacks                       callbacks;
 	std::jthread                          gc_thread;
 
@@ -235,7 +239,8 @@ auto make_scanner_exe_args(std::string_view id) -> std::vector<std::string> {
 static
 auto scanner_check_exit(scanner_proc* proc) -> void {
 	if (!proc->child.running()) {
-		// TODO: invoke a callback
+		DATA_->callbacks.on_scan_complete.fn(&DATA_->callbacks.on_scan_complete);
+		return;
 	}
 	// Check again later
 	proc->check_exit_timer.expires_after(basio::chrono::seconds(1));
@@ -246,24 +251,138 @@ auto scanner_check_exit(scanner_proc* proc) -> void {
 	});
 }
 
+template <typename ReadFn> static
+auto async_read_lines(scanner_proc* proc, bp::async_pipe& pipe, basio::streambuf& buffer, ReadFn&& read_fn) -> void {
+	auto wrapper_fn = [proc, read_fn = std::forward<ReadFn>(read_fn)](const bsys::error_code& ec, size_t bytes_transferred) {
+		read_fn(proc, ec, bytes_transferred);
+	};
+	basio::async_read_until(pipe, buffer, '\n', wrapper_fn);
+}
+
 static
-auto scanner_read_line(scanner_proc* proc, const bsys::error_code& ec, size_t bytes_transferred) -> void {
-	// TODO: read JSON description of plugin
+auto scanner_read_broken_plugfile(const nlohmann::json& j) -> void {
+	const std::string plugfile_type = j["plugfile-type"];
+	const std::string path          = j["path"];
+	const std::string error         = j["error"];
+	id::plugfile id = /*TODO*/{};
+	DATA_->callbacks.on_plugfile_broken.fn(&DATA_->callbacks.on_plugfile_broken, id.value);
+}
+
+static
+auto scanner_read_broken_plugin(const nlohmann::json& j) -> void {
+	const std::string plugfile_type = j["plugfile-type"];
+	const std::string path          = j["path"];
+	const std::string error         = j["error"];
+	if (plugfile_type == "clap") {
+		const std::string name    = j["name"];
+		const std::string id      = j["id"];
+		const std::string url     = j["url"];
+		const std::string vendor  = j["vendor"];
+		const std::string version = j["version"];
+		// TODO: 
+	}
+	id::plugin id = /*TODO*/{};
+	DATA_->callbacks.on_plugin_broken.fn(&DATA_->callbacks.on_plugin_broken, id.value);
+}
+
+static
+auto scanner_read_plugfile(const nlohmann::json& j) -> void {
+	const std::string plugfile_type = j["plugfile-type"];
+	const std::string path          = j["path"];
+	id::plugfile id = /*TODO*/{};
+	DATA_->callbacks.on_plugfile_scanned.fn(&DATA_->callbacks.on_plugfile_scanned, id.value);
+}
+
+static
+auto scanner_read_plugin(const nlohmann::json& j) -> void {
+	const std::string plugfile_type = j["plugfile-type"];
+	const std::string path          = j["path"];
+	if (plugfile_type == "clap") {
+		const std::string name    = j["name"];
+		const std::string id      = j["id"];
+		const std::string url     = j["url"];
+		const std::string vendor  = j["vendor"];
+		const std::string version = j["version"];
+		// TODO:
+	}
+	id::plugin id = /*TODO*/{};
+	DATA_->callbacks.on_plugin_scanned.fn(&DATA_->callbacks.on_plugin_scanned, id.value);
+}
+
+static
+auto scanner_read_error(const nlohmann::json& j) -> void {
+	const std::string type = j["type"];
+	if (type == "broken-plugfile") { scanner_read_broken_plugfile(j); return; }
+	if (type == "broken-plugin")   { scanner_read_broken_plugin(j); return; }
+}
+
+static
+auto scanner_read_output(const nlohmann::json& j) -> void {
+	const std::string type = j["type"];
+	if (type == "plugfile") { scanner_read_plugfile(j); return; }
+	if (type == "plugin")   { scanner_read_plugin(j); return; }
+}
+
+static
+auto report_scan_error(std::string_view err) -> void {
+	DATA_->callbacks.on_scan_error.fn(&DATA_->callbacks.on_scan_error, err.data());
+}
+
+static
+auto report_scan_exception(const std::exception& err) -> void {
+	report_scan_error(err.what());
+}
+
+static
+auto scanner_read_stderr_line(scanner_proc* proc, const bsys::error_code& ec, size_t bytes_transferred) -> void {
+	if (ec) {
+		// TODO: handle this
+		return;
+	}
+	std::istream is(&proc->stderr_buffer);
+	std::string line;
+	std::getline(is, line);
+	if (!line.empty()) {
+		try { scanner_read_error(nlohmann::json::parse(line)); }
+		catch (const std::exception& err) {
+			report_scan_exception(err);
+		}
+	}
+	// continue reading
+	async_read_lines(proc, proc->stderr_pipe, proc->stderr_buffer, scanner_read_stderr_line);
+}
+
+static
+auto scanner_read_stdout_line(scanner_proc* proc, const bsys::error_code& ec, size_t bytes_transferred) -> void {
+	if (ec) {
+		// TODO: handle this
+		return;
+	}
+	std::istream is(&proc->stdout_buffer);
+	std::string line;
+	std::getline(is, line);
+	if (!line.empty()) {
+		try { scanner_read_output(nlohmann::json::parse(line)); }
+		catch (const std::exception& err) {
+			report_scan_exception(err);
+		}
+	}
+	// continue reading
+	async_read_lines(proc, proc->stdout_pipe, proc->stdout_buffer, scanner_read_stdout_line);
 }
 
 static
 auto scanner_start() -> void {
 	const auto id       = DATA_->instance_id + "+scanner+" + std::to_string(id_gen_++);
-	const auto exe      = "scuff-scanner.exe";
+	const auto exe      = DATA_->scanner_exe_path;
 	const auto exe_args = make_scanner_exe_args(id);
 	auto proc              = std::make_unique<scanner_proc>();
-	proc->pipe             = bp::async_pipe(proc->io_context);
-	proc->child            = bp::child(exe, exe_args, bp::std_out > proc->pipe, proc->io_context);
+	proc->stderr_pipe      = bp::async_pipe(proc->io_context);
+	proc->stdout_pipe      = bp::async_pipe(proc->io_context);
+	proc->child            = bp::child(exe, exe_args, bp::std_err > proc->stderr_pipe, bp::std_out > proc->stdout_pipe, proc->io_context);
 	proc->check_exit_timer = basio::steady_timer(proc->io_context, basio::chrono::seconds(1));
-	basio::async_read_until(proc->pipe, proc->buffer, '\n',
-		[proc = proc.get()](const bsys::error_code& ec, size_t bytes_transferred) {
-			scanner_read_line(proc, ec, bytes_transferred);
-		});
+	async_read_lines(proc.get(), proc->stderr_pipe, proc->stderr_buffer, scanner_read_stderr_line);
+	async_read_lines(proc.get(), proc->stdout_pipe, proc->stdout_buffer, scanner_read_stdout_line);
 	scanner_check_exit(proc.get());
 	proc->io_context.run();
 	*DATA_->scanner.lock() = std::move(proc);
@@ -417,6 +536,7 @@ auto scuff_init(const scuff_config* config) -> void {
 	scuff::DATA_->callbacks           = config->callbacks;
 	scuff::DATA_->instance_id         = "scuff+" + std::to_string(scuff::os::get_process_id());
 	scuff::DATA_->sandbox_exe_path    = config->sandbox_exe_path;
+	scuff::DATA_->scanner_exe_path    = config->scanner_exe_path;
 	scuff::DATA_->shm_strings_remover = {scuff::DATA_->shm_strings.id};
 	scuff::DATA_->gc_thread           = std::jthread{scuff::garbage_collector, config->gc_interval_ms};
 	scuff::shm::create(&scuff::DATA_->shm_strings, scuff::DATA_->instance_id + "+string", config->string_options);

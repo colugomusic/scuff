@@ -32,7 +32,7 @@ typedef const char* scuff_param_id;
 // A plugin string id.
 typedef const char* scuff_plugin_id;
 
-enum scuff_plugin_type { clap, vst };
+enum scuff_plugin_type { clap, vst2, vst3 };
 
 typedef struct scuff_audio_writer_t {
 	void* ctx;
@@ -70,28 +70,35 @@ typedef struct scuff_group_process_t {
 	scuff_output_devices output_devices;
 } scuff_group_process;
 
+typedef struct scuff_on_plugfile_broken_t  { void* ctx; void (*fn)(const struct scuff_on_plugfile_broken_t* ctx, scuff_plugfile plugfile); } scuff_on_plugfile_broken;
 typedef struct scuff_on_plugfile_scanned_t { void* ctx; void (*fn)(const struct scuff_on_plugfile_scanned_t* ctx, scuff_plugfile plugfile); } scuff_on_plugfile_scanned;
+typedef struct scuff_on_plugin_broken_t    { void* ctx; void (*fn)(const struct scuff_on_plugin_broken_t* ctx, scuff_plugin plugin); } scuff_on_plugin_broken;
 typedef struct scuff_on_plugin_scanned_t   { void* ctx; void (*fn)(const struct scuff_on_plugin_scanned_t* ctx, scuff_plugin plugin); } scuff_on_plugin_scanned;
 typedef struct scuff_on_sbox_crashed_t     { void* ctx; void (*fn)(const struct scuff_on_sbox_crashed_t* ctx, scuff_sbox sbox); } scuff_on_sbox_crashed;
 typedef struct scuff_on_sbox_started_t     { void* ctx; void (*fn)(const struct scuff_on_sbox_started_t* ctx, scuff_sbox sbox); } scuff_on_sbox_started;
 typedef struct scuff_on_scan_complete_t    { void* ctx; void (*fn)(const struct scuff_on_scan_complete_t* ctx); } scuff_on_scan_complete;
+typedef struct scuff_on_scan_error_t       { void* ctx; void (*fn)(const struct scuff_on_scan_error_t* ctx, const char* error); } scuff_on_scan_error;
 typedef struct scuff_return_device_t       { void* ctx; void (*fn)(const struct scuff_return_device_t* ctx, scuff_device dev); } scuff_return_device; 
 typedef struct scuff_return_double_t       { void* ctx; void (*fn)(const struct scuff_return_double_t* ctx, double value); } scuff_return_double;
 typedef struct scuff_return_param_t        { void* ctx; void (*fn)(const struct scuff_return_param_t* ctx, scuff_param param); } scuff_return_param;
 typedef struct scuff_return_string_t       { void* ctx; void (*fn)(const struct scuff_return_string_t* ctx, const char* text); } scuff_return_string; 
 
 typedef struct scuff_callbacks_t {
+	scuff_on_plugfile_broken on_plugfile_broken;
 	scuff_on_plugfile_scanned on_plugfile_scanned;
+	scuff_on_plugin_broken on_plugin_broken;
 	scuff_on_plugin_scanned on_plugin_scanned;
 	scuff_on_sbox_crashed on_sbox_crashed;
 	scuff_on_sbox_started on_sbox_started;
 	scuff_on_scan_complete on_scan_complete;
+	scuff_on_scan_error on_scan_error;
 } scuff_callbacks;
 
 typedef struct scuff_config_t {
 	scuff_callbacks callbacks;
 	scuff_string_options string_options;
 	const char* sandbox_exe_path;
+	const char* scanner_exe_path;
 	size_t gc_interval_ms;
 } scuff_config;
 
