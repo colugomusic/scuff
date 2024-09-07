@@ -1,6 +1,7 @@
 #pragma once
 
 #include <clap/entry.h>
+#include <cstdio>
 #include <filesystem>
 #include <vector>
 
@@ -13,6 +14,8 @@ namespace os {
 [[nodiscard]] auto get_system_search_paths() -> std::vector<std::filesystem::path>;
 [[nodiscard]] auto is_clap_file(const std::filesystem::path& path) -> bool;
 [[nodiscard]] auto is_vst3_file(const std::filesystem::path& path) -> bool;
+[[nodiscard]] auto redirect_stream(FILE* stream) -> int;
+[[nodiscard]] auto restore_stream(FILE* stream, int old) -> void;
 
 } // os
 } // scanner

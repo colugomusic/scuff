@@ -1,5 +1,6 @@
 #include "os.hpp"
 #include <dlfcn.h>
+#include <unistd.h>
 
 namespace scanner {
 namespace os {
@@ -32,6 +33,24 @@ auto is_clap_file(const std::filesystem::path& path) -> bool {
 
 auto is_vst3_file(const std::filesystem::path& path) -> bool {
 	return util::has_extension_case_insensitive(path, VST3_EXT);
+}
+
+auto redirect_stream(FILE* stream) -> int {
+	fflush(stream);
+	// Save the current stdout
+	const auto old = dup(fileno(stream));
+	// Redirect stdout to /dev/null on Unix-like systems
+	FILE* null_file = freopen("/dev/null", "w", stream);
+	return old;
+}
+
+auto restore_stream(FILE* stream, int old) -> void {
+	if (old != -1) {
+		fflush(stream);
+		// Restore the original stdout on Unix-like systems
+		dup2(old, fileno(stream));
+		close(old);
+	}
 }
 
 } // os

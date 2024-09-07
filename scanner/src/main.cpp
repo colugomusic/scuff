@@ -11,6 +11,27 @@ namespace scanner {
 
 enum class plugfile_type { unknown, clap, possible_vst2, vst3 };
 
+template <typename ClassType, typename T, typename... Args>
+concept IsMemberFn = requires(ClassType obj, T t, Args... args) {
+	(obj.*t)(args...);
+};
+
+struct stream_redirector {
+	stream_redirector(FILE* stream) : stream{stream}, old{os::redirect_stream(stream)} {}
+	~stream_redirector() { os::restore_stream(stream, old); }
+	template <typename ClassType, typename Fn, typename... Args>
+	requires IsMemberFn<ClassType, Fn, Args...>
+	static
+	auto invoke(ClassType&& obj, Fn&& fn, Args&&... args) -> decltype(auto) {
+		stream_redirector redirect_stdout{stdout};
+		stream_redirector redirect_stderr{stderr};
+		return (obj.*fn)(args...);
+	}
+private:
+	FILE* stream;
+	int old;
+};
+
 struct plugfile {
 	plugfile_type type;
 	std::filesystem::path path;
@@ -185,17 +206,17 @@ auto scan_clap_plugin(const plugfile& pf, const clap_plugin_factory_t& factory, 
 	host.url              = "https://github.com/colugomusic/scuff";
 	host.vendor           = "Moron Enterprises";
 	host.version          = "0.0.0";
-	const auto device = factory.create_plugin(&factory, &host, desc->id);
+	const auto device = stream_redirector::invoke(factory, &clap_plugin_factory_t::create_plugin, &factory, &host, desc->id);
 	if (!device) {
 		report_broken_plugin(pf, *desc, "clap_plugin_factory.create_plugin failed");
 		return;
 	}
-	if (!device->init(device)) {
+	if (!stream_redirector::invoke(*device, &clap_plugin_t::init, device)) {
 		report_broken_plugin(pf, *desc, "clap_plugin.init failed");
 		device->destroy(device);
 		return;
 	}
-	if (!device->activate(device, 48000, 32, 4096)) {
+	if (!stream_redirector::invoke(*device, &clap_plugin_t::activate, device, 48000, 32, 4096)) {
 		report_broken_plugin(pf, *desc, "clap_plugin.activate failed");
 		device->destroy(device);
 		return;

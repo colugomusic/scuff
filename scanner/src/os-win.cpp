@@ -2,6 +2,7 @@
 #include "os.hpp"
 #include "util.hpp"
 #include <flux.hpp>
+#include <io.h>
 #include <optional>
 #include <ShlObj.h>
 
@@ -52,6 +53,25 @@ auto is_clap_file(const std::filesystem::path& path) -> bool {
 
 auto is_vst3_file(const std::filesystem::path& path) -> bool {
 	return util::has_extension_case_insensitive(path, VST3_EXT);
+}
+
+auto redirect_stream(FILE* stream) -> int {
+	fflush(stream);
+	// Save the current stdout
+	const auto old = _dup(_fileno(stream));
+	// Redirect stdout to NUL on Windows
+	FILE* null_file = nullptr;
+	freopen_s(&null_file, "NUL", "w", stream);
+	return old;
+}
+
+auto restore_stream(FILE* stream, int old) -> void {
+	if (old != -1) {
+		fflush(stream);
+		// Restore the original stdout on Windows
+		_dup2(old, _fileno(stream));
+		_close(old);
+	}
 }
 
 } // os
