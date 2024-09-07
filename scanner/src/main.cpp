@@ -47,7 +47,7 @@ auto to_string(plugfile_type type) -> std::string {
 	switch (type) {
 		case plugfile_type::clap:          { return "clap"; }
 		case plugfile_type::vst3:          { return "vst3"; }
-		case plugfile_type::possible_vst2: { return "possible_vst2"; }
+		case plugfile_type::possible_vst2: { return "possible-vst2"; }
 		default:                           { return "unknown"; }
 	}
 }
@@ -89,15 +89,9 @@ auto get_plugfile_search_paths(const options& opts) -> std::vector<std::filesyst
 
 [[nodiscard]] static
 auto to_plugfile(const std::filesystem::path& path) -> std::optional<plugfile> {
-	if (os::is_clap_file(path)) {
-		return plugfile{plugfile_type::clap, path};
-	}
-	if (os::is_vst3_file(path)) {
-		return plugfile{plugfile_type::vst3, path};
-	}
-	if (os::could_be_a_vst2_file(path)) {
-		return plugfile{plugfile_type::possible_vst2, path};
-	}
+	if (os::is_clap_file(path))         { return plugfile{plugfile_type::clap, path}; }
+	if (os::is_vst3_file(path))         { return plugfile{plugfile_type::vst3, path}; }
+	if (os::could_be_a_vst2_file(path)) { return plugfile{plugfile_type::possible_vst2, path}; }
 	return std::nullopt;
 }
 
