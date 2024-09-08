@@ -9,7 +9,6 @@ endif()
 list (APPEND src
 	src/constants.hpp
 	src/main.cpp
-	src/os.cpp
 	src/os.hpp
 	src/util.cpp
 	src/util.hpp
@@ -34,4 +33,8 @@ target_link_libraries(scuff-scanner
 	cxxopts::cxxopts
 	flux::flux
 	nlohmann_json::nlohmann_json
+)
+target_compile_options(scuff-scanner PRIVATE
+	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror>
+	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )

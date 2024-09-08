@@ -1,6 +1,7 @@
 #include "constants.hpp"
 #include "os.hpp"
 #include "util.hpp"
+#include <flux.hpp>
 #include <io.h>
 #include <optional>
 #include <ShlObj.h>
@@ -29,6 +30,19 @@ auto find_clap_entry(const std::filesystem::path& path) -> const clap_plugin_ent
 		return reinterpret_cast<clap_plugin_entry_t*>(GetProcAddress(lib, "clap_entry"));
 	}
 	return nullptr;
+}
+
+auto get_env_search_paths(char path_delimiter) -> std::vector<std::filesystem::path> {
+	char* p = nullptr;
+	size_t len = 0;
+	if (_dupenv_s(&p, &len, "CLAP_PATH") == 0 && p != nullptr) {
+		auto paths = flux::from(std::string(p))
+			.split_string(path_delimiter)
+			.to<std::vector<std::filesystem::path>>();
+		free(p);
+		return paths;
+	}
+	return {};
 }
 
 auto get_system_search_paths() -> std::vector<std::filesystem::path> {

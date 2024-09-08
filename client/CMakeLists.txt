@@ -16,7 +16,7 @@ list (APPEND src
 	include/scuff/client.h
 	src/client.cpp
 )
-set(BOOST_LIBS_OPTIONAL header filesystem CACHE STRING "Boost libraries to be compiled" FORCE)
+set(BOOST_LIBS_OPTIONAL header filesystem system regex CACHE STRING "Boost libraries to be compiled" FORCE)
 set(immer_BUILD_TESTS OFF)
 set(immer_BUILD_EXAMPLES OFF)
 set(immer_BUILD_DOCS OFF)
@@ -37,19 +37,26 @@ set_target_properties(scuff-client PROPERTIES
 )
 target_include_directories(scuff-client INTERFACE
 	include
+	${CMAKE_CURRENT_LIST_DIR}/../common
 )
 target_include_directories(scuff-client PRIVATE
 	include/scuff
 	${clap_SOURCE_DIR}/include
 	${clog_SOURCE_DIR}/include
 	${CMAKE_CURRENT_LIST_DIR}/..
+	${CMAKE_CURRENT_LIST_DIR}/../common
 	${cs_libguarded_SOURCE_DIR}/src
 )
 target_link_libraries(scuff-client PUBLIC
 	Boost::boost
 	Boost::filesystem
+	Boost::regex
 	ent
 	immer
 	nlohmann_json::nlohmann_json
 	readerwriterqueue
+)
+target_compile_options(scuff-client PRIVATE
+	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror>
+	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )

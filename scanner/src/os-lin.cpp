@@ -16,6 +16,15 @@ auto find_clap_entry(const std::filesystem::path& path) -> const clap_plugin_ent
 	return nullptr;
 }
 
+auto get_env_search_paths(char path_delimiter) -> std::vector<std::filesystem::path> {
+	if (auto p = getenv("CLAP_PATH")) {
+		return flux::from(std::string(p))
+			.split_string(path_delimiter)
+			.to<std::vector<std::filesystem::path>>();
+	}
+	return {};
+}
+
 auto get_system_search_paths() -> std::vector<std::filesystem::path> {
 	std::vector<std::filesystem::path> paths;
 	paths.push_back("/usr/lib/clap");

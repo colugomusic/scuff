@@ -24,7 +24,7 @@ set(BOOST_LIBS_OPTIONAL
 CPMAddPackage(NAME boost-cmake GITHUB_REPOSITORY colugomusic/boost-cmake GIT_TAG master)
 CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap         GIT_TAG c2c1dea DOWNLOAD_ONLY YES)
 CPMAddPackage(NAME ent         GITHUB_REPOSITORY colugomusic/ent         GIT_TAG main)
-CPMAddPackage(NAME nappgui     GITHUB_REPOSITORY frang75/nappgui_src     GIT_TAG dcbdbcd OPTIONS "NAPPGUI_DEMO OFF" "NAPPGUI_WEB OFF")
+CPMAddPackage(NAME nappgui     GITHUB_REPOSITORY frang75/nappgui_src     GIT_TAG v1.4.2 OPTIONS "NAPPGUI_DEMO OFF" "NAPPGUI_WEB OFF")
 set(NAPPGUI_ROOT_PATH ${nappgui_SOURCE_DIR})
 nap_generate_tools()
 nap_desktop_app(scuff-sbox osapp NRC_EMBEDDED)
@@ -37,4 +37,8 @@ target_link_libraries(scuff-sbox
 	Boost::boost
 	ent
 	${NAPPGUI_LIBRARIES}
+)
+target_compile_options(scuff-sbox PRIVATE
+	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror>
+	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )

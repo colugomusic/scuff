@@ -1,9 +1,10 @@
 #pragma once
 
-#include "../../../common/c_constants.h"
-#include "../../../common/c_events.h"
-#include "../../../common/c_render_mode.h"
-#include "../../../common/c_string_options.h"
+#include "c_constants.h"
+#include "c_events.h"
+#include "c_render_mode.h"
+#include "c_string_options.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 typedef double      scuff_sample_rate;
@@ -102,7 +103,9 @@ typedef struct scuff_config_t {
 	size_t gc_interval_ms;
 } scuff_config;
 
+#ifdef __cplusplus
 extern "C" {
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // Audio thread
@@ -124,10 +127,10 @@ void            scuff_init(const scuff_config* config);
 
 // Call this when you're done with the sandboxing system.
 // Don't call anything else after this.
-void            scuff_shutdown();
+void            scuff_shutdown(void);
 
 // Close all editor windows.
-void            scuff_close_all_editors();
+void            scuff_close_all_editors(void);
 
 // Connect the audio output of one device to the audio input of another device.
 // The devices don't have to belong to the same sandbox - the connections are allowed to
@@ -189,7 +192,7 @@ bool            scuff_device_was_loaded_successfully(scuff_device dev);
 // Create a new group.
 // - Every sandbox has to belong to a group.
 // - This is what allows data to travel between sandboxes.
-scuff_group     scuff_group_create();
+scuff_group     scuff_group_create(void);
 
 // Erase a group.
 // It's OK to do this while the audio thread is processing. The group will be
@@ -213,7 +216,7 @@ const char*     scuff_sandbox_get_error(scuff_sbox sbox);
 bool            scuff_is_running(scuff_sbox sbox);
 
 // Return true if the plugin scanner process is currently running.
-bool            scuff_is_scanning();
+bool            scuff_is_scanning(void);
 
 // Find the parameter with the given id asynchronously.
 // When the result is ready, call the given function with it.
@@ -259,7 +262,7 @@ void            scuff_restart(scuff_sbox sbox);
 
 // Scan the system for plugins. If the scanner process is already
 // running, it is restarted.
-void            scuff_scan();
+void            scuff_scan(void);
 
 // Find a scanned plugin with the given string ID.
 scuff_plugin    scuff_plugin_find(scuff_plugin_id plugin_id);
@@ -267,4 +270,6 @@ scuff_plugin    scuff_plugin_find(scuff_plugin_id plugin_id);
 // Set the sample rate for all devices.
 void            scuff_set_sample_rate(scuff_sample_rate sr);
 
+#ifdef __cplusplus
 } // extern "C"
+#endif

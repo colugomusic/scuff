@@ -118,8 +118,15 @@ struct plugfile {
 	immer::box<std::string> path;
 };
 
+struct model {
+	immer::table<device> devices;
+	immer::table<group> groups;
+	immer::table<plugfile> plugfiles;
+	immer::table<plugin> plugins;
+	immer::table<sandbox> sandboxes;
+};
+
 struct scanner_proc {
-	using uptr = std::unique_ptr<scanner_proc>;
 	basio::io_context io_context;
 	basio::streambuf stdout_buffer;
 	basio::streambuf stderr_buffer;
@@ -129,17 +136,8 @@ struct scanner_proc {
 	bp::child child;
 };
 
-struct model {
-	immer::table<device> devices;
-	immer::table<group> groups;
-	immer::table<plugfile> plugfiles;
-	immer::table<plugin> plugins;
-	immer::table<sandbox> sandboxes;
-};
-
 // DATA /////////////////////////////////////////////////////////////////////
 struct data {
-	lg::plain_guarded<scanner_proc::uptr> scanner;
 	shm::string_buffer                    shm_strings;
 	shm::segment_remover                  shm_strings_remover;
 	std::string                           instance_id;
@@ -147,6 +145,7 @@ struct data {
 	std::string                           scanner_exe_path;
 	scuff_callbacks                       callbacks;
 	std::jthread                          gc_thread;
+	std::jthread                          scanner_thread;
 
 	// Copy of the model shared by non-audio threads. If a thread modifies
 	// the model in a way that affects the audio thread then it should publish
@@ -230,26 +229,24 @@ auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id) 
 }
 
 [[nodiscard]] static
-auto make_scanner_exe_args(std::string_view id) -> std::vector<std::string> {
-	std::vector<std::string> args;
-	args.push_back(std::string("--id ") + id.data());
-	return args;
+auto make_scanner_exe_args_for_plugin_listing() -> std::vector<std::string> {
+	return {};
 }
 
-static
-auto scanner_check_exit(scanner_proc* proc) -> void {
-	if (!proc->child.running()) {
-		DATA_->callbacks.on_scan_complete.fn(&DATA_->callbacks.on_scan_complete);
-		return;
-	}
-	// Check again later
-	proc->check_exit_timer.expires_after(basio::chrono::seconds(1));
-	proc->check_exit_timer.async_wait([proc](const bsys::error_code& ec) {
-		if (!ec) {
-			scanner_check_exit(proc);
-		}
-	});
-}
+//static
+//auto scanner_check_exit(scanner_proc* proc) -> void {
+//	if (!proc->child.running()) {
+//		DATA_->callbacks.on_scan_complete.fn(&DATA_->callbacks.on_scan_complete);
+//		return;
+//	}
+//	// Check again later
+//	proc->check_exit_timer.expires_after(basio::chrono::seconds(1));
+//	proc->check_exit_timer.async_wait([proc](const bsys::error_code& ec) {
+//		if (!ec) {
+//			scanner_check_exit(proc);
+//		}
+//	});
+//}
 
 template <typename ReadFn> static
 auto async_read_lines(scanner_proc* proc, bp::async_pipe& pipe, basio::streambuf& buffer, ReadFn&& read_fn) -> void {
@@ -264,8 +261,12 @@ auto scanner_read_broken_plugfile(const nlohmann::json& j) -> void {
 	const std::string plugfile_type = j["plugfile-type"];
 	const std::string path          = j["path"];
 	const std::string error         = j["error"];
-	id::plugfile id = /*TODO*/{};
-	DATA_->callbacks.on_plugfile_broken.fn(&DATA_->callbacks.on_plugfile_broken, id.value);
+	scuff::plugfile pf;
+	pf.id   = id::plugfile{id_gen_++};
+	pf.path = path;
+	const auto model = DATA_->working_model.lock();
+	model->plugfiles = model->plugfiles.insert(pf);
+	DATA_->callbacks.on_plugfile_broken.fn(&DATA_->callbacks.on_plugfile_broken, pf.id.value);
 }
 
 static
@@ -279,18 +280,28 @@ auto scanner_read_broken_plugin(const nlohmann::json& j) -> void {
 		const std::string url     = j["url"];
 		const std::string vendor  = j["vendor"];
 		const std::string version = j["version"];
-		// TODO: 
+		scuff::plugin plugin;
+		plugin.id      = id::plugin{id_gen_++};
+		plugin.ext_id  = ext::id::plugin{id};
+		plugin.name    = name;
+		plugin.vendor  = vendor;
+		plugin.version = version;
+		const auto model = DATA_->working_model.lock();
+		model->plugins = model->plugins.insert(plugin);
+		DATA_->callbacks.on_plugin_broken.fn(&DATA_->callbacks.on_plugin_broken, plugin.id.value);
 	}
-	id::plugin id = /*TODO*/{};
-	DATA_->callbacks.on_plugin_broken.fn(&DATA_->callbacks.on_plugin_broken, id.value);
 }
 
 static
 auto scanner_read_plugfile(const nlohmann::json& j) -> void {
 	const std::string plugfile_type = j["plugfile-type"];
 	const std::string path          = j["path"];
-	id::plugfile id = /*TODO*/{};
-	DATA_->callbacks.on_plugfile_scanned.fn(&DATA_->callbacks.on_plugfile_scanned, id.value);
+	plugfile pf;
+	pf.id   = id::plugfile{id_gen_++};
+	pf.path = path;
+	const auto model = DATA_->working_model.lock();
+	model->plugfiles = model->plugfiles.insert(pf);
+	DATA_->callbacks.on_plugfile_scanned.fn(&DATA_->callbacks.on_plugfile_scanned, pf.id.value);
 }
 
 static
@@ -303,10 +314,16 @@ auto scanner_read_plugin(const nlohmann::json& j) -> void {
 		const std::string url     = j["url"];
 		const std::string vendor  = j["vendor"];
 		const std::string version = j["version"];
-		// TODO:
+		scuff::plugin plugin;
+		plugin.id      = id::plugin{id_gen_++};
+		plugin.ext_id  = ext::id::plugin{id};
+		plugin.name    = name;
+		plugin.vendor  = vendor;
+		plugin.version = version;
+		const auto model = DATA_->working_model.lock();
+		model->plugins = model->plugins.insert(plugin);
+		DATA_->callbacks.on_plugin_scanned.fn(&DATA_->callbacks.on_plugin_scanned, plugin.id.value);
 	}
-	id::plugin id = /*TODO*/{};
-	DATA_->callbacks.on_plugin_scanned.fn(&DATA_->callbacks.on_plugin_scanned, id.value);
 }
 
 static
@@ -372,31 +389,33 @@ auto scanner_read_stdout_line(scanner_proc* proc, const bsys::error_code& ec, si
 }
 
 static
-auto scanner_start() -> void {
-	const auto id       = DATA_->instance_id + "+scanner+" + std::to_string(id_gen_++);
+auto scanner_thread() -> void {
 	const auto exe      = DATA_->scanner_exe_path;
-	const auto exe_args = make_scanner_exe_args(id);
-	auto proc              = std::make_unique<scanner_proc>();
-	proc->stderr_pipe      = bp::async_pipe(proc->io_context);
-	proc->stdout_pipe      = bp::async_pipe(proc->io_context);
-	proc->child            = bp::child(exe, exe_args, bp::std_err > proc->stderr_pipe, bp::std_out > proc->stdout_pipe, proc->io_context);
-	proc->check_exit_timer = basio::steady_timer(proc->io_context, basio::chrono::seconds(1));
-	async_read_lines(proc.get(), proc->stderr_pipe, proc->stderr_buffer, scanner_read_stderr_line);
-	async_read_lines(proc.get(), proc->stdout_pipe, proc->stdout_buffer, scanner_read_stdout_line);
-	scanner_check_exit(proc.get());
-	proc->io_context.run();
-	*DATA_->scanner.lock() = std::move(proc);
+	const auto exe_args = make_scanner_exe_args_for_plugin_listing();
+	if (!(std::filesystem::exists(exe) && std::filesystem::is_regular_file(exe))) {
+		const auto err = std::format("Scanner executable not found: {}", exe);
+		report_scan_error(err);
+		return;
+	}
+	scanner_proc proc;
+	proc.child            = os::start_child_process(exe, exe_args, bp::std_err > proc.stderr_pipe, bp::std_out > proc.stdout_pipe, proc.io_context);
+	proc.check_exit_timer = basio::steady_timer(proc.io_context, basio::chrono::seconds(1));
+	async_read_lines(&proc, proc.stderr_pipe, proc.stderr_buffer, scanner_read_stderr_line);
+	async_read_lines(&proc, proc.stdout_pipe, proc.stdout_buffer, scanner_read_stdout_line);
+	proc.io_context.run();
+}
+
+static
+auto scanner_start() -> void {
+	DATA_->scanner_thread = std::jthread{scanner_thread};
 }
 
 static
 auto scanner_stop_if_it_is_already_running() -> void {
-	auto scanner = DATA_->scanner.lock();
-	if (!scanner) { return; }
-	const auto& proc = *scanner;
-	if (!proc) { return; }
-	if (!proc->child.running()) { return; }
-	proc->child.terminate();
-	(*scanner).reset();
+	if (DATA_->scanner_thread.joinable()) {
+		DATA_->scanner_thread.request_stop();
+		DATA_->scanner_thread.join();
+	}
 }
 
 [[nodiscard]] static
@@ -537,9 +556,9 @@ auto scuff_init(const scuff_config* config) -> void {
 	scuff::DATA_->instance_id         = "scuff+" + std::to_string(scuff::os::get_process_id());
 	scuff::DATA_->sandbox_exe_path    = config->sandbox_exe_path;
 	scuff::DATA_->scanner_exe_path    = config->scanner_exe_path;
-	scuff::DATA_->shm_strings_remover = {scuff::DATA_->shm_strings.id};
 	scuff::DATA_->gc_thread           = std::jthread{scuff::garbage_collector, config->gc_interval_ms};
-	scuff::shm::create(&scuff::DATA_->shm_strings, scuff::DATA_->instance_id + "+string", config->string_options);
+	scuff::shm::create(&scuff::DATA_->shm_strings, scuff::DATA_->instance_id + "+strings", config->string_options);
+	scuff::DATA_->shm_strings_remover = {scuff::DATA_->shm_strings.id};
 	scuff::initialized_ = true;
 }
 
@@ -661,7 +680,7 @@ auto scuff_is_running(scuff_sbox sbox) -> bool {
 }
 
 auto scuff_is_scanning() -> bool {
-	return bool(*scuff::DATA_->scanner.lock());
+	return scuff::DATA_->scanner_thread.joinable();
 }
 
 auto scuff_param_get_value(scuff_device dev, scuff_param param, scuff_return_double fn) -> void {
@@ -762,7 +781,7 @@ auto scuff_scan() -> void {
 		scuff::scanner_start();
 	}
 	catch (const std::exception& err) {
-		// TODO: invoke a callback or something?
+		scuff::report_scan_error(err.what());
 	}
 }
 

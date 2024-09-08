@@ -89,7 +89,7 @@ auto lowercase(const std::string& str) -> std::string {
 	std::string result;
 	result.reserve(str.size());
 	for (const auto c : str) {
-		result.push_back(std::tolower(c));
+		result.push_back(char(std::tolower(int(c))));
 	}
 	return result;
 }
@@ -176,8 +176,7 @@ auto destroy() -> void {
 	M_.reset();
 }
 
-[[nodiscard]] static
-auto add(const fs::path& path) -> scuff::id::plugfile {
+auto add(const fs::path& ath) -> scuff::id::plugfile {
 	// TODO:
 	return {};
 	//auto idx = scuff::plugfile{M_->files.size()};
@@ -189,8 +188,9 @@ auto add(const fs::path& path) -> scuff::id::plugfile {
 
 [[nodiscard]]
 auto get_path(scuff::id::plugfile idx) -> const fs::path& {
+	static fs::path tmp;
 	// TODO:
-	return {};//M_->files[idx.value].path;
+	return tmp;//M_->files[idx.value].path;
 }
 
 [[nodiscard]]
