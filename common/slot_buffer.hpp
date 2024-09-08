@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <mutex>
+#include <numeric>
 #include <vector>
 
 template <typename T>

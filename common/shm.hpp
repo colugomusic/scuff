@@ -19,6 +19,7 @@ namespace bip = boost::interprocess;
 
 namespace scuff::shm {
 
+static constexpr auto SEGMENT_OVERHEAD         = 2048;
 static constexpr auto OBJECT_AUDIO_IN          = "+audio+in";
 static constexpr auto OBJECT_AUDIO_OUT         = "+audio+out";
 static constexpr auto OBJECT_EVENTS_IN         = "+events+in";
@@ -83,6 +84,7 @@ auto calc_item_buffer_seg_size(size_t capacity, size_t item_size) -> size_t {
 	size += sizeof(scuff::shm::buffer_cb);
 	size += capacity * sizeof(size_t);
 	size += capacity * item_size;
+	size += SEGMENT_OVERHEAD;
 	return size;
 }
 
@@ -184,6 +186,7 @@ auto create(string_buffer* sb, std::string_view id, const scuff_string_options& 
 	const auto char_count = calc_total_chars(options);
 	const auto capacity   = options.max_in_flight_strings;
 	sb->seg               = bip::managed_shared_memory{bip::create_only, id.data(), calc_seg_size(options)};
+	sb->id                = id;
 	sb->cb                = sb->seg.construct<buffer_cb>(OBJECT_CONTROL_BLOCK)(capacity);
 	sb->items             = sb->seg.construct<char>     (OBJECT_ITEMS)[char_count]('\0');
 	sb->max_string_length = *sb->seg.construct<size_t>  (OBJECT_MAX_STRING_LENGTH)(options.max_string_length);
@@ -244,7 +247,7 @@ struct group : segment {
 
 static
 auto create(group* group, std::string_view id) -> void {
-	static constexpr auto SEG_SIZE = sizeof(grp_control_block);
+	static constexpr auto SEG_SIZE = sizeof(grp_control_block) + SEGMENT_OVERHEAD;
 	group->id  = id;
 	group->seg = bip::managed_shared_memory{bip::create_only, id.data(), SEG_SIZE};
 	group->cb  = group->seg.construct<grp_control_block>(OBJECT_CONTROL_BLOCK)();
@@ -267,7 +270,8 @@ static
 auto create(sandbox* sbox, std::string_view id) -> void {
 	static constexpr auto SEG_SIZE =
 		sizeof(shm::sbox_messages_in) +
-		sizeof(shm::sbox_messages_out);
+		sizeof(shm::sbox_messages_out) +
+		SEGMENT_OVERHEAD;
 	sbox->id       = id;
 	sbox->seg      = bip::managed_shared_memory{bip::create_only, id.data(), SEG_SIZE};
 	sbox->msgs_in  = sbox->seg.construct<sbox_messages_in>(OBJECT_SBOX_MSGS_IN)();
@@ -293,7 +297,7 @@ struct device : segment {
 
 static
 auto create(device* dev, std::string_view id) -> void {
-	const auto seg_size = (sizeof(ab<event_buffer>) * 2 * 2);
+	const auto seg_size = (sizeof(ab<event_buffer>) * 2 * 2) + SEGMENT_OVERHEAD;
 	dev->id         = id;
 	dev->seg        = bip::managed_shared_memory{bip::create_only, id.data(), seg_size};
 	dev->events_in  = dev->seg.construct<ab<event_buffer>>(OBJECT_EVENTS_IN)();
@@ -320,7 +324,8 @@ static
 auto create(device_audio_ports* ports, std::string_view id, size_t input_port_count, size_t output_port_count) -> void {
 	const auto seg_size =
 		(sizeof(ab<audio_buffer>) * input_port_count) +
-		(sizeof(ab<audio_buffer>) * output_port_count);
+		(sizeof(ab<audio_buffer>) * output_port_count) +
+		SEGMENT_OVERHEAD;
 	assert (input_port_count > 0 || output_port_count > 0);
 	ports->id           = id;
 	ports->seg          = bip::managed_shared_memory{bip::create_only, id.data(), seg_size};

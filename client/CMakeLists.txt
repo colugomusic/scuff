@@ -16,7 +16,7 @@ list (APPEND src
 	include/scuff/client.h
 	src/client.cpp
 )
-set(BOOST_LIBS_OPTIONAL header CACHE STRING "Boost libraries to be compiled" FORCE)
+set(BOOST_LIBS_OPTIONAL header filesystem CACHE STRING "Boost libraries to be compiled" FORCE)
 set(immer_BUILD_TESTS OFF)
 set(immer_BUILD_EXAMPLES OFF)
 set(immer_BUILD_DOCS OFF)
@@ -30,19 +30,24 @@ CPMAddPackage(NAME ent               GITHUB_REPOSITORY colugomusic/ent          
 CPMAddPackage(NAME immer             GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                            )
 CPMAddPackage(NAME json              GITHUB_REPOSITORY nlohmann/json                GIT_TAG v3.11.3                           )
 CPMAddPackage(NAME readerwriterqueue GITHUB_REPOSITORY cameron314/readerwriterqueue GIT_TAG v1.0.6                            )
-add_library(${PROJECT_NAME} STATIC ${src})
-set_target_properties(${PROJECT_NAME} PROPERTIES
+add_library(scuff-client STATIC ${src})
+add_library(scuff-client::scuff-client ALIAS scuff-client)
+set_target_properties(scuff-client PROPERTIES
 	CXX_STANDARD 20
 )
-target_include_directories(${PROJECT_NAME} PUBLIC
+target_include_directories(scuff-client INTERFACE
+	include
+)
+target_include_directories(scuff-client PRIVATE
 	include/scuff
 	${clap_SOURCE_DIR}/include
 	${clog_SOURCE_DIR}/include
 	${CMAKE_CURRENT_LIST_DIR}/..
 	${cs_libguarded_SOURCE_DIR}/src
 )
-target_link_libraries(${PROJECT_NAME} PUBLIC
+target_link_libraries(scuff-client PUBLIC
 	Boost::boost
+	Boost::filesystem
 	ent
 	immer
 	nlohmann_json::nlohmann_json
