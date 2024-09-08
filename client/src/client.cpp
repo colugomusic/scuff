@@ -127,13 +127,30 @@ struct model {
 };
 
 struct scanner_proc {
-	basio::io_context io_context;
-	basio::streambuf stdout_buffer;
-	basio::streambuf stderr_buffer;
-	basio::steady_timer check_exit_timer{io_context, basio::chrono::seconds(1)};
-	bp::async_pipe stderr_pipe{io_context};
-	bp::async_pipe stdout_pipe{io_context};
+	static constexpr auto STDOUT = 0;
+	static constexpr auto STDERR = 1;
+	basio::io_context* ioctx;
+	std::array<basio::streambuf, 2> buffers;
+	std::array<bp::async_pipe, 2> pipes;
 	bp::child child;
+	scanner_proc(basio::io_context* ioctx, const std::string& exe, const std::vector<std::string>& args)
+		: ioctx{ioctx}
+		, pipes{*ioctx, *ioctx}
+		, child{os::start_child_process(exe, args, bp::std_out > pipes[STDOUT], bp::std_err > pipes[STDERR], *ioctx)}
+	{
+	}
+};
+
+struct scanner_reader {
+	std::shared_ptr<scanner_proc> proc;
+	basio::streambuf* buffer;
+	bp::async_pipe* pipe;
+	scanner_reader(std::shared_ptr<scanner_proc> proc, size_t stream)
+		: proc{proc}
+		, buffer{&proc->buffers[stream]}
+		, pipe{&proc->pipes[stream]}
+	{
+	}
 };
 
 // DATA /////////////////////////////////////////////////////////////////////
@@ -233,27 +250,20 @@ auto make_scanner_exe_args_for_plugin_listing() -> std::vector<std::string> {
 	return {};
 }
 
-//static
-//auto scanner_check_exit(scanner_proc* proc) -> void {
-//	if (!proc->child.running()) {
-//		DATA_->callbacks.on_scan_complete.fn(&DATA_->callbacks.on_scan_complete);
-//		return;
-//	}
-//	// Check again later
-//	proc->check_exit_timer.expires_after(basio::chrono::seconds(1));
-//	proc->check_exit_timer.async_wait([proc](const bsys::error_code& ec) {
-//		if (!ec) {
-//			scanner_check_exit(proc);
-//		}
-//	});
-//}
+[[nodiscard]] static
+auto make_scanner_exe_args_for_scanning_plugin(const std::string& path) -> std::vector<std::string> {
+	std::vector<std::string> args;
+	args.push_back("--file");
+	args.push_back(path);
+	return args;
+}
 
 template <typename ReadFn> static
-auto async_read_lines(scanner_proc* proc, bp::async_pipe& pipe, basio::streambuf& buffer, ReadFn&& read_fn) -> void {
-	auto wrapper_fn = [proc, read_fn = std::forward<ReadFn>(read_fn)](const bsys::error_code& ec, size_t bytes_transferred) {
-		read_fn(proc, ec, bytes_transferred);
+auto async_read_lines(const std::shared_ptr<scanner_reader>& reader, ReadFn&& read_fn) -> void {
+	auto wrapper_fn = [reader, read_fn = std::forward<ReadFn>(read_fn)](const bsys::error_code& ec, size_t bytes_transferred) {
+		read_fn(reader, ec, bytes_transferred);
 	};
-	basio::async_read_until(pipe, buffer, '\n', wrapper_fn);
+	basio::async_read_until(*reader->pipe, *reader->buffer, '\n', wrapper_fn);
 }
 
 static
@@ -292,8 +302,22 @@ auto scanner_read_broken_plugin(const nlohmann::json& j) -> void {
 	}
 }
 
+static auto scanner_read_stderr_line(const std::shared_ptr<scanner_reader>& reader, const bsys::error_code& ec, size_t bytes_transferred) -> void;
+static auto scanner_read_stdout_line(const std::shared_ptr<scanner_reader>& reader, const bsys::error_code& ec, size_t bytes_transferred) -> void;
+
 static
-auto scanner_read_plugfile(const nlohmann::json& j) -> void {
+auto async_scan_clap_file(basio::io_context* ioctx, const std::string& path) -> void {
+	const auto exe      = DATA_->scanner_exe_path;
+	const auto exe_args = make_scanner_exe_args_for_scanning_plugin(path);
+	auto proc           = std::make_shared<scanner_proc>(ioctx, exe, exe_args);
+	auto stderr_reader  = std::make_shared<scanner_reader>(proc, scanner_proc::STDERR);
+	auto stdout_reader  = std::make_shared<scanner_reader>(proc, scanner_proc::STDOUT);
+	async_read_lines(stderr_reader, scanner_read_stderr_line);
+	async_read_lines(stdout_reader, scanner_read_stdout_line);
+}
+
+static
+auto scanner_read_plugfile(basio::io_context* ioctx, const nlohmann::json& j) -> void {
 	const std::string plugfile_type = j["plugfile-type"];
 	const std::string path          = j["path"];
 	plugfile pf;
@@ -302,6 +326,7 @@ auto scanner_read_plugfile(const nlohmann::json& j) -> void {
 	const auto model = DATA_->working_model.lock();
 	model->plugfiles = model->plugfiles.insert(pf);
 	DATA_->callbacks.on_plugfile_scanned.fn(&DATA_->callbacks.on_plugfile_scanned, pf.id.value);
+	async_scan_clap_file(ioctx, path);
 }
 
 static
@@ -334,9 +359,9 @@ auto scanner_read_error(const nlohmann::json& j) -> void {
 }
 
 static
-auto scanner_read_output(const nlohmann::json& j) -> void {
+auto scanner_read_output(basio::io_context* ioctx, const nlohmann::json& j) -> void {
 	const std::string type = j["type"];
-	if (type == "plugfile") { scanner_read_plugfile(j); return; }
+	if (type == "plugfile") { scanner_read_plugfile(ioctx, j); return; }
 	if (type == "plugin")   { scanner_read_plugin(j); return; }
 }
 
@@ -351,13 +376,12 @@ auto report_scan_exception(const std::exception& err) -> void {
 }
 
 static
-auto scanner_read_stderr_line(scanner_proc* proc, const bsys::error_code& ec, size_t bytes_transferred) -> void {
+auto scanner_read_stderr_line(const std::shared_ptr<scanner_reader>& reader, const bsys::error_code& ec, size_t bytes_transferred) -> void {
 	if (ec) {
-		// TODO: handle this
 		return;
 	}
-	std::istream is(&proc->stderr_buffer);
-	std::string line;
+	auto is   = std::istream{reader->buffer};
+	auto line = std::string{};
 	std::getline(is, line);
 	if (!line.empty()) {
 		try { scanner_read_error(nlohmann::json::parse(line)); }
@@ -366,43 +390,49 @@ auto scanner_read_stderr_line(scanner_proc* proc, const bsys::error_code& ec, si
 		}
 	}
 	// continue reading
-	async_read_lines(proc, proc->stderr_pipe, proc->stderr_buffer, scanner_read_stderr_line);
+	async_read_lines(reader, scanner_read_stderr_line);
 }
 
 static
-auto scanner_read_stdout_line(scanner_proc* proc, const bsys::error_code& ec, size_t bytes_transferred) -> void {
+auto scanner_read_stdout_line(const std::shared_ptr<scanner_reader>& reader, const bsys::error_code& ec, size_t bytes_transferred) -> void {
 	if (ec) {
-		// TODO: handle this
 		return;
 	}
-	std::istream is(&proc->stdout_buffer);
-	std::string line;
+	auto is   = std::istream{reader->buffer};
+	auto line = std::string{};
 	std::getline(is, line);
 	if (!line.empty()) {
-		try { scanner_read_output(nlohmann::json::parse(line)); }
+		try { scanner_read_output(reader->proc->ioctx, nlohmann::json::parse(line)); }
 		catch (const std::exception& err) {
 			report_scan_exception(err);
 		}
 	}
 	// continue reading
-	async_read_lines(proc, proc->stdout_pipe, proc->stdout_buffer, scanner_read_stdout_line);
+	async_read_lines(reader, scanner_read_stdout_line);
 }
 
 static
-auto scanner_thread() -> void {
-	const auto exe      = DATA_->scanner_exe_path;
-	const auto exe_args = make_scanner_exe_args_for_plugin_listing();
+auto scan_system_for_installed_plugins(basio::io_context* ioctx) -> void {
+	const auto exe           = DATA_->scanner_exe_path;
 	if (!(std::filesystem::exists(exe) && std::filesystem::is_regular_file(exe))) {
 		const auto err = std::format("Scanner executable not found: {}", exe);
 		report_scan_error(err);
 		return;
 	}
-	scanner_proc proc;
-	proc.child            = os::start_child_process(exe, exe_args, bp::std_err > proc.stderr_pipe, bp::std_out > proc.stdout_pipe, proc.io_context);
-	proc.check_exit_timer = basio::steady_timer(proc.io_context, basio::chrono::seconds(1));
-	async_read_lines(&proc, proc.stderr_pipe, proc.stderr_buffer, scanner_read_stderr_line);
-	async_read_lines(&proc, proc.stdout_pipe, proc.stdout_buffer, scanner_read_stdout_line);
-	proc.io_context.run();
+	const auto exe_args      = make_scanner_exe_args_for_plugin_listing();
+	const auto proc          = std::make_shared<scanner_proc>(ioctx, exe, exe_args);
+	const auto stderr_reader = std::make_shared<scanner_reader>(proc, scanner_proc::STDERR);
+	const auto stdout_reader = std::make_shared<scanner_reader>(proc, scanner_proc::STDOUT);
+	async_read_lines(stderr_reader, scanner_read_stderr_line);
+	async_read_lines(stdout_reader, scanner_read_stdout_line);
+}
+
+static
+auto scanner_thread() -> void {
+	basio::io_context ioctx;
+	basio::post(ioctx, [&ioctx]{ scan_system_for_installed_plugins(&ioctx); });
+	ioctx.run();
+	DATA_->callbacks.on_scan_complete.fn(&DATA_->callbacks.on_scan_complete);
 }
 
 static

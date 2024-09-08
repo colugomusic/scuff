@@ -167,6 +167,12 @@ auto create_window(host::app* app) -> void {
 	tableview_header_title(app->table_plugins.view, app->table_plugins.col_vendor, "Vendor");
 	tableview_header_title(app->table_plugins.view, app->table_plugins.col_name, "Name");
 	tableview_header_title(app->table_plugins.view, app->table_plugins.col_status, "Status");
+	tableview_header_resizable(app->table_plugfiles.view, true);
+	tableview_header_resizable(app->table_plugins.view, true);
+	tableview_column_resizable(app->table_plugfiles.view, app->table_plugfiles.col_path, true);
+	tableview_column_resizable(app->table_plugins.view, app->table_plugins.col_vendor, true);
+	tableview_column_width(app->table_plugfiles.view, app->table_plugfiles.col_path, 400);
+	tableview_column_width(app->table_plugins.view, app->table_plugins.col_name, 300);
 	tableview_OnData(app->table_plugfiles.view, listener(app, on_table_plugfiles_data, host::app));
 	tableview_OnData(app->table_plugins.view, listener(app, on_table_plugins_data, host::app));
 	label_text(app->lbl_plugfile_table_title, "Plugin Files");
@@ -194,7 +200,7 @@ auto create_window(host::app* app) -> void {
 	window_title(app->window, "scuff-test-host");
 	window_panel(app->window, app->panel);
 	window_origin(app->window, v2df(500, 200));
-	window_size(app->window, s2df(800, 600));
+	window_size(app->window, s2df(1200, 600));
 	window_OnClose(app->window, listener(app, on_window_close, host::app));
 	window_show(app->window);
 }
@@ -208,20 +214,19 @@ auto on_scuff_plugfile_broken(const scuff_on_plugfile_broken* ctx, scuff_plugfil
 static
 auto on_scuff_plugfile_scanned(const scuff_on_plugfile_scanned* ctx, scuff_plugfile pf) -> void {
 	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
-	auto q = app->to_main.lock();
-	q->push_back(to_main::plugfile_scanned{pf});
+	app->to_main.lock()->push_back(to_main::plugfile_scanned{pf});
 }
 
 static
 auto on_scuff_plugin_broken(const scuff_on_plugin_broken* ctx, scuff_plugin p) -> void {
 	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
-	// TODO:
+	app->to_main.lock()->push_back(to_main::plugin_broken{p});
 }
 
 static
 auto on_scuff_plugin_scanned(const scuff_on_plugin_scanned* ctx, scuff_plugin p) -> void {
 	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
-	// TODO:
+	app->to_main.lock()->push_back(to_main::plugin_scanned{p});
 }
 
 static
@@ -242,6 +247,7 @@ auto on_scuff_scan_complete(const scuff_on_scan_complete* ctx) -> void {
 static
 auto on_scuff_scan_error(const scuff_on_scan_error* ctx, const char* error) -> void {
 	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+	log_printf("scuff_scan_error: %s\n", error);
 }
 
 template <typename Cb, typename Fn> [[nodiscard]] static
