@@ -23,12 +23,8 @@ static std::unique_ptr<model> M_;
 auto open(std::string_view group, std::string_view sandbox) -> bool {
 	try {
 		M_ = std::make_unique<model>();
-		if (!scuff::shm::open(&M_->group, group)) {
-			throw std::runtime_error(std::format("Failed to open shared memory segment: '{}'", group.data()));
-		}
-		if (!scuff::shm::open(&M_->sandbox, sandbox)) {
-			throw std::runtime_error(std::format("Failed to open shared memory segment: '{}'", sandbox.data()));
-		}
+		M_->group   = scuff::shm::group{bip::open_only, group};
+		M_->sandbox = scuff::shm::sandbox{bip::open_only, sandbox};
 	}
 	catch (const std::exception& err) {
 		log_printf(err.what());

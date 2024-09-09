@@ -43,13 +43,6 @@ auto send(const sandbox& sbox, const scuff::msg::in::msg& msg) -> void {
 }
 
 [[nodiscard]] static
-auto make_sandbox_shm(std::string_view shmid) -> shm::sandbox {
-	auto shm = shm::sandbox{};
-	scuff::shm::create(&shm, shmid);
-	return shm;
-}
-
-[[nodiscard]] static
 auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id) -> std::vector<std::string> {
 	std::vector<std::string> args;
 	args.push_back(std::string("--group ") + group_id.data());
@@ -193,10 +186,14 @@ auto process_message_(id::sandbox sbox_id, const msg::out::device_create_error& 
 static
 auto process_message_(id::sandbox sbox_id, const msg::out::device_create_success& msg) -> void {
 	// We sent a device_create message to the sandbox and it succeeded in creating the remote device.
-	const auto m         = DATA_->working_model.lock();
-	const auto sbox      = m->sandboxes.at(sbox_id);
-	const auto return_fn = sbox.external->return_buffers.devices.take(msg.callback);
-	// TODO: open shared memory segments and create removers for them
+	const auto m                  = DATA_->working_model.lock();
+	const auto device             = m->devices.at(msg.dev);
+	const auto sbox               = m->sandboxes.at(sbox_id);
+	const auto return_fn          = sbox.external->return_buffers.devices.take(msg.callback);
+	const auto device_shmid       = scuff::DATA_->instance_id + "+dev+" + std::to_string(msg.dev.value);
+	const auto device_ports_shmid = scuff::DATA_->instance_id + "+dev+" + std::to_string(msg.dev.value) + "+ports";
+	device.external->shm_device      = shm::device{bip::open_only, shm::segment::remove_when_done, device_shmid};
+	device.external->shm_audio_ports = shm::device_audio_ports{bip::open_only, shm::segment::remove_when_done, device_ports_shmid};
 	return_fn.fn(&return_fn, msg.dev.value);
 	publish(*m); // Device may not have been published yet.
 }
@@ -433,8 +430,9 @@ auto group_create() -> scuff_group {
 	scuff::group group;
 	group.id     = scuff::id::group{scuff::id_gen_++};
 	try {
-		// TODO:
-		// - remember to create segment remover
+		const auto shmid = scuff::DATA_->instance_id + "+group+" + std::to_string(group.id.value);
+		group.external = std::make_shared<scuff::group_external>();
+		group.external->shm = shm::group{bip::create_only, shm::segment::remove_when_done, shmid};
 	} catch (const std::exception& err) {
 		scuff::DATA_->callbacks.on_error.fn(&scuff::DATA_->callbacks.on_error, err.what());
 		return -1;
@@ -548,8 +546,8 @@ auto restart(scuff_sbox sbox, const char* sbox_exe_path) -> void {
 	if (sandbox.external->proc && sandbox.external->proc->running()) {
 		sandbox.external->proc->terminate();
 	}
-	const auto group_shmid   = group.external->shm.id;
-	const auto sandbox_shmid = sandbox.external->shm.id;
+	const auto group_shmid   = group.external->shm.id();
+	const auto sandbox_shmid = sandbox.external->shm.id();
 	const auto exe_args      = scuff::make_sbox_exe_args(group_shmid, sandbox_shmid);
 	sandbox.external->proc   = std::make_unique<bp::child>(sbox_exe_path, exe_args);
 }
@@ -567,13 +565,12 @@ auto sandbox_create(scuff_group group_id, const char* sbox_exe_path) -> scuff_sb
 	sbox.id = scuff::id::sandbox{scuff::id_gen_++};
 	try {
 		const auto& group          = m->groups.at({group_id});
-		const auto group_shmid     = group.external->shm.id;
+		const auto group_shmid     = group.external->shm.id();
 		const auto sandbox_shmid   = scuff::DATA_->instance_id + "+sbox+" + std::to_string(sbox.id.value);
 		const auto exe_args        = scuff::make_sbox_exe_args(group_shmid, sandbox_shmid);
 		sbox.group                 = {group_id};
 		sbox.external              = std::make_shared<scuff::sandbox_external>();
-		sbox.external->shm         = scuff::make_sandbox_shm(sandbox_shmid);
-		sbox.external->shm_remover = {sbox.external->shm.id};
+		sbox.external->shm         = shm::sandbox{bip::create_only, shm::segment::remove_when_done, sandbox_shmid};
 		sbox.external->proc        = std::make_unique<bp::child>(sbox_exe_path, exe_args);
 		// Add sandbox to group
 		*m = add_sandbox_to_group(std::move(*m), {group_id}, sbox.id);

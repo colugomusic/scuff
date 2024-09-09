@@ -29,8 +29,39 @@ static constexpr auto OBJECT_DATA      = "+data";
 using string = boost::static_string<SCUFF_SHM_STRING_MAX>;
 
 struct segment {
-	bip::managed_shared_memory seg;
-	std::string id;
+	struct remove_when_done_t {};
+	static constexpr auto remove_when_done = remove_when_done_t{};
+	segment() = default;
+	segment(const segment&) = delete;
+	segment(segment&&) noexcept = default;
+	segment& operator=(const segment&) = delete;
+	segment& operator=(segment&&) noexcept = default;
+	segment(std::string_view id) : segment{id, false} {}
+	segment(remove_when_done_t, std::string_view id) : segment{id, true} {}
+	segment(std::string_view id, size_t segment_size) : segment{id, segment_size, false} {}
+	segment(remove_when_done_t, std::string_view id, size_t segment_size) : segment{id, segment_size, true} {}
+	~segment() {
+		if (remove_when_done_) {
+			bip::shared_memory_object::remove(id_.c_str());
+		}
+	}
+	[[nodiscard]] auto seg() -> bip::managed_shared_memory& { return seg_; }
+	[[nodiscard]] auto id() const -> std::string_view { return id_; }
+private:
+	segment(std::string_view id, size_t segment_size, bool remove_when_done)
+		: id_{id}
+		, seg_{bip::create_only, id.data(), segment_size}
+		, remove_when_done_{remove_when_done}
+	{}
+	segment(std::string_view id, bool remove_when_done)
+		: id_{id}
+		, seg_{bip::open_only, id.data()}
+		, remove_when_done_{remove_when_done}
+	{
+	}
+	bip::managed_shared_memory seg_;
+	std::string id_;
+	bool remove_when_done_ = false;
 };
 
 template <typename MsgT>
@@ -120,25 +151,10 @@ struct device_data {
 	bip::interprocess_mutex mutex;
 };
 
-struct device : segment {
-	device_data* data = nullptr;
-};
-
-struct device_audio_ports : segment {
-	size_t input_count    = 0;
-	size_t output_count   = 0;
-	ab<audio_buffer>* input_buffers  = nullptr;
-	ab<audio_buffer>* output_buffers = nullptr;
-};
-
 struct sandbox_data {
 	sbox_msg_buffer<msg::in::msg> msgs_in;
 	sbox_msg_buffer<msg::out::msg> msgs_out;
 	slot_buffer<shm::string, SCUFF_MAX_SBOX_STRINGS> strings;
-};
-
-struct sandbox : segment {
-	sandbox_data* data = nullptr;
 };
 
 struct group_data {
@@ -148,10 +164,6 @@ struct group_data {
 	// Each sandbox process decrements this
 	// counter when it is finished processing.
 	ab<std::atomic<uint64_t>> sandboxes_processing;
-};
-
-struct group : segment {
-	group_data* data = nullptr;
 };
 
 template <typename T> static
@@ -168,92 +180,87 @@ auto find_shm_obj_value(bip::managed_shared_memory* seg, std::string_view id, T*
 	return count;
 }
 
-static
-auto create(group* group, std::string_view id) -> void {
-	static constexpr auto SEG_SIZE = sizeof(group_data) + SEGMENT_OVERHEAD;
-	group->id   = id;
-	group->seg  = bip::managed_shared_memory{bip::create_only, id.data(), SEG_SIZE};
-	group->data = group->seg.construct<group_data>(OBJECT_DATA)();
+template <typename T> static
+auto require_shm_obj(bip::managed_shared_memory* seg, std::string_view id, size_t required_count, T** out_ptr) -> void {
+	const auto count = find_shm_obj(seg, id, out_ptr);
+	if (count < required_count) {
+		throw std::runtime_error{"Could not find shared memory object: " + std::string{id}};
+	}
 }
 
-[[nodiscard]] static
-auto open(group* group, std::string_view id) -> bool {
-	group->id  = id;
-	group->seg = bip::managed_shared_memory{bip::open_only, id.data()};
-	if (find_shm_obj<group_data>(&group->seg, OBJECT_DATA, &group->data) < 1) { return false; }
-	return true;
-}
+struct group : segment {
+	static constexpr auto SEGMENT_SIZE = sizeof(group_data) + SEGMENT_OVERHEAD;
+	group_data* data = nullptr;
+	group() = default;
+	group(bip::create_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id, SEGMENT_SIZE} { create(); }
+	group(bip::open_only_t, std::string_view id) : segment{id} { open(); }
+private:
+	auto create() -> void {
+		data = seg().construct<group_data>(OBJECT_DATA)();
+	}
+	auto open() -> void {
+		require_shm_obj<group_data>(&seg(), OBJECT_DATA, 1, &data);
+	}
+};
 
-static
-auto create(sandbox* sbox, std::string_view id) -> void {
-	static constexpr auto SEG_SIZE = sizeof(shm::sandbox_data) + SEGMENT_OVERHEAD;
-	sbox->id   = id;
-	sbox->seg  = bip::managed_shared_memory{bip::create_only, id.data(), SEG_SIZE};
-	sbox->data = sbox->seg.construct<sandbox_data>(OBJECT_DATA)();
-}
+struct sandbox : segment {
+	static constexpr auto SEGMENT_SIZE = sizeof(sandbox_data) + SEGMENT_OVERHEAD;
+	sandbox_data* data = nullptr;
+	sandbox() = default;
+	sandbox(bip::create_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id, SEGMENT_SIZE} { create(); }
+	sandbox(bip::open_only_t, std::string_view id) : segment{id} { open(); }
+private:
+	auto create() -> void {
+		data = seg().construct<sandbox_data>(OBJECT_DATA)();
+	}
+	auto open() -> void {
+		require_shm_obj<sandbox_data>(&seg(), OBJECT_DATA, 1, &data);
+	}
+};
 
-[[nodiscard]] static
-auto open(sandbox* sbox, std::string_view id) -> bool {
-	sbox->id  = id;
-	sbox->seg = bip::managed_shared_memory{bip::open_only, id.data()};
-	if (find_shm_obj<sandbox_data>(&sbox->seg, OBJECT_DATA, &sbox->data) < 1) { return false; }
-	return true;
-}
+struct device : segment {
+	static constexpr auto SEGMENT_SIZE = sizeof(device_data) + SEGMENT_OVERHEAD;
+	device_data* data = nullptr;
+	device() = default;
+	device(bip::create_only_t, std::string_view id) : segment{id, SEGMENT_SIZE} { create(); }
+	device(bip::open_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id} { open(); }
+private:
+	auto create() -> void {
+		data = seg().construct<device_data>(OBJECT_DATA)();
+	}
+	auto open() -> void {
+		require_shm_obj<device_data>(&seg(), OBJECT_DATA, 1, &data);
+	}
+};
 
-static
-auto create(device* dev, std::string_view id) -> void {
-	const auto SEG_SIZE = sizeof(device_data) + SEGMENT_OVERHEAD;
-	dev->id   = id;
-	dev->seg  = bip::managed_shared_memory{bip::create_only, id.data(), SEG_SIZE};
-	dev->data = dev->seg.construct<device_data>(OBJECT_DATA)();
-}
-
-static
-auto open(device* dev, std::string_view id) -> bool {
-	dev->id  = id;
-	dev->seg = bip::managed_shared_memory{bip::open_only, id.data()};
-	if (find_shm_obj<device_data>(&dev->seg, OBJECT_DATA, &dev->data) < 1) { return false; }
-	return true;
-}
-
-static
-auto create(device_audio_ports* ports, std::string_view id, size_t input_port_count, size_t output_port_count) -> void {
-	const auto seg_size =
-		(sizeof(ab<audio_buffer>) * input_port_count) +
-		(sizeof(ab<audio_buffer>) * output_port_count) +
-		SEGMENT_OVERHEAD;
-	assert (input_port_count > 0 || output_port_count > 0);
-	ports->id           = id;
-	ports->seg          = bip::managed_shared_memory{bip::create_only, id.data(), seg_size};
-	ports->input_count  = input_port_count;
-	ports->output_count = output_port_count;
-	if (input_port_count > 0)  { ports->input_buffers  = ports->seg.construct<ab<audio_buffer>>(OBJECT_AUDIO_IN)[input_port_count](); }
-	if (output_port_count > 0) { ports->output_buffers = ports->seg.construct<ab<audio_buffer>>(OBJECT_AUDIO_OUT)[output_port_count](); }
-}
-
-static
-auto open(device_audio_ports* ports, std::string_view id) -> bool {
-	ports->id           = id;
-	ports->seg          = bip::managed_shared_memory{bip::open_only, id.data()};
-	ports->input_count  = find_shm_obj<ab<audio_buffer>>(&ports->seg, OBJECT_AUDIO_IN, &ports->input_buffers);
-	ports->output_count = find_shm_obj<ab<audio_buffer>>(&ports->seg, OBJECT_AUDIO_OUT, &ports->output_buffers);
-	return true;
-}
-
-struct segment_remover {
-	segment_remover() = default;
-	segment_remover(const segment_remover&) = delete;
-	segment_remover(segment_remover&&) noexcept = default;
-	segment_remover& operator=(const segment_remover&) = delete;
-	segment_remover& operator=(segment_remover&&) noexcept = default;
-	segment_remover(std::string id) : id{id} {}
-	~segment_remover() {
-		if (!id.empty()) {
-			bip::shared_memory_object::remove(id.c_str());
-		}
+struct device_audio_ports : segment {
+	size_t input_count  = 0;
+	size_t output_count = 0;
+	ab<audio_buffer>* input_buffers  = nullptr;
+	ab<audio_buffer>* output_buffers = nullptr;
+	device_audio_ports() = default;
+	device_audio_ports(bip::create_only_t, std::string_view id, size_t input_port_count, size_t output_port_count)
+		: segment{id, sizeof(ab<audio_buffer>) * (input_port_count + output_port_count) + SEGMENT_OVERHEAD}
+	{
+		create(input_port_count, output_port_count);
+	}
+	device_audio_ports(bip::open_only_t, segment::remove_when_done_t, std::string_view id)
+		: segment{segment::remove_when_done, id}
+	{
+		open();
 	}
 private:
-	std::string id;
+	auto create(size_t input_port_count, size_t output_port_count) -> void {
+		assert (input_port_count > 0 || output_port_count > 0);
+		input_count    = input_port_count;
+		output_count   = output_port_count;
+		if (input_port_count > 0)  { input_buffers  = seg().construct<ab<audio_buffer>>(OBJECT_AUDIO_IN)[input_port_count](); }
+		if (output_port_count > 0) { output_buffers = seg().construct<ab<audio_buffer>>(OBJECT_AUDIO_OUT)[output_port_count](); }
+	}
+	auto open() -> void {
+		input_count  = find_shm_obj<ab<audio_buffer>>(&seg(), OBJECT_AUDIO_IN, &input_buffers);
+		output_count = find_shm_obj<ab<audio_buffer>>(&seg(), OBJECT_AUDIO_OUT, &output_buffers);
+	}
 };
 
 } // scuff::shm

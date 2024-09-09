@@ -38,14 +38,11 @@ struct device_external {
 	using shptr = std::shared_ptr<device_external>;
 	shm::device_audio_ports shm_audio_ports;
 	shm::device shm_device;
-	shm::segment_remover shm_audio_ports_remover;
-	shm::segment_remover shm_device_remover;
 };
 
 struct sandbox_external {
 	using shptr = std::shared_ptr<sandbox_external>;
 	shm::sandbox shm;
-	shm::segment_remover shm_remover;
 	std::unique_ptr<bp::child> proc;
 	lg::plain_guarded<std::deque<msg::in::msg>> msg_queue;
 	return_buffers return_buffers;
@@ -54,7 +51,6 @@ struct sandbox_external {
 struct group_external {
 	using shptr = std::shared_ptr<group_external>;
 	shm::group shm;
-	shm::segment_remover shm_remover;
 	uint64_t epoch = 0;
 };
 
