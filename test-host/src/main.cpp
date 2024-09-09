@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cs_plain_guarded.h>
+#include <deque>
 #include <nappgui.h>
 #include <scuff/client.h>
 #include <stdlib.h>
@@ -110,7 +111,7 @@ struct app {
 	ui::main ui;
 	with_dirt<std::vector<plugfile>> plugfiles;
 	with_dirt<std::vector<plugin>> plugins;
-	lg::plain_guarded<std::vector<to_main::msg>> to_main;
+	lg::plain_guarded<std::deque<to_main::msg>> to_main;
 };
 
 static
@@ -132,10 +133,6 @@ auto on_window_close(host::app* app, Event* e) -> void {
 
 static
 auto on_btn_rescan_clicked(host::app* app, Event* e) -> void {
-	app->plugfiles.clear();
-	app->plugfiles.dirty = true;
-	app->plugins.clear();
-	app->plugins.dirty = true;
 	scuff_scan();
 }
 
@@ -150,6 +147,7 @@ auto on_table_plugfiles_data(host::app* app, Event *e) -> void {
 		case ekGUI_EVENT_TBL_CELL: {
 			const auto pos  = event_params(e, EvTbPos);
 			const auto cell = event_result(e, EvTbCell);
+			if (pos->row >= app->plugfiles.size()) { break; }
 			if (pos->col == app->ui.plugfile_table.col_path)   { cell->text = app->plugfiles[pos->row].path.c_str(); break; }
 			if (pos->col == app->ui.plugfile_table.col_status) { cell->text = app->plugfiles[pos->row].status.c_str(); break; }
 			break;
@@ -168,6 +166,7 @@ auto on_table_plugins_data(host::app* app, Event *e) -> void {
 		case ekGUI_EVENT_TBL_CELL: {
 			const auto pos  = event_params(e, EvTbPos);
 			const auto cell = event_result(e, EvTbCell);
+			if (pos->row >= app->plugins.size()) { break; }
 			if (pos->col == app->ui.plugin_table.col_vendor) { cell->text = app->plugins[pos->row].vendor.c_str(); break; }
 			if (pos->col == app->ui.plugin_table.col_name)   { cell->text = app->plugins[pos->row].name.c_str(); break; }
 			if (pos->col == app->ui.plugin_table.col_status) { cell->text = app->plugins[pos->row].status.c_str(); break; }
@@ -333,6 +332,7 @@ auto on_scuff_sbox_crashed(const scuff_on_sbox_crashed* ctx, scuff_sbox sbox) ->
 static
 auto on_scuff_sbox_started(const scuff_on_sbox_started* ctx, scuff_sbox sbox) -> void {
 	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+	app->to_main.lock()->push_back(to_main::scan_started{});
 }
 
 static
@@ -401,12 +401,20 @@ auto destroy(host::app** app) -> void {
 	*app = nullptr;
 }
 
-static
-auto get_messages_to_main(host::app* app) -> std::vector<to_main::msg> {
-	const auto queue = app->to_main.lock();
-	const auto msgs = *queue;
-	queue->clear();
-	return msgs;
+template <typename T, size_t N> [[nodiscard]] static
+auto take_some(std::deque<T>* vec) -> std::vector<T> {
+	std::vector<T> out;
+	out.reserve(std::min(N, vec->size()));
+	for (size_t i = 0; i < N && !vec->empty(); ++i) {
+		out.push_back(std::move(vec->front()));
+		vec->pop_front();
+	}
+	return out;
+}
+
+template <size_t N> [[nodiscard]] static
+auto get_some_messages(host::app* app) -> std::vector<to_main::msg> {
+	return take_some<to_main::msg, N>(app->to_main.lock().get());
 }
 
 static
@@ -460,6 +468,10 @@ auto process_(host::app* app, const to_main::scan_error& msg) -> void {
 static
 auto process_(host::app* app, const to_main::scan_started& msg) -> void {
 	textview_writef(app->ui.log.view, "Scan started\n");
+	app->plugfiles.clear();
+	app->plugfiles.dirty = true;
+	app->plugins.clear();
+	app->plugins.dirty = true;
 }
 
 static
@@ -469,7 +481,7 @@ auto process(host::app* app, const to_main::msg& msg) -> void {
 
 static
 auto update(host::app* app, double prtime, double ctime) -> void {
-	const auto msgs = get_messages_to_main(app);
+	const auto msgs = get_some_messages<10>(app);
 	for (const auto& msg : msgs) {
 		process(app, msg);
 	}

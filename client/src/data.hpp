@@ -4,10 +4,13 @@
 #include "common/audio_sync.hpp"
 #include "common/shm.hpp"
 #include "common/slot_buffer.hpp"
+#include <boost/asio.hpp>
 #include <cs_plain_guarded.h>
 #include <immer/box.hpp>
 #include <immer/set.hpp>
 #include <immer/table.hpp>
+
+namespace basio = boost::asio;
 
 namespace scuff {
 
@@ -116,8 +119,9 @@ struct data {
 	std::string              sandbox_exe_path;
 	std::string              scanner_exe_path;
 	scuff_callbacks          callbacks;
-	std::jthread             gc_thread;
-	std::jthread             scanner_thread;
+	basio::io_context        io_context;
+	std::jthread             io_thread;
+	std::jthread             scan_thread;
 
 	// Copy of the model shared by non-audio threads. If a thread modifies
 	// the model in a way that affects the audio thread then it should publish

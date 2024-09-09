@@ -1,4 +1,3 @@
-#include "common/os.hpp"
 #include "common/speen.hpp"
 #include "common/types.hpp"
 #include "common/visit.hpp"
@@ -39,7 +38,7 @@ auto convert(const scuff::events::event& event) -> const scuff_event_header& {
 }
 
 [[nodiscard]] static
-auto add_sandbox(model&& m, id::group group, id::sandbox sbox) -> model {
+auto add_sandbox_to_group(model&& m, id::group group, id::sandbox sbox) -> model {
 	m.groups = m.groups.update_if_exists(group, [sbox](scuff::group g) {
 		g.sandboxes = g.sandboxes.insert(sbox);
 		return g;
@@ -48,7 +47,19 @@ auto add_sandbox(model&& m, id::group group, id::sandbox sbox) -> model {
 }
 
 [[nodiscard]] static
-auto remove_sandbox(model&& m, id::group group, id::sandbox sbox) -> model {
+auto erase_sandbox(model&& m, id::sandbox id) -> model {
+	m.sandboxes = m.sandboxes.erase(id);
+	return m;
+}
+
+[[nodiscard]] static
+auto insert_sandbox(model&& m, scuff::sandbox sbox) -> model {
+	m.sandboxes = m.sandboxes.insert(sbox);
+	return m;
+}
+
+[[nodiscard]] static
+auto remove_sandbox_from_group(model&& m, id::group group, id::sandbox sbox) -> model {
 	m.groups = m.groups.update_if_exists(group, [sbox](scuff::group g) {
 		g.sandboxes = g.sandboxes.erase(sbox);
 		return g;
@@ -190,10 +201,13 @@ auto signal_sandbox_processing(const scuff::group& group, uint64_t epoch, size_t
 }
 
 static
-auto garbage_collector(std::stop_token stop_token, size_t interval_ms) -> void {
-	while (!stop_token.stop_requested()) {
+auto io_thread(std::chrono::milliseconds gc_interval) -> void {
+	auto work_guard = basio::make_work_guard(DATA_->io_context);
+	while (!DATA_->io_context.stopped()) {
+		const auto now     = std::chrono::steady_clock::now();
+		const auto next_gc = now + gc_interval;
 		DATA_->published_model.garbage_collect();
-		std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
+		DATA_->io_context.run_until(next_gc);
 	}
 }
 
@@ -329,7 +343,7 @@ auto is_running(scuff_sbox sbox) -> bool {
 
 static
 auto is_scanning() -> bool {
-	return scuff::DATA_->scanner_thread.joinable();
+	return scuff::scan::is_running();
 }
 
 static
@@ -439,7 +453,7 @@ auto restart(scuff_sbox sbox) -> void {
 }
 
 static
-auto scan() -> void {
+auto do_scan() -> void {
 	scuff::scan::stop_if_it_is_already_running();
 	scuff::scan::start();
 }
@@ -459,13 +473,13 @@ auto sandbox_create(scuff_group group_id) -> scuff_sbox {
 		sbox.external->shm_remover = {sbox.external->shm.id};
 		sbox.external->proc        = std::make_unique<bp::child>(scuff::DATA_->sandbox_exe_path, exe_args);
 		// Add sandbox to group
-		*m = add_sandbox(std::move(*m), {group_id}, sbox.id);
+		*m = add_sandbox_to_group(std::move(*m), {group_id}, sbox.id);
 	}
 	catch (const std::exception& err) {
 		sbox.error = err.what();
 		scuff::DATA_->callbacks.on_sbox_error.fn(&scuff::DATA_->callbacks.on_sbox_error, sbox.id.value);
 	}
-	m->sandboxes = m->sandboxes.insert(sbox);
+	*m = insert_sandbox(std::move(*m), sbox);
 	scuff::publish(*m);
 	return sbox.id.value;
 }
@@ -474,8 +488,8 @@ static
 auto sandbox_erase(scuff_sbox sbox) -> void {
 	const auto m = scuff::DATA_->working_model.lock();
 	const auto& sandbox = m->sandboxes.at({sbox});
-	*m = remove_sandbox(std::move(*m), sandbox.group, {sbox});
-	m->sandboxes = m->sandboxes.erase({sbox});
+	*m = remove_sandbox_from_group(std::move(*m), sandbox.group, {sbox});
+	*m = erase_sandbox(std::move(*m), {sbox});
 	scuff::publish(*m);
 }
 
@@ -509,27 +523,29 @@ auto scuff_audio_process(scuff_group_process process) -> void {
 }
 
 auto scuff_init(const scuff_config* config) -> bool {
-	if (scuff::initialized_) { return; }
+	if (scuff::initialized_) { return true; }
 	scuff::DATA_                   = std::make_unique<scuff::data>();
 	scuff::DATA_->callbacks        = config->callbacks;
 	scuff::DATA_->instance_id      = "scuff+" + std::to_string(scuff::os::get_process_id());
 	scuff::DATA_->sandbox_exe_path = config->sandbox_exe_path;
 	scuff::DATA_->scanner_exe_path = config->scanner_exe_path;
 	try {
-		scuff::DATA_->gc_thread = std::jthread{scuff::garbage_collector, config->gc_interval_ms};
+		scuff::DATA_->io_thread = std::jthread{scuff::io_thread, std::chrono::milliseconds{config->gc_interval_ms}};
 		scuff::shm::create(&scuff::DATA_->shm_strings, scuff::DATA_->instance_id + "+strings", config->string_options);
 		scuff::DATA_->shm_strings_remover = {scuff::DATA_->shm_strings.id};
 		scuff::initialized_ = true;
+		return true;
 	} catch (const std::exception& err) {
 		scuff::DATA_.reset();
 		config->callbacks.on_error.fn(&config->callbacks.on_error, err.what());
+		return false;
 	}
 }
 
 auto scuff_shutdown() -> void {
 	if (!scuff::initialized_) { return; }
-	scuff::DATA_->gc_thread.request_stop();
-	scuff::DATA_->gc_thread.detach();
+	scuff::DATA_->io_context.stop();
+	scuff::DATA_->io_thread.join();
 	scuff::DATA_.reset();
 	scuff::initialized_ = false;
 }
@@ -700,7 +716,7 @@ auto scuff_restart(scuff_sbox sbox) -> void {
 }
 
 auto scuff_scan() -> void {
-	try                               { scuff::scan(); }
+	try                               { scuff::do_scan(); }
 	catch (const std::exception& err) { scuff::report_error(err.what()); }
 }
 
