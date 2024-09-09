@@ -1,5 +1,6 @@
 #pragma once
 
+#include "c_plugin_type.h"
 #include "c_render_mode.h"
 #include "types.hpp"
 #include "events.hpp"
@@ -10,7 +11,7 @@ namespace scuff::msg::in {
 
 struct close_all_editors      {};
 struct commit_changes         {};
-struct device_create          { scuff::id::device dev; size_t callback; };
+struct device_create          { scuff::id::device dev; scuff_plugin_type type; size_t STR_plugin_id; size_t callback; };
 struct device_connect         { scuff::id::device out_dev; size_t out_port; scuff::id::device in_dev; size_t in_port; };
 struct device_disconnect      { scuff::id::device out_dev; size_t out_port; scuff::id::device in_dev; size_t in_port; };
 struct device_erase           { scuff::id::device dev; };
@@ -39,12 +40,6 @@ using msg = std::variant<
 	get_param_value_text,
 	set_sample_rate
 >;
-
-template <size_t N>
-struct list {
-	msg arr[N];
-	size_t count = 0;
-};
 
 } // scuff::msg::in
 

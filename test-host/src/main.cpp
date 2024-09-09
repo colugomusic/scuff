@@ -132,7 +132,7 @@ auto on_window_close(host::app* app, Event* e) -> void {
 
 static
 auto on_btn_rescan_clicked(host::app* app, Event* e) -> void {
-	scuff_scan(edit_get_text(app->ui.paths.path_edit_scan_exe.edit));
+	scuff_scan(edit_get_text(app->ui.paths.path_edit_scan_exe.edit), {});
 }
 
 static
@@ -363,18 +363,15 @@ auto make_scuff_cb(Fn fn, host::app* app) -> Cb {
 static
 auto initialize_scuff(host::app* app) -> void {
 	scuff_config cfg;
-	cfg.gc_interval_ms                       = 1000;
-	cfg.string_options.max_in_flight_strings = 100;
-	cfg.string_options.max_string_length     = 256;
-	cfg.callbacks.on_plugfile_broken         = make_scuff_cb<scuff_on_plugfile_broken>(on_scuff_plugfile_broken, app);
-	cfg.callbacks.on_plugfile_scanned        = make_scuff_cb<scuff_on_plugfile_scanned>(on_scuff_plugfile_scanned, app);
-	cfg.callbacks.on_plugin_broken           = make_scuff_cb<scuff_on_plugin_broken>(on_scuff_plugin_broken, app);
-	cfg.callbacks.on_plugin_scanned          = make_scuff_cb<scuff_on_plugin_scanned>(on_scuff_plugin_scanned, app);
-	cfg.callbacks.on_sbox_crashed            = make_scuff_cb<scuff_on_sbox_crashed>(on_scuff_sbox_crashed, app);
-	cfg.callbacks.on_sbox_started            = make_scuff_cb<scuff_on_sbox_started>(on_scuff_sbox_started, app);
-	cfg.callbacks.on_scan_complete           = make_scuff_cb<scuff_on_scan_complete>(on_scuff_scan_complete, app);
-	cfg.callbacks.on_scan_error              = make_scuff_cb<scuff_on_scan_error>(on_scuff_scan_error, app);
-	cfg.callbacks.on_scan_started            = make_scuff_cb<scuff_on_scan_started>(on_scuff_scan_started, app);
+	cfg.callbacks.on_plugfile_broken  = make_scuff_cb<scuff_on_plugfile_broken>(on_scuff_plugfile_broken, app);
+	cfg.callbacks.on_plugfile_scanned = make_scuff_cb<scuff_on_plugfile_scanned>(on_scuff_plugfile_scanned, app);
+	cfg.callbacks.on_plugin_broken    = make_scuff_cb<scuff_on_plugin_broken>(on_scuff_plugin_broken, app);
+	cfg.callbacks.on_plugin_scanned   = make_scuff_cb<scuff_on_plugin_scanned>(on_scuff_plugin_scanned, app);
+	cfg.callbacks.on_sbox_crashed     = make_scuff_cb<scuff_on_sbox_crashed>(on_scuff_sbox_crashed, app);
+	cfg.callbacks.on_sbox_started     = make_scuff_cb<scuff_on_sbox_started>(on_scuff_sbox_started, app);
+	cfg.callbacks.on_scan_complete    = make_scuff_cb<scuff_on_scan_complete>(on_scuff_scan_complete, app);
+	cfg.callbacks.on_scan_error       = make_scuff_cb<scuff_on_scan_error>(on_scuff_scan_error, app);
+	cfg.callbacks.on_scan_started     = make_scuff_cb<scuff_on_scan_started>(on_scuff_scan_started, app);
 	try {
 		scuff_init(&cfg);
 	} catch (const std::exception& e) {

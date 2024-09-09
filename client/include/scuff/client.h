@@ -2,8 +2,8 @@
 
 #include "c_constants.h"
 #include "c_events.h"
+#include "c_plugin_type.h"
 #include "c_render_mode.h"
-#include "c_string_options.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -33,29 +33,34 @@ typedef const char* scuff_param_id;
 // A plugin string id.
 typedef const char* scuff_plugin_id;
 
-enum scuff_plugin_type { clap, vst2, vst3 };
+enum {
+	scuff_scan_flag_reload_failed_devices = 1 << 0, // If a plugin is scanned which wasn't previously known,
+	                                                // and the user already tried to create a device with that
+	                                                // plugin ID, try to create the device again now that the
+	                                                // plugin is known.
+};
 
 typedef struct scuff_audio_writer_t {
 	void* ctx;
 	size_t port_index;
-	void (*fn)(const struct scuff_audio_writer_t* ctx, float* floats);
+	void (*fn)(const struct scuff_audio_writer_t*, float* floats);
 } scuff_audio_writer;
 
 typedef struct scuff_audio_reader_t {
 	void* ctx;
 	size_t port_index;
-	void (*fn)(const struct scuff_audio_reader_t* ctx, const float* floats);
+	void (*fn)(const struct scuff_audio_reader_t*, const float* floats);
 } scuff_audio_reader;
 
 typedef struct scuff_event_writer_t {
 	void* ctx;
 	size_t (*count)(const struct scuff_event_writer_t* ctx);
-	const scuff_event_header* (*get)(const struct scuff_event_writer_t* ctx, size_t index);
+	const scuff_event_header* (*get)(const struct scuff_event_writer_t*, size_t index);
 } scuff_event_writer;
 
 typedef struct scuff_event_reader_t {
 	void* ctx;
-	void (*push)(const struct scuff_event_reader_t* ctx, const scuff_event_header* event);
+	void (*push)(const struct scuff_event_reader_t*, const scuff_event_header* event);
 } scuff_event_reader;
 
 typedef struct scuff_audio_writers_t  { size_t count; const scuff_audio_writer* writers; } scuff_audio_writers; 
@@ -71,25 +76,25 @@ typedef struct scuff_group_process_t {
 	scuff_output_devices output_devices;
 } scuff_group_process;
 
-// Users should assume that any of these callbacks can be called from any thread.
+// Users should assume that any of these callbacks can be called from any non-realtime thread.
 // Every callback must be provided when calling scuff_init.
-typedef struct scuff_on_device_error_t          { void* ctx; void (*fn)(const struct scuff_on_device_error_t* ctx, scuff_device dev); } scuff_on_device_error;
-typedef struct scuff_on_device_params_changed_t { void* ctx; void (*fn)(const struct scuff_on_device_params_changed_t* ctx, scuff_device dev); } scuff_on_device_params_changed;
-typedef struct scuff_on_error_t                 { void* ctx; void (*fn)(const struct scuff_on_error_t* ctx, const char* error); } scuff_on_error;
-typedef struct scuff_on_plugfile_broken_t       { void* ctx; void (*fn)(const struct scuff_on_plugfile_broken_t* ctx, scuff_plugfile plugfile); } scuff_on_plugfile_broken;
-typedef struct scuff_on_plugfile_scanned_t      { void* ctx; void (*fn)(const struct scuff_on_plugfile_scanned_t* ctx, scuff_plugfile plugfile); } scuff_on_plugfile_scanned;
-typedef struct scuff_on_plugin_broken_t         { void* ctx; void (*fn)(const struct scuff_on_plugin_broken_t* ctx, scuff_plugin plugin); } scuff_on_plugin_broken;
-typedef struct scuff_on_plugin_scanned_t        { void* ctx; void (*fn)(const struct scuff_on_plugin_scanned_t* ctx, scuff_plugin plugin); } scuff_on_plugin_scanned;
-typedef struct scuff_on_sbox_crashed_t          { void* ctx; void (*fn)(const struct scuff_on_sbox_crashed_t* ctx, scuff_sbox sbox); } scuff_on_sbox_crashed;
-typedef struct scuff_on_sbox_error_t            { void* ctx; void (*fn)(const struct scuff_on_sbox_error_t* ctx, scuff_sbox sbox); } scuff_on_sbox_error;
-typedef struct scuff_on_sbox_started_t          { void* ctx; void (*fn)(const struct scuff_on_sbox_started_t* ctx, scuff_sbox sbox); } scuff_on_sbox_started;
+typedef struct scuff_on_device_error_t          { void* ctx; void (*fn)(const struct scuff_on_device_error_t*, scuff_device dev); } scuff_on_device_error;
+typedef struct scuff_on_device_params_changed_t { void* ctx; void (*fn)(const struct scuff_on_device_params_changed_t*, scuff_device dev); } scuff_on_device_params_changed;
+typedef struct scuff_on_error_t                 { void* ctx; void (*fn)(const struct scuff_on_error_t*, const char* error); } scuff_on_error;
+typedef struct scuff_on_plugfile_broken_t       { void* ctx; void (*fn)(const struct scuff_on_plugfile_broken_t*, scuff_plugfile plugfile); } scuff_on_plugfile_broken;
+typedef struct scuff_on_plugfile_scanned_t      { void* ctx; void (*fn)(const struct scuff_on_plugfile_scanned_t*, scuff_plugfile plugfile); } scuff_on_plugfile_scanned;
+typedef struct scuff_on_plugin_broken_t         { void* ctx; void (*fn)(const struct scuff_on_plugin_broken_t*, scuff_plugin plugin); } scuff_on_plugin_broken;
+typedef struct scuff_on_plugin_scanned_t        { void* ctx; void (*fn)(const struct scuff_on_plugin_scanned_t*, scuff_plugin plugin); } scuff_on_plugin_scanned;
+typedef struct scuff_on_sbox_crashed_t          { void* ctx; void (*fn)(const struct scuff_on_sbox_crashed_t*, scuff_sbox sbox); } scuff_on_sbox_crashed;
+typedef struct scuff_on_sbox_error_t            { void* ctx; void (*fn)(const struct scuff_on_sbox_error_t*, scuff_sbox sbox); } scuff_on_sbox_error;
+typedef struct scuff_on_sbox_started_t          { void* ctx; void (*fn)(const struct scuff_on_sbox_started_t*, scuff_sbox sbox); } scuff_on_sbox_started;
 typedef struct scuff_on_scan_complete_t         { void* ctx; void (*fn)(const struct scuff_on_scan_complete_t* ctx); } scuff_on_scan_complete;
-typedef struct scuff_on_scan_error_t            { void* ctx; void (*fn)(const struct scuff_on_scan_error_t* ctx, const char* error); } scuff_on_scan_error;
+typedef struct scuff_on_scan_error_t            { void* ctx; void (*fn)(const struct scuff_on_scan_error_t*, const char* error); } scuff_on_scan_error;
 typedef struct scuff_on_scan_started_t          { void* ctx; void (*fn)(const struct scuff_on_scan_started_t* ctx ); } scuff_on_scan_started;
-typedef struct scuff_return_device_t            { void* ctx; void (*fn)(const struct scuff_return_device_t* ctx, scuff_device dev); } scuff_return_device; 
-typedef struct scuff_return_double_t            { void* ctx; void (*fn)(const struct scuff_return_double_t* ctx, double value); } scuff_return_double;
-typedef struct scuff_return_param_t             { void* ctx; void (*fn)(const struct scuff_return_param_t* ctx, scuff_param param); } scuff_return_param;
-typedef struct scuff_return_string_t            { void* ctx; void (*fn)(const struct scuff_return_string_t* ctx, const char* text); } scuff_return_string; 
+typedef struct scuff_return_device_t            { void* ctx; void (*fn)(const struct scuff_return_device_t*, scuff_device dev); } scuff_return_device; 
+typedef struct scuff_return_double_t            { void* ctx; void (*fn)(const struct scuff_return_double_t*, double value); } scuff_return_double;
+typedef struct scuff_return_param_t             { void* ctx; void (*fn)(const struct scuff_return_param_t*, scuff_param param); } scuff_return_param;
+typedef struct scuff_return_string_t            { void* ctx; void (*fn)(const struct scuff_return_string_t*, const char* text); } scuff_return_string; 
 
 typedef struct scuff_callbacks_t {
 	scuff_on_device_error on_device_error;
@@ -109,8 +114,6 @@ typedef struct scuff_callbacks_t {
 
 typedef struct scuff_config_t {
 	scuff_callbacks callbacks;
-	scuff_string_options string_options;
-	size_t gc_interval_ms;
 } scuff_config;
 
 #ifdef __cplusplus
@@ -154,7 +157,10 @@ void            scuff_device_connect(scuff_device dev_out, size_t port_out, scuf
 //  - When the operation is complete, call the given function with the device handle.
 //  - If the device fails to load, it will still be created, but it will be in an error
 //    state.
-void            scuff_device_create(scuff_sbox sbox, scuff_plugin plugin, scuff_return_device fn);
+//  - You can create a device with a plugin ID that hasn't been scanned yet. It will be
+//    created in an error state and will remain that way until the plugin is found by
+//    a future scan where the reload_failed_devices flag is set.
+void            scuff_device_create(scuff_sbox sbox, scuff_plugin_type type, scuff_plugin_id plugin_id, scuff_return_device fn);
 
 // Remove the given connection between two devices.
 void            scuff_device_disconnect(scuff_device dev_out, size_t port_out, scuff_device dev_in, size_t port_in);
@@ -260,6 +266,10 @@ const char*     scuff_plugfile_get_error(scuff_plugfile plugfile);
 // Return the file path of the plugin file.
 const char*     scuff_plugfile_get_path(scuff_plugfile plugfile);
 
+// Find a scanned plugin with the given string ID.
+// Returns < 0 if the plugin was not found.
+scuff_plugin    scuff_plugin_find(scuff_plugin_id plugin_id);
+
 // If the plugin failed to load, return the error string.
 const char*     scuff_plugin_get_error(scuff_plugin plugin);
 
@@ -280,10 +290,7 @@ void            scuff_restart(scuff_sbox sbox, const char* sbox_exe_path);
 
 // Scan the system for plugins. If the scanner process is already
 // running, it is restarted.
-void            scuff_scan(const char* scan_exe_path);
-
-// Find a scanned plugin with the given string ID.
-scuff_plugin    scuff_plugin_find(scuff_plugin_id plugin_id);
+void            scuff_scan(const char* scan_exe_path, int flags);
 
 // Set the sample rate for all devices.
 void            scuff_set_sample_rate(scuff_sample_rate sr);

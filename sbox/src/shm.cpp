@@ -42,11 +42,7 @@ auto destroy() -> void {
 }
 
 auto receive_input_messages(std::vector<scuff::msg::in::msg>* msgs) -> void {
-	auto lock = std::unique_lock(M_->sandbox.msgs_in->mutex);
-	for (const auto& msg : M_->sandbox.msgs_in->list) {
-		msgs->push_back(msg);
-	}
-	M_->sandbox.msgs_in->list.clear();
+	M_->sandbox.data->msgs_in.take(msgs);
 }
 
 } // sbox::shm

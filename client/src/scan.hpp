@@ -6,10 +6,6 @@
 #include <deque>
 #include <nlohmann/json.hpp>
 
-// MY APOLOGIES BUT I DO NOT REALLY UNDERSTAND HOW TO USE BOOST::ASIO CORRECTLY.
-// THIS SEEMS TO WORK.
-// IF YOU WANT TO REFACTOR THIS THEN GO AHEAD.
-
 namespace bp   = boost::process;
 namespace bsys = boost::system;
 

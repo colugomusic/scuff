@@ -6,6 +6,7 @@
 #include "common/slot_buffer.hpp"
 #include <boost/asio.hpp>
 #include <cs_plain_guarded.h>
+#include <deque>
 #include <immer/box.hpp>
 #include <immer/set.hpp>
 #include <immer/table.hpp>
@@ -46,6 +47,7 @@ struct sandbox_external {
 	shm::sandbox shm;
 	shm::segment_remover shm_remover;
 	std::unique_ptr<bp::child> proc;
+	lg::plain_guarded<std::deque<msg::in::msg>> msg_queue;
 	return_buffers return_buffers;
 };
 
@@ -60,6 +62,7 @@ struct device {
 	id::device id;
 	id::plugin plugin;
 	id::sandbox sbox;
+	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
 	immer::box<std::string> name;
 	device_external::shptr external;
@@ -103,8 +106,6 @@ struct model {
 };
 
 struct data {
-	shm::string_buffer       shm_strings;
-	shm::segment_remover     shm_strings_remover;
 	std::string              instance_id;
 	scuff_callbacks          callbacks;
 	std::jthread             poll_thread;

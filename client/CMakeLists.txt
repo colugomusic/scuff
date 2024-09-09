@@ -5,8 +5,8 @@ list (APPEND src
 	../common/audio_sync.hpp
 	../common/c_constants.h
 	../common/c_events.h
+	../common/c_plugin_type.h
 	../common/c_render_mode.h
-	../common/c_string_options.h
 	../common/events.hpp
 	../common/messages.hpp
 	../common/os.hpp
