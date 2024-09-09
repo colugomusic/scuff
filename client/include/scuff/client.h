@@ -71,11 +71,16 @@ typedef struct scuff_group_process_t {
 	scuff_output_devices output_devices;
 } scuff_group_process;
 
+// Users should assume that any of these callbacks can be called from any thread.
+// Every callback must be provided when calling scuff_init.
+typedef struct scuff_on_device_error_t     { void* ctx; void (*fn)(const struct scuff_on_device_error_t* ctx, scuff_device dev); } scuff_on_device_error;
+typedef struct scuff_on_error_t            { void* ctx; void (*fn)(const struct scuff_on_error_t* ctx, const char* error); } scuff_on_error;
 typedef struct scuff_on_plugfile_broken_t  { void* ctx; void (*fn)(const struct scuff_on_plugfile_broken_t* ctx, scuff_plugfile plugfile); } scuff_on_plugfile_broken;
 typedef struct scuff_on_plugfile_scanned_t { void* ctx; void (*fn)(const struct scuff_on_plugfile_scanned_t* ctx, scuff_plugfile plugfile); } scuff_on_plugfile_scanned;
 typedef struct scuff_on_plugin_broken_t    { void* ctx; void (*fn)(const struct scuff_on_plugin_broken_t* ctx, scuff_plugin plugin); } scuff_on_plugin_broken;
 typedef struct scuff_on_plugin_scanned_t   { void* ctx; void (*fn)(const struct scuff_on_plugin_scanned_t* ctx, scuff_plugin plugin); } scuff_on_plugin_scanned;
 typedef struct scuff_on_sbox_crashed_t     { void* ctx; void (*fn)(const struct scuff_on_sbox_crashed_t* ctx, scuff_sbox sbox); } scuff_on_sbox_crashed;
+typedef struct scuff_on_sbox_error_t       { void* ctx; void (*fn)(const struct scuff_on_sbox_error_t* ctx, scuff_sbox sbox); } scuff_on_sbox_error;
 typedef struct scuff_on_sbox_started_t     { void* ctx; void (*fn)(const struct scuff_on_sbox_started_t* ctx, scuff_sbox sbox); } scuff_on_sbox_started;
 typedef struct scuff_on_scan_complete_t    { void* ctx; void (*fn)(const struct scuff_on_scan_complete_t* ctx); } scuff_on_scan_complete;
 typedef struct scuff_on_scan_error_t       { void* ctx; void (*fn)(const struct scuff_on_scan_error_t* ctx, const char* error); } scuff_on_scan_error;
@@ -86,11 +91,14 @@ typedef struct scuff_return_param_t        { void* ctx; void (*fn)(const struct 
 typedef struct scuff_return_string_t       { void* ctx; void (*fn)(const struct scuff_return_string_t* ctx, const char* text); } scuff_return_string; 
 
 typedef struct scuff_callbacks_t {
+	scuff_on_device_error on_device_error;
+	scuff_on_error on_error;
 	scuff_on_plugfile_broken on_plugfile_broken;
 	scuff_on_plugfile_scanned on_plugfile_scanned;
 	scuff_on_plugin_broken on_plugin_broken;
 	scuff_on_plugin_scanned on_plugin_scanned;
 	scuff_on_sbox_crashed on_sbox_crashed;
+	scuff_on_sbox_error on_sbox_error;
 	scuff_on_sbox_started on_sbox_started;
 	scuff_on_scan_complete on_scan_complete;
 	scuff_on_scan_error on_scan_error;
@@ -125,22 +133,27 @@ void            scuff_audio_process(scuff_group_process process);
 /////////////////////////////////////////////////////////////////////////////////////////
 
 // Call this before anything else.
-void            scuff_init(const scuff_config* config);
+//  - If an error occurs during initialization then the error callback will be called.
+//  - Returns true if the initialization was successful, or if scuff was already
+//    initialized.
+bool            scuff_init(const scuff_config* config);
 
 // Call this when you're done with the sandboxing system.
-// Don't call anything else after this.
+//  - Don't call anything else after this.
 void            scuff_shutdown(void);
 
 // Close all editor windows.
 void            scuff_close_all_editors(void);
 
 // Connect the audio output of one device to the audio input of another device.
-// The devices don't have to belong to the same sandbox - the connections are allowed to
-// cross from one sandbox to another, within the same sandbox group.
+//  - The devices don't have to belong to the same sandbox - the connections are allowed
+//    to cross from one sandbox to another, within the same sandbox group.
 void            scuff_device_connect(scuff_device dev_out, size_t port_out, scuff_device dev_in, size_t port_in);
 
 // Create a device and add it to the sandbox asynchronously.
-// When the operation is complete, call the given function with the device handle.
+//  - When the operation is complete, call the given function with the device handle.
+//  - If the device fails to load, it will still be created, but it will be in an error
+//    state.
 void            scuff_device_create(scuff_sbox sbox, scuff_plugin plugin, scuff_return_device fn);
 
 // Remove the given connection between two devices.
@@ -204,6 +217,8 @@ void            scuff_group_erase(scuff_group group);
 // Create a new sandbox.
 // - Every sandbox has to belong to a group.
 // - Data can travel between sandboxes in the same group.
+// - If starting the sandbox process fails, the sandbox will still be created,
+//   but it will be in an error state.
 scuff_sbox      scuff_sandbox_create(scuff_group group);
 
 // Erase a sandbox.

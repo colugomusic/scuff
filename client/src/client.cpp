@@ -12,8 +12,6 @@ namespace bip  = boost::interprocess;
 
 namespace scuff {
 
-// TODO: exception handling around every entry point
-
 static
 auto publish(model m) -> void {
 	DATA_->published_model.set(std::move(m));
@@ -199,41 +197,13 @@ auto garbage_collector(std::stop_token stop_token, size_t interval_ms) -> void {
 	}
 }
 
-} // scuff
-
-auto scuff_audio_process(scuff_group_process process) -> void {
-	const auto audio     = scuff::DATA_->published_model.read();
-	const auto& group    = audio->groups.at({process.group});
-	const auto epoch     = ++group.external->epoch;
-	const auto backside  = (epoch + 0) % 2;
-	const auto frontside = (epoch + 1) % 2;
-	scuff::write_entry_ports(*audio, process.input_devices, backside);
-	scuff::signal_sandbox_processing(group, epoch, backside);
-	scuff::read_exit_ports(*audio, group, process.output_devices, frontside);
+static
+auto report_error(std::string_view err) -> void {
+	DATA_->callbacks.on_error.fn(&DATA_->callbacks.on_error, err.data());
 }
 
-auto scuff_init(const scuff_config* config) -> void {
-	if (scuff::initialized_) { return; }
-	scuff::DATA_                      = std::make_unique<scuff::data>();
-	scuff::DATA_->callbacks           = config->callbacks;
-	scuff::DATA_->instance_id         = "scuff+" + std::to_string(scuff::os::get_process_id());
-	scuff::DATA_->sandbox_exe_path    = config->sandbox_exe_path;
-	scuff::DATA_->scanner_exe_path    = config->scanner_exe_path;
-	scuff::DATA_->gc_thread           = std::jthread{scuff::garbage_collector, config->gc_interval_ms};
-	scuff::shm::create(&scuff::DATA_->shm_strings, scuff::DATA_->instance_id + "+strings", config->string_options);
-	scuff::DATA_->shm_strings_remover = {scuff::DATA_->shm_strings.id};
-	scuff::initialized_ = true;
-}
-
-auto scuff_shutdown() -> void {
-	if (!scuff::initialized_) { return; }
-	scuff::DATA_->gc_thread.request_stop();
-	scuff::DATA_->gc_thread.detach();
-	scuff::DATA_.reset();
-	scuff::initialized_ = false;
-}
-
-auto scuff_close_all_editors() -> void {
+static
+auto close_all_editors() -> void {
 	const auto model = scuff::DATA_->working_model.lock();
 	for (const auto& sandbox : model->sandboxes) {
 		if (sandbox.external->proc && sandbox.external->proc->running()) {
@@ -242,11 +212,13 @@ auto scuff_close_all_editors() -> void {
 	}
 }
 
-auto scuff_device_connect(scuff_device dev_out, size_t port_out, scuff_device dev_in, size_t port_in) -> void {
+static
+auto device_connect(scuff_device dev_out, size_t port_out, scuff_device dev_in, size_t port_in) -> void {
 	// TODO:
 }
 
-auto scuff_device_create(scuff_sbox sbox, scuff_plugin plugin, scuff_return_device fn) -> void {
+static
+auto device_create(scuff_sbox sbox, scuff_plugin plugin, scuff_return_device fn) -> void {
 	// TODO:
 	// - create device table entry, shared memory, etc.
 	// - then send message to sandbox
@@ -255,31 +227,35 @@ auto scuff_device_create(scuff_sbox sbox, scuff_plugin plugin, scuff_return_devi
 	// - remember to create segment remover
 }
 
-auto scuff_device_disconnect(scuff_device dev_out, size_t port_out, scuff_device dev_in, size_t port_in) -> void {
+auto device_disconnect(scuff_device dev_out, size_t port_out, scuff_device dev_in, size_t port_in) -> void {
 	// TODO:
 }
 
-auto scuff_device_duplicate(scuff_device dev, scuff_sbox sbox, scuff_return_device fn) -> void {
+auto device_duplicate(scuff_device dev, scuff_sbox sbox, scuff_return_device fn) -> void {
 	// TODO: similar to create()?
 }
 
-auto scuff_device_get_error(scuff_device device) -> const char* {
+static
+auto device_get_error(scuff_device device) -> const char* {
 	const auto m = scuff::DATA_->working_model.lock();
 	return m->devices.at({device}).error->c_str();
 }
 
-auto scuff_device_get_name(scuff_device dev) -> const char* {
+static
+auto device_get_name(scuff_device dev) -> const char* {
 	const auto m = scuff::DATA_->working_model.lock();
 	return m->devices.at({dev}).name->c_str();
 }
 
-auto scuff_device_get_param_count(scuff_device dev) -> size_t {
+static
+auto device_get_param_count(scuff_device dev) -> size_t {
 	const auto m = scuff::DATA_->working_model.lock();
 	// TODO:
 	return {};
 }
 
-auto scuff_device_get_param_value_text(scuff_device dev, scuff_param param, double value, scuff_return_string fn) -> void {
+static
+auto device_get_param_value_text(scuff_device dev, scuff_param param, double value, scuff_return_string fn) -> void {
 	const auto& m       = scuff::DATA_->working_model.lock();
 	const auto& device  = m->devices.at({dev});
 	const auto& sbox    = m->sandboxes.at(device.sbox);
@@ -287,66 +263,77 @@ auto scuff_device_get_param_value_text(scuff_device dev, scuff_param param, doub
 	send(sbox, scuff::msg::in::get_param_value_text{dev, param, value, callback});
 }
 
-auto scuff_device_get_plugin(scuff_device dev) -> scuff_plugin {
+static
+auto device_get_plugin(scuff_device dev) -> scuff_plugin {
 	const auto m = scuff::DATA_->working_model.lock();
 	return m->devices.at({dev}).plugin.value;
 }
 
-auto scuff_device_has_gui(scuff_device dev) -> bool {
+static
+auto device_has_gui(scuff_device dev) -> bool {
 	const auto m = scuff::DATA_->working_model.lock();
 	const auto& device = m->devices.at({dev});
 	return device.flags.value & device.flags.has_gui;
 }
 
-auto scuff_device_has_params(scuff_device dev) -> bool {
+static
+auto device_has_params(scuff_device dev) -> bool {
 	const auto m = scuff::DATA_->working_model.lock();
 	const auto& device = m->devices.at({dev});
 	return device.flags.value & device.flags.has_params;
 }
 
-auto scuff_device_set_render_mode(scuff_device dev, scuff_render_mode mode) -> void {
+static
+auto device_set_render_mode(scuff_device dev, scuff_render_mode mode) -> void {
 	const auto m       = scuff::DATA_->working_model.lock();
 	const auto& device = m->devices.at({dev});
 	const auto& sbox   = m->sandboxes.at(device.sbox);
 	send(sbox, scuff::msg::in::device_set_render_mode{dev, mode});
 }
 
-auto scuff_device_gui_hide(scuff_device dev) -> void {
+static
+auto device_gui_hide(scuff_device dev) -> void {
 	const auto m       = scuff::DATA_->working_model.lock();
 	const auto& device = m->devices.at({dev});
 	const auto& sbox   = m->sandboxes.at(device.sbox);
 	send(sbox, scuff::msg::in::device_gui_hide{dev});
 }
 
-auto scuff_device_gui_show(scuff_device dev) -> void {
+static
+auto device_gui_show(scuff_device dev) -> void {
 	const auto m       = scuff::DATA_->working_model.lock();
 	const auto& device = m->devices.at({dev});
 	const auto& sbox   = m->sandboxes.at(device.sbox);
 	send(sbox, scuff::msg::in::device_gui_show{dev});
 }
 
-auto scuff_device_was_loaded_successfully(scuff_device dev) -> bool {
+static
+auto device_was_loaded_successfully(scuff_device dev) -> bool {
 	const auto m = scuff::DATA_->working_model.lock();
 	return m->devices.at({dev}).error->empty();
 }
 
-auto scuff_group_create() -> scuff_group {
+static
+auto group_create() -> scuff_group {
 	// TODO:
 	// - remember to create segment remover
 	return scuff::id::group{}.value;
 }
 
-auto scuff_is_running(scuff_sbox sbox) -> bool {
+static
+auto is_running(scuff_sbox sbox) -> bool {
 	const auto m        = scuff::DATA_->working_model.lock();
 	const auto& sandbox = m->sandboxes.at({sbox});
 	return sandbox.external->proc && sandbox.external->proc->running();
 }
 
-auto scuff_is_scanning() -> bool {
+static
+auto is_scanning() -> bool {
 	return scuff::DATA_->scanner_thread.joinable();
 }
 
-auto scuff_param_get_value(scuff_device dev, scuff_param param, scuff_return_double fn) -> void {
+static
+auto param_get_value(scuff_device dev, scuff_param param, scuff_return_double fn) -> void {
 	const auto& m       = scuff::DATA_->working_model.lock();
 	const auto& device  = m->devices.at({dev});
 	const auto& sbox    = m->sandboxes.at(device.sbox);
@@ -354,7 +341,8 @@ auto scuff_param_get_value(scuff_device dev, scuff_param param, scuff_return_dou
 	send(sbox, scuff::msg::in::get_param_value{dev, param, callback});
 }
 
-auto scuff_param_find(scuff_device dev, scuff_param_id param_id, scuff_return_param fn) -> void {
+static
+auto param_find(scuff_device dev, scuff_param_id param_id, scuff_return_param fn) -> void {
 	const auto& model       = scuff::DATA_->working_model.lock();
 	const auto& device      = model->devices.at({dev});
 	const auto& sbox        = model->sandboxes.at(device.sbox);
@@ -363,28 +351,32 @@ auto scuff_param_find(scuff_device dev, scuff_param_id param_id, scuff_return_pa
 	send(sbox, scuff::msg::in::find_param{dev, STR_param_id, callback});
 }
 
-auto scuff_param_gesture_begin(scuff_device dev, scuff_param param) -> void {
+static
+auto param_gesture_begin(scuff_device dev, scuff_param param) -> void {
 	const auto m = scuff::DATA_->working_model.lock();
 	const auto& device = m->devices.at({dev});
 	const auto& sbox   = m->sandboxes.at(device.sbox);
 	send(sbox, scuff::msg::in::event{dev, scuff_event_param_gesture_begin{/*TODO:*/}});
 }
 
-auto scuff_param_gesture_end(scuff_device dev, scuff_param param) -> void {
+static
+auto param_gesture_end(scuff_device dev, scuff_param param) -> void {
 	const auto m = scuff::DATA_->working_model.lock();
 	const auto& device = m->devices.at({dev});
 	const auto& sbox   = m->sandboxes.at(device.sbox);
 	send(sbox, scuff::msg::in::event{dev, scuff_event_param_gesture_end{/*TODO:*/}});
 }
 
-auto scuff_param_set_value(scuff_device dev, scuff_param param, double value) -> void {
+static
+auto param_set_value(scuff_device dev, scuff_param param, double value) -> void {
 	const auto m       = scuff::DATA_->working_model.lock();
 	const auto& device = m->devices.at({dev});
 	const auto& sbox   = m->sandboxes.at(device.sbox);
 	send(sbox, scuff::msg::in::event{dev, scuff_event_param_value{/*TODO:*/}});
 }
 
-auto scuff_plugin_find(scuff_plugin_id plugin_id) -> scuff_plugin {
+static
+auto plugin_find(scuff_plugin_id plugin_id) -> scuff_plugin {
 	const auto& m = scuff::DATA_->working_model.lock();
 	for (const auto& plugin : m->plugins) {
 		if (plugin.ext_id.value == plugin_id) {
@@ -394,42 +386,50 @@ auto scuff_plugin_find(scuff_plugin_id plugin_id) -> scuff_plugin {
 	return scuff::id::plugin{}.value;
 }
 
-auto scuff_plugfile_get_path(scuff_plugfile plugfile) -> const char* {
+static
+auto plugfile_get_path(scuff_plugfile plugfile) -> const char* {
 	const auto m = scuff::DATA_->working_model.lock();
 	return m->plugfiles.at({plugfile}).path->c_str();
 }
 
-auto scuff_plugfile_get_error(scuff_plugfile plugfile) -> const char* {
+static
+auto plugfile_get_error(scuff_plugfile plugfile) -> const char* {
 	const auto m = scuff::DATA_->working_model.lock();
 	return m->plugfiles.at({plugfile}).error->c_str();
 }
 
-auto scuff_plugin_get_error(scuff_plugin plugin) -> const char* {
+static
+auto plugin_get_error(scuff_plugin plugin) -> const char* {
 	const auto m = scuff::DATA_->working_model.lock();
 	return m->plugins.at({plugin}).error->c_str();
 }
 
-auto scuff_plugin_get_id(scuff_plugin plugin) -> scuff_plugin_id {
+static
+auto plugin_get_id(scuff_plugin plugin) -> scuff_plugin_id {
 	const auto m = scuff::DATA_->working_model.lock();
 	return m->plugins.at({plugin}).ext_id.value.c_str();
 }
 
-auto scuff_plugin_get_name(scuff_plugin plugin) -> const char* {
+static
+auto plugin_get_name(scuff_plugin plugin) -> const char* {
 	const auto m = scuff::DATA_->working_model.lock();
 	return m->plugins.at({plugin}).name->c_str();
 }
 
-auto scuff_plugin_get_vendor(scuff_plugin plugin) -> const char* {
+static
+auto plugin_get_vendor(scuff_plugin plugin) -> const char* {
 	const auto m = scuff::DATA_->working_model.lock();
 	return m->plugins.at({plugin}).vendor->c_str();
 }
 
-auto scuff_plugin_get_version(scuff_plugin plugin) -> const char* {
+static
+auto plugin_get_version(scuff_plugin plugin) -> const char* {
 	const auto m = scuff::DATA_->working_model.lock();
 	return m->plugins.at({plugin}).version->c_str();
 }
 
-auto scuff_restart(scuff_sbox sbox) -> void {
+static
+auto restart(scuff_sbox sbox) -> void {
 	const auto m = scuff::DATA_->working_model.lock();
 	const auto sandbox = m->sandboxes.at({sbox});
 	if (sandbox.external->proc && sandbox.external->proc->running()) {
@@ -438,17 +438,13 @@ auto scuff_restart(scuff_sbox sbox) -> void {
 	// TODO:
 }
 
-auto scuff_scan() -> void {
-	try {
-		scuff::scan::stop_if_it_is_already_running();
-		scuff::scan::start();
-	}
-	catch (const std::exception& err) {
-		scuff::scan::report_error(err.what());
-	}
+static
+auto scan() -> void {
+	scuff::scan::stop_if_it_is_already_running();
+	scuff::scan::start();
 }
 
-auto scuff_sandbox_create(scuff_group group_id) -> scuff_sbox {
+auto sandbox_create(scuff_group group_id) -> scuff_sbox {
 	const auto m = scuff::DATA_->working_model.lock();
 	scuff::sandbox sbox;
 	sbox.id = scuff::id::sandbox{scuff::id_gen_++};
@@ -467,14 +463,15 @@ auto scuff_sandbox_create(scuff_group group_id) -> scuff_sbox {
 	}
 	catch (const std::exception& err) {
 		sbox.error = err.what();
-		// TODO: invoke a callback or something?
+		scuff::DATA_->callbacks.on_sbox_error.fn(&scuff::DATA_->callbacks.on_sbox_error, sbox.id.value);
 	}
 	m->sandboxes = m->sandboxes.insert(sbox);
 	scuff::publish(*m);
 	return sbox.id.value;
 }
 
-auto scuff_sandbox_erase(scuff_sbox sbox) -> void {
+static
+auto sandbox_erase(scuff_sbox sbox) -> void {
 	const auto m = scuff::DATA_->working_model.lock();
 	const auto& sandbox = m->sandboxes.at({sbox});
 	*m = remove_sandbox(std::move(*m), sandbox.group, {sbox});
@@ -482,16 +479,247 @@ auto scuff_sandbox_erase(scuff_sbox sbox) -> void {
 	scuff::publish(*m);
 }
 
-auto scuff_sandbox_get_error(scuff_sbox sbox) -> const char* {
+static
+auto sandbox_get_error(scuff_sbox sbox) -> const char* {
 	const auto m = scuff::DATA_->working_model.lock();
 	return m->sandboxes.at({sbox}).error->c_str();
 }
 
-auto scuff_set_sample_rate(scuff_sample_rate sr) -> void {
+static
+auto set_sample_rate(scuff_sample_rate sr) -> void {
 	const auto m = scuff::DATA_->working_model.lock();
 	for (const auto& sbox : m->sandboxes) {
 		if (sbox.external->proc && sbox.external->proc->running()) {
 			send(sbox, scuff::msg::in::set_sample_rate{sr});
 		}
 	}
+}
+
+} // scuff
+
+auto scuff_audio_process(scuff_group_process process) -> void {
+	const auto audio     = scuff::DATA_->published_model.read();
+	const auto& group    = audio->groups.at({process.group});
+	const auto epoch     = ++group.external->epoch;
+	const auto backside  = (epoch + 0) % 2;
+	const auto frontside = (epoch + 1) % 2;
+	scuff::write_entry_ports(*audio, process.input_devices, backside);
+	scuff::signal_sandbox_processing(group, epoch, backside);
+	scuff::read_exit_ports(*audio, group, process.output_devices, frontside);
+}
+
+auto scuff_init(const scuff_config* config) -> bool {
+	if (scuff::initialized_) { return; }
+	scuff::DATA_                   = std::make_unique<scuff::data>();
+	scuff::DATA_->callbacks        = config->callbacks;
+	scuff::DATA_->instance_id      = "scuff+" + std::to_string(scuff::os::get_process_id());
+	scuff::DATA_->sandbox_exe_path = config->sandbox_exe_path;
+	scuff::DATA_->scanner_exe_path = config->scanner_exe_path;
+	try {
+		scuff::DATA_->gc_thread = std::jthread{scuff::garbage_collector, config->gc_interval_ms};
+		scuff::shm::create(&scuff::DATA_->shm_strings, scuff::DATA_->instance_id + "+strings", config->string_options);
+		scuff::DATA_->shm_strings_remover = {scuff::DATA_->shm_strings.id};
+		scuff::initialized_ = true;
+	} catch (const std::exception& err) {
+		scuff::DATA_.reset();
+		config->callbacks.on_error.fn(&config->callbacks.on_error, err.what());
+	}
+}
+
+auto scuff_shutdown() -> void {
+	if (!scuff::initialized_) { return; }
+	scuff::DATA_->gc_thread.request_stop();
+	scuff::DATA_->gc_thread.detach();
+	scuff::DATA_.reset();
+	scuff::initialized_ = false;
+}
+
+auto scuff_close_all_editors() -> void {
+	try                               { scuff::close_all_editors(); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_device_connect(scuff_device dev_out, size_t port_out, scuff_device dev_in, size_t port_in) -> void {
+	try                               { scuff::device_connect(dev_out, port_out, dev_in, port_in); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_device_create(scuff_sbox sbox, scuff_plugin plugin, scuff_return_device fn) -> void {
+	try                               { scuff::device_create(sbox, plugin, fn); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_device_disconnect(scuff_device dev_out, size_t port_out, scuff_device dev_in, size_t port_in) -> void {
+	try                               { scuff::device_disconnect(dev_out, port_out, dev_in, port_in); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_device_duplicate(scuff_device dev, scuff_sbox sbox, scuff_return_device fn) -> void {
+	try                               { scuff::device_duplicate(dev, sbox, fn); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_device_get_error(scuff_device device) -> const char* {
+	try                               { return scuff::device_get_error(device); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return ""; }
+}
+
+auto scuff_device_get_name(scuff_device dev) -> const char* {
+	try                               { return scuff::device_get_name(dev); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return ""; }
+}
+
+auto scuff_device_get_param_count(scuff_device dev) -> size_t {
+	try                               { return scuff::device_get_param_count(dev); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return 0; }
+}
+
+auto scuff_device_get_param_value_text(scuff_device dev, scuff_param param, double value, scuff_return_string fn) -> void {
+	try                               { scuff::device_get_param_value_text(dev, param, value, fn); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_device_get_plugin(scuff_device dev) -> scuff_plugin {
+	try                               { return scuff::device_get_plugin(dev); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return {}; }
+}
+
+auto scuff_device_has_gui(scuff_device dev) -> bool {
+	try                               { return scuff::device_has_gui(dev); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return false; }
+}
+
+auto scuff_device_has_params(scuff_device dev) -> bool {
+	try                               { return scuff::device_has_params(dev); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return false; }
+}
+
+auto scuff_device_set_render_mode(scuff_device dev, scuff_render_mode mode) -> void {
+	try                               { scuff::device_set_render_mode(dev, mode); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_device_gui_hide(scuff_device dev) -> void {
+	try                               { scuff::device_gui_hide(dev); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_device_gui_show(scuff_device dev) -> void {
+	try                               { scuff::device_gui_show(dev); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_device_was_loaded_successfully(scuff_device dev) -> bool {
+	try                               { return scuff::device_was_loaded_successfully(dev); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return false; }
+}
+
+auto scuff_group_create() -> scuff_group {
+	try                               { return scuff::group_create(); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return {}; }
+}
+
+auto scuff_is_running(scuff_sbox sbox) -> bool {
+	try                               { return scuff::is_running(sbox); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return false; }
+}
+
+auto scuff_is_scanning() -> bool {
+	try                               { return scuff::is_scanning(); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return false; }
+}
+
+auto scuff_param_get_value(scuff_device dev, scuff_param param, scuff_return_double fn) -> void {
+	try                               { scuff::param_get_value(dev, param, fn); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_param_find(scuff_device dev, scuff_param_id param_id, scuff_return_param fn) -> void {
+	try                               { scuff::param_find(dev, param_id, fn); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_param_gesture_begin(scuff_device dev, scuff_param param) -> void {
+	try                               { scuff::param_gesture_begin(dev, param); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_param_gesture_end(scuff_device dev, scuff_param param) -> void {
+	try                               { scuff::param_gesture_end(dev, param); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_param_set_value(scuff_device dev, scuff_param param, double value) -> void {
+	try                               { scuff::param_set_value(dev, param, value); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_plugin_find(scuff_plugin_id plugin_id) -> scuff_plugin {
+	try                               { return scuff::plugin_find(plugin_id); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return {}; }
+}
+
+auto scuff_plugfile_get_path(scuff_plugfile plugfile) -> const char* {
+	try                               { return scuff::plugfile_get_path(plugfile); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return ""; }
+}
+
+auto scuff_plugfile_get_error(scuff_plugfile plugfile) -> const char* {
+	try                               { return scuff::plugfile_get_error(plugfile); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return ""; }
+}
+
+auto scuff_plugin_get_error(scuff_plugin plugin) -> const char* {
+	try                               { return scuff::plugin_get_error(plugin); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return ""; }
+}
+
+auto scuff_plugin_get_id(scuff_plugin plugin) -> scuff_plugin_id {
+	try                               { return scuff::plugin_get_id(plugin); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return {}; }
+}
+
+auto scuff_plugin_get_name(scuff_plugin plugin) -> const char* {
+	try                               { return scuff::plugin_get_name(plugin); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return ""; }
+}
+
+auto scuff_plugin_get_vendor(scuff_plugin plugin) -> const char* {
+	try                               { return scuff::plugin_get_vendor(plugin); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return ""; }
+}
+
+auto scuff_plugin_get_version(scuff_plugin plugin) -> const char* {
+	try                               { return scuff::plugin_get_version(plugin); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return ""; }
+}
+
+auto scuff_restart(scuff_sbox sbox) -> void {
+	try                               { scuff::restart(sbox); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_scan() -> void {
+	try                               { scuff::scan(); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_sandbox_create(scuff_group group_id) -> scuff_sbox {
+	try                               { return scuff::sandbox_create(group_id); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return {}; }
+}
+
+auto scuff_sandbox_erase(scuff_sbox sbox) -> void {
+	try                               { scuff::sandbox_erase(sbox); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
+}
+
+auto scuff_sandbox_get_error(scuff_sbox sbox) -> const char* {
+	try                               { return scuff::sandbox_get_error(sbox); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return ""; }
+}
+
+auto scuff_set_sample_rate(scuff_sample_rate sr) -> void {
+	try                               { scuff::set_sample_rate(sr); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); }
 }
