@@ -10,7 +10,7 @@ namespace scuff::msg::in {
 
 struct close_all_editors      {};
 struct commit_changes         {};
-struct device_add             { scuff::id::device dev; };
+struct device_create          { scuff::id::device dev; size_t callback; };
 struct device_connect         { scuff::id::device out_dev; size_t out_port; scuff::id::device in_dev; size_t in_port; };
 struct device_disconnect      { scuff::id::device out_dev; size_t out_port; scuff::id::device in_dev; size_t in_port; };
 struct device_erase           { scuff::id::device dev; };
@@ -26,7 +26,7 @@ struct set_sample_rate        { double sr; };
 using msg = std::variant<
 	close_all_editors,
 	commit_changes,
-	device_add,
+	device_create,
 	device_connect,
 	device_disconnect,
 	device_erase,
@@ -50,16 +50,16 @@ struct list {
 
 namespace scuff::msg::out {
 
-struct device_add_error        { scuff::id::device dev; };
-struct device_add_success      { scuff::id::device dev; };
+struct device_create_error     { scuff::id::device dev; size_t callback; };
+struct device_create_success   { scuff::id::device dev; size_t callback; };
 struct device_params_changed   { scuff::id::device dev; };
 struct return_param            { scuff::idx::param param; size_t callback; };
 struct return_param_value      { double value; size_t callback; };
 struct return_param_value_text { size_t STR_text; size_t callback; };
 
 using msg = std::variant<
-	device_add_error,
-	device_add_success,
+	device_create_error,
+	device_create_success,
 	device_params_changed,
 	return_param,
 	return_param_value,

@@ -73,25 +73,27 @@ typedef struct scuff_group_process_t {
 
 // Users should assume that any of these callbacks can be called from any thread.
 // Every callback must be provided when calling scuff_init.
-typedef struct scuff_on_device_error_t     { void* ctx; void (*fn)(const struct scuff_on_device_error_t* ctx, scuff_device dev); } scuff_on_device_error;
-typedef struct scuff_on_error_t            { void* ctx; void (*fn)(const struct scuff_on_error_t* ctx, const char* error); } scuff_on_error;
-typedef struct scuff_on_plugfile_broken_t  { void* ctx; void (*fn)(const struct scuff_on_plugfile_broken_t* ctx, scuff_plugfile plugfile); } scuff_on_plugfile_broken;
-typedef struct scuff_on_plugfile_scanned_t { void* ctx; void (*fn)(const struct scuff_on_plugfile_scanned_t* ctx, scuff_plugfile plugfile); } scuff_on_plugfile_scanned;
-typedef struct scuff_on_plugin_broken_t    { void* ctx; void (*fn)(const struct scuff_on_plugin_broken_t* ctx, scuff_plugin plugin); } scuff_on_plugin_broken;
-typedef struct scuff_on_plugin_scanned_t   { void* ctx; void (*fn)(const struct scuff_on_plugin_scanned_t* ctx, scuff_plugin plugin); } scuff_on_plugin_scanned;
-typedef struct scuff_on_sbox_crashed_t     { void* ctx; void (*fn)(const struct scuff_on_sbox_crashed_t* ctx, scuff_sbox sbox); } scuff_on_sbox_crashed;
-typedef struct scuff_on_sbox_error_t       { void* ctx; void (*fn)(const struct scuff_on_sbox_error_t* ctx, scuff_sbox sbox); } scuff_on_sbox_error;
-typedef struct scuff_on_sbox_started_t     { void* ctx; void (*fn)(const struct scuff_on_sbox_started_t* ctx, scuff_sbox sbox); } scuff_on_sbox_started;
-typedef struct scuff_on_scan_complete_t    { void* ctx; void (*fn)(const struct scuff_on_scan_complete_t* ctx); } scuff_on_scan_complete;
-typedef struct scuff_on_scan_error_t       { void* ctx; void (*fn)(const struct scuff_on_scan_error_t* ctx, const char* error); } scuff_on_scan_error;
-typedef struct scuff_on_scan_started_t     { void* ctx; void (*fn)(const struct scuff_on_scan_started_t* ctx ); } scuff_on_scan_started;
-typedef struct scuff_return_device_t       { void* ctx; void (*fn)(const struct scuff_return_device_t* ctx, scuff_device dev); } scuff_return_device; 
-typedef struct scuff_return_double_t       { void* ctx; void (*fn)(const struct scuff_return_double_t* ctx, double value); } scuff_return_double;
-typedef struct scuff_return_param_t        { void* ctx; void (*fn)(const struct scuff_return_param_t* ctx, scuff_param param); } scuff_return_param;
-typedef struct scuff_return_string_t       { void* ctx; void (*fn)(const struct scuff_return_string_t* ctx, const char* text); } scuff_return_string; 
+typedef struct scuff_on_device_error_t          { void* ctx; void (*fn)(const struct scuff_on_device_error_t* ctx, scuff_device dev); } scuff_on_device_error;
+typedef struct scuff_on_device_params_changed_t { void* ctx; void (*fn)(const struct scuff_on_device_params_changed_t* ctx, scuff_device dev); } scuff_on_device_params_changed;
+typedef struct scuff_on_error_t                 { void* ctx; void (*fn)(const struct scuff_on_error_t* ctx, const char* error); } scuff_on_error;
+typedef struct scuff_on_plugfile_broken_t       { void* ctx; void (*fn)(const struct scuff_on_plugfile_broken_t* ctx, scuff_plugfile plugfile); } scuff_on_plugfile_broken;
+typedef struct scuff_on_plugfile_scanned_t      { void* ctx; void (*fn)(const struct scuff_on_plugfile_scanned_t* ctx, scuff_plugfile plugfile); } scuff_on_plugfile_scanned;
+typedef struct scuff_on_plugin_broken_t         { void* ctx; void (*fn)(const struct scuff_on_plugin_broken_t* ctx, scuff_plugin plugin); } scuff_on_plugin_broken;
+typedef struct scuff_on_plugin_scanned_t        { void* ctx; void (*fn)(const struct scuff_on_plugin_scanned_t* ctx, scuff_plugin plugin); } scuff_on_plugin_scanned;
+typedef struct scuff_on_sbox_crashed_t          { void* ctx; void (*fn)(const struct scuff_on_sbox_crashed_t* ctx, scuff_sbox sbox); } scuff_on_sbox_crashed;
+typedef struct scuff_on_sbox_error_t            { void* ctx; void (*fn)(const struct scuff_on_sbox_error_t* ctx, scuff_sbox sbox); } scuff_on_sbox_error;
+typedef struct scuff_on_sbox_started_t          { void* ctx; void (*fn)(const struct scuff_on_sbox_started_t* ctx, scuff_sbox sbox); } scuff_on_sbox_started;
+typedef struct scuff_on_scan_complete_t         { void* ctx; void (*fn)(const struct scuff_on_scan_complete_t* ctx); } scuff_on_scan_complete;
+typedef struct scuff_on_scan_error_t            { void* ctx; void (*fn)(const struct scuff_on_scan_error_t* ctx, const char* error); } scuff_on_scan_error;
+typedef struct scuff_on_scan_started_t          { void* ctx; void (*fn)(const struct scuff_on_scan_started_t* ctx ); } scuff_on_scan_started;
+typedef struct scuff_return_device_t            { void* ctx; void (*fn)(const struct scuff_return_device_t* ctx, scuff_device dev); } scuff_return_device; 
+typedef struct scuff_return_double_t            { void* ctx; void (*fn)(const struct scuff_return_double_t* ctx, double value); } scuff_return_double;
+typedef struct scuff_return_param_t             { void* ctx; void (*fn)(const struct scuff_return_param_t* ctx, scuff_param param); } scuff_return_param;
+typedef struct scuff_return_string_t            { void* ctx; void (*fn)(const struct scuff_return_string_t* ctx, const char* text); } scuff_return_string; 
 
 typedef struct scuff_callbacks_t {
 	scuff_on_device_error on_device_error;
+	scuff_on_device_params_changed on_device_params_changed;
 	scuff_on_error on_error;
 	scuff_on_plugfile_broken on_plugfile_broken;
 	scuff_on_plugfile_scanned on_plugfile_scanned;
@@ -205,6 +207,7 @@ bool            scuff_device_was_loaded_successfully(scuff_device dev);
 // Create a new group.
 // - Every sandbox has to belong to a group.
 // - This is what allows data to travel between sandboxes.
+// - On failure, returns < 0.
 scuff_group     scuff_group_create(void);
 
 // Erase a group.
@@ -235,7 +238,7 @@ bool            scuff_is_scanning(void);
 
 // Find the parameter with the given id asynchronously.
 // When the result is ready, call the given function with it.
-// If the parameter was not found then the result will be TOM_INVALID_INDEX.
+// If the parameter was not found then the result will be SCUFF_INVALID_INDEX.
 void            scuff_param_find(scuff_device dev, scuff_param_id param_id, scuff_return_param fn);
 
 // Begin a parameter gesture (CLAP)
@@ -273,7 +276,7 @@ const char*     scuff_plugin_get_vendor(scuff_plugin plugin);
 const char*     scuff_plugin_get_version(scuff_plugin plugin);
 
 // Restart the sandbox.
-void            scuff_restart(scuff_sbox sbox);
+void            scuff_restart(scuff_sbox sbox, const char* sbox_exe_path);
 
 // Scan the system for plugins. If the scanner process is already
 // running, it is restarted.

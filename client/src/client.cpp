@@ -62,8 +62,8 @@ auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id) 
 
 [[nodiscard]] static
 auto wait_for_output_ready(const scuff::group& group, size_t frontside) -> bool {
-	auto ready = [cb = group.external->shm.cb, frontside]() -> bool {
-		return cb->sandboxes_processing.value[frontside].load(std::memory_order_acquire) < 1;
+	auto ready = [data = group.external->shm.data, frontside]() -> bool {
+		return data->sandboxes_processing.value[frontside].load(std::memory_order_acquire) < 1;
 	};
 	if (ready()) {
 		return true;
@@ -120,7 +120,7 @@ auto read_audio(const scuff::device& dev, const scuff_audio_readers& readers, si
 
 static
 auto read_zeros(const scuff::device& dev, const scuff_audio_readers& readers) -> void {
-	std::array<float, TOM_CHANNEL_COUNT * TOM_VECTOR_SIZE> zeros = {0.0f};
+	std::array<float, SCUFF_CHANNEL_COUNT * SCUFF_VECTOR_SIZE> zeros = {0.0f};
 	for (size_t j = 0; j < readers.count; j++) {
 		const auto& reader = readers.readers[j];
 		reader.fn(&reader, zeros.data());
@@ -163,27 +163,117 @@ auto read_exit_ports(const scuff::model& m, const scuff::group& group, const scu
 
 static
 auto signal_sandbox_processing(const scuff::group& group, uint64_t epoch, size_t backside) -> void {
-	auto& cb = *group.external->shm.cb;
+	auto& data = *group.external->shm.data;
 	// Set the sandbox counter
-	cb.sandboxes_processing.value[backside].store(group.sandboxes.size(), std::memory_order_seq_cst);
+	data.sandboxes_processing.value[backside].store(group.sandboxes.size(), std::memory_order_seq_cst);
 	// Set the epoch. This will trigger the sandboxes to begin processing.
-	cb.epoch.store(epoch, std::memory_order_release);
-}
-
-static
-auto io_thread(std::chrono::milliseconds gc_interval) -> void {
-	auto work_guard = basio::make_work_guard(DATA_->io_context);
-	while (!DATA_->io_context.stopped()) {
-		const auto now     = std::chrono::steady_clock::now();
-		const auto next_gc = now + gc_interval;
-		DATA_->published_model.garbage_collect();
-		DATA_->io_context.run_until(next_gc);
-	}
+	data.epoch.store(epoch, std::memory_order_release);
 }
 
 static
 auto report_error(std::string_view err) -> void {
 	DATA_->callbacks.on_error.fn(&DATA_->callbacks.on_error, err.data());
+}
+
+static
+auto get_messages(const sandbox& sbox) -> std::vector<msg::out::msg> {
+	const auto lock = std::unique_lock(sbox.external->shm.msgs_out->mutex);
+	auto msgs = std::vector<msg::out::msg>{};
+	msgs.reserve(sbox.external->shm.msgs_out->list.size());
+	std::copy(sbox.external->shm.msgs_out->list.begin(), sbox.external->shm.msgs_out->list.end(), std::back_inserter(msgs));
+	sbox.external->shm.msgs_out->list.clear();
+	return msgs;
+}
+
+static
+auto process_message_(id::sandbox sbox_id, const msg::out::device_create_error& msg) -> void {
+	// We sent a device_create message to the sandbox but it failed to create the remote device.
+	const auto m         = DATA_->working_model.lock();
+	const auto sbox      = m->sandboxes.at(sbox_id);
+	const auto return_fn = sbox.external->return_buffers.devices.take(msg.callback);
+	*m = set_error(std::move(*m), msg.dev, "Failed to create.");
+	return_fn.fn(&return_fn, msg.dev.value);
+	DATA_->callbacks.on_device_error.fn(&DATA_->callbacks.on_device_error, msg.dev.value);
+}
+
+static
+auto process_message_(id::sandbox sbox_id, const msg::out::device_create_success& msg) -> void {
+	// We sent a device_create message to the sandbox and it succeeded in creating the remote device.
+	const auto m         = DATA_->working_model.lock();
+	const auto sbox      = m->sandboxes.at(sbox_id);
+	const auto return_fn = sbox.external->return_buffers.devices.take(msg.callback);
+	// TODO: open shared memory segments and create removers for them
+	return_fn.fn(&return_fn, msg.dev.value);
+	publish(*m); // Device may not have been published yet.
+}
+
+static
+auto process_message_(id::sandbox sbox_id, const msg::out::device_params_changed& msg) -> void {
+	DATA_->callbacks.on_device_params_changed.fn(&DATA_->callbacks.on_device_params_changed, msg.dev.value);
+}
+
+static
+auto process_message_(id::sandbox sbox_id, const msg::out::return_param& msg) -> void {
+	const auto m         = DATA_->working_model.lock();
+	const auto sbox      = m->sandboxes.at(sbox_id);
+	const auto return_fn = sbox.external->return_buffers.params.take(msg.callback);
+	return_fn.fn(&return_fn, msg.param.value);
+}
+
+static
+auto process_message_(id::sandbox sbox_id, const msg::out::return_param_value& msg) -> void {
+	const auto m         = DATA_->working_model.lock();
+	const auto sbox      = m->sandboxes.at(sbox_id);
+	const auto return_fn = sbox.external->return_buffers.doubles.take(msg.callback);
+	return_fn.fn(&return_fn, msg.value);
+}
+
+static
+auto process_message_(id::sandbox sbox_id, const msg::out::return_param_value_text& msg) -> void {
+	const auto m         = DATA_->working_model.lock();
+	const auto sbox      = m->sandboxes.at(sbox_id);
+	const auto return_fn = sbox.external->return_buffers.strings.take(msg.callback);
+	const auto text      = shm::take(&DATA_->shm_strings, msg.STR_text);
+	return_fn.fn(&return_fn, text.c_str());
+}
+
+static
+auto process_message(id::sandbox sbox_id, const msg::out::msg& msg) -> void {
+	const auto proc = [sbox_id](const auto& msg) -> void { process_message_(sbox_id, msg); };
+	try                               { fast_visit(proc, msg); }
+	catch (const std::exception& err) { report_error(err.what()); }
+}
+
+static
+auto process_sandbox_messages(const sandbox& sbox) -> void {
+	const auto msgs = get_messages(sbox);
+	for (const auto& msg : msgs) {
+		process_message(sbox.id, msg);
+	}
+}
+
+static
+auto process_sandbox_messages() -> void {
+	const auto sandboxes = DATA_->working_model.lock()->sandboxes;
+	for (const auto& sbox : sandboxes) {
+		process_sandbox_messages(sbox);
+	}
+}
+
+static
+auto poll_thread(std::stop_token stop_token, std::chrono::milliseconds gc_interval) -> void {
+	static constexpr auto SLEEP_TIME = std::chrono::milliseconds{10};
+	auto now     = std::chrono::steady_clock::now();
+	auto next_gc = now + gc_interval;
+	while (!stop_token.stop_requested()) {
+		now = std::chrono::steady_clock::now();
+		if (now > next_gc) {
+			DATA_->published_model.garbage_collect();
+			next_gc = now + gc_interval;
+		}
+		process_sandbox_messages();
+		std::this_thread::sleep_for(SLEEP_TIME);
+	}
 }
 
 static
@@ -202,13 +292,21 @@ auto device_connect(scuff_device dev_out, size_t port_out, scuff_device dev_in, 
 }
 
 static
-auto device_create(scuff_sbox sbox, scuff_plugin plugin, scuff_return_device fn) -> void {
-	// TODO:
-	// - create device table entry, shared memory, etc.
-	// - then send message to sandbox
-	// - if result is success, call fn with the handle
-	// - otherwise, erase device table entry, shared memory, etc.
-	// - remember to create segment remover
+auto device_create(scuff_sbox sbox_id, scuff_plugin plugin, scuff_return_device fn) -> void {
+	const auto m     = scuff::DATA_->working_model.lock();
+	const auto& sbox = m->sandboxes.at({sbox_id});
+	scuff::device dev;
+	dev.id     = scuff::id::device{scuff::id_gen_++};
+	dev.sbox   = {sbox_id};
+	dev.plugin = {plugin};
+	try {
+		const auto callback = sbox.external->return_buffers.devices.put(fn);
+		send(sbox, msg::in::device_create{dev.id, callback});
+	} catch (const std::exception& err) {
+		dev.error = err.what();
+		scuff::DATA_->callbacks.on_device_error.fn(&scuff::DATA_->callbacks.on_device_error, dev.id.value);
+	}
+	scuff::insert_device(dev);
 }
 
 auto device_disconnect(scuff_device dev_out, size_t port_out, scuff_device dev_in, size_t port_in) -> void {
@@ -233,9 +331,15 @@ auto device_get_name(scuff_device dev) -> const char* {
 
 static
 auto device_get_param_count(scuff_device dev) -> size_t {
-	const auto m = scuff::DATA_->working_model.lock();
-	// TODO:
-	return {};
+	const auto m       = scuff::DATA_->working_model.lock();
+	const auto& device = m->devices.at({dev});
+	const auto& shm    = device.external->shm_device;
+	if (!shm.data) {
+		// Device wasn't successfully created by the sandbox process (yet?)
+		return 0;
+	}
+	const auto lock = std::unique_lock{shm.data->mutex};
+	return device.external->shm_device.data->param_count;
 }
 
 static
@@ -255,16 +359,20 @@ auto device_get_plugin(scuff_device dev) -> scuff_plugin {
 
 static
 auto device_has_gui(scuff_device dev) -> bool {
-	const auto m = scuff::DATA_->working_model.lock();
+	const auto m       = scuff::DATA_->working_model.lock();
 	const auto& device = m->devices.at({dev});
-	return device.flags.value & device.flags.has_gui;
+	const auto lock    = std::unique_lock{device.external->shm_device.data->mutex};
+	const auto flags   = device.external->shm_device.data->flags;
+	return flags.value & flags.has_gui;
 }
 
 static
 auto device_has_params(scuff_device dev) -> bool {
-	const auto m = scuff::DATA_->working_model.lock();
+	const auto m       = scuff::DATA_->working_model.lock();
 	const auto& device = m->devices.at({dev});
-	return device.flags.value & device.flags.has_params;
+	const auto lock    = std::unique_lock{device.external->shm_device.data->mutex};
+	const auto flags   = device.external->shm_device.data->flags;
+	return flags.value & flags.has_params;
 }
 
 static
@@ -299,9 +407,18 @@ auto device_was_loaded_successfully(scuff_device dev) -> bool {
 
 static
 auto group_create() -> scuff_group {
-	// TODO:
-	// - remember to create segment remover
-	return scuff::id::group{}.value;
+	const auto m = scuff::DATA_->working_model.lock();
+	scuff::group group;
+	group.id     = scuff::id::group{scuff::id_gen_++};
+	try {
+		// TODO:
+		// - remember to create segment remover
+	} catch (const std::exception& err) {
+		scuff::DATA_->callbacks.on_error.fn(&scuff::DATA_->callbacks.on_error, err.what());
+		return -1;
+	}
+	scuff::insert_group(group);
+	return {group.id.value};
 }
 
 static
@@ -413,13 +530,17 @@ auto plugin_get_version(scuff_plugin plugin) -> const char* {
 }
 
 static
-auto restart(scuff_sbox sbox) -> void {
-	const auto m = scuff::DATA_->working_model.lock();
+auto restart(scuff_sbox sbox, const char* sbox_exe_path) -> void {
+	const auto m       = scuff::DATA_->working_model.lock();
 	const auto sandbox = m->sandboxes.at({sbox});
+	const auto& group  = m->groups.at(sandbox.group);
 	if (sandbox.external->proc && sandbox.external->proc->running()) {
 		sandbox.external->proc->terminate();
 	}
-	// TODO:
+	const auto group_shmid   = group.external->shm.id;
+	const auto sandbox_shmid = sandbox.external->shm.id;
+	const auto exe_args      = scuff::make_sbox_exe_args(group_shmid, sandbox_shmid);
+	sandbox.external->proc   = std::make_unique<bp::child>(sbox_exe_path, exe_args);
 }
 
 static
@@ -449,7 +570,7 @@ auto sandbox_create(scuff_group group_id, const char* sbox_exe_path) -> scuff_sb
 		sbox.error = err.what();
 		scuff::DATA_->callbacks.on_sbox_error.fn(&scuff::DATA_->callbacks.on_sbox_error, sbox.id.value);
 	}
-	*m = insert_sandbox(std::move(*m), sbox);
+	scuff::insert_sandbox(sbox);
 	scuff::publish(*m);
 	return sbox.id.value;
 }
@@ -498,7 +619,7 @@ auto scuff_init(const scuff_config* config) -> bool {
 	scuff::DATA_->callbacks   = config->callbacks;
 	scuff::DATA_->instance_id = "scuff+" + std::to_string(scuff::os::get_process_id());
 	try {
-		scuff::DATA_->io_thread = std::jthread{scuff::io_thread, std::chrono::milliseconds{config->gc_interval_ms}};
+		scuff::DATA_->poll_thread = std::jthread{scuff::poll_thread, std::chrono::milliseconds{config->gc_interval_ms}};
 		scuff::shm::create(&scuff::DATA_->shm_strings, scuff::DATA_->instance_id + "+strings", config->string_options);
 		scuff::DATA_->shm_strings_remover = {scuff::DATA_->shm_strings.id};
 		scuff::initialized_ = true;
@@ -512,8 +633,8 @@ auto scuff_init(const scuff_config* config) -> bool {
 
 auto scuff_shutdown() -> void {
 	if (!scuff::initialized_) { return; }
-	scuff::DATA_->io_context.stop();
-	scuff::DATA_->io_thread.join();
+	scuff::DATA_->poll_thread.request_stop();
+	scuff::DATA_->poll_thread.join();
 	scuff::DATA_.reset();
 	scuff::initialized_ = false;
 }
@@ -678,8 +799,8 @@ auto scuff_plugin_get_version(scuff_plugin plugin) -> const char* {
 	catch (const std::exception& err) { scuff::report_error(err.what()); return ""; }
 }
 
-auto scuff_restart(scuff_sbox sbox) -> void {
-	try                               { scuff::restart(sbox); }
+auto scuff_restart(scuff_sbox sbox, const char* sbox_exe_path) -> void {
+	try                               { scuff::restart(sbox, sbox_exe_path); }
 	catch (const std::exception& err) { scuff::report_error(err.what()); }
 }
 

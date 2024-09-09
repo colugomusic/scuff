@@ -26,15 +26,6 @@ struct return_buffers {
 	return_string_fns strings;
 };
 
-struct device_flags {
-	enum e {
-		has_gui          = 1 << 0,
-		has_params       = 1 << 1,
-		supports_offline = 1 << 2, // TODO: initialize these flags when device is created
-	};
-	int value = 0;
-};
-
 struct sbox_flags {
 	enum e {
 		running = 1 << 0,
@@ -67,7 +58,6 @@ struct group_external {
 
 struct device {
 	id::device id;
-	device_flags flags;
 	id::plugin plugin;
 	id::sandbox sbox;
 	immer::box<std::string> error;
@@ -117,8 +107,7 @@ struct data {
 	shm::segment_remover     shm_strings_remover;
 	std::string              instance_id;
 	scuff_callbacks          callbacks;
-	basio::io_context        io_context;
-	std::jthread             io_thread;
+	std::jthread             poll_thread;
 	std::jthread             scan_thread;
 
 	// Copy of the model shared by non-audio threads. If a thread modifies
@@ -144,26 +133,50 @@ auto add_sandbox_to_group(model&& m, id::group group, id::sandbox sbox) -> model
 }
 
 [[nodiscard]] static
+auto erase_device(model&& m, id::device id) -> model {
+	m.devices = m.devices.erase(id);
+	return m;
+}
+
+[[nodiscard]] static
+auto erase_group(model&& m, id::group id) -> model {
+	m.groups = m.groups.erase(id);
+	return m;
+}
+
+[[nodiscard]] static
 auto erase_sandbox(model&& m, id::sandbox id) -> model {
 	m.sandboxes = m.sandboxes.erase(id);
 	return m;
 }
 
 [[nodiscard]] static
+auto insert_device(model&& m, device&& dev) -> model {
+	m.devices = m.devices.insert(dev);
+	return m;
+}
+
+[[nodiscard]]
+auto insert_group(model&& m, group&& g) -> model {
+	m.groups = m.groups.insert(g);
+	return m;
+}
+
+[[nodiscard]] static
 auto insert_plugfile(model&& m, plugfile&& pf) -> model {
-	m.plugfiles = m.plugfiles.insert(pf);
+	m.plugfiles = m.plugfiles.insert(std::move(pf));
 	return m;
 }
 
 [[nodiscard]] static
 auto insert_plugin(model&& m, plugin&& p) -> model {
-	m.plugins = m.plugins.insert(p);
+	m.plugins = m.plugins.insert(std::move(p));
 	return m;
 }
 
 [[nodiscard]] static
-auto insert_sandbox(model&& m, scuff::sandbox sbox) -> model {
-	m.sandboxes = m.sandboxes.insert(sbox);
+auto insert_sandbox(model&& m, scuff::sandbox&& sbox) -> model {
+	m.sandboxes = m.sandboxes.insert(std::move(sbox));
 	return m;
 }
 
@@ -176,16 +189,29 @@ auto remove_sandbox_from_group(model&& m, id::group group, id::sandbox sbox) -> 
 	return m;
 }
 
-static
-auto insert_plugfile(plugfile&& pf) -> void {
-	const auto m = DATA_->working_model.lock();
-	*m = insert_plugfile(std::move(*m), std::move(pf));
+[[nodiscard]] static
+auto set_error(model&& m, id::device id, std::string_view error) -> model {
+	m.devices = m.devices.update_if_exists(id, [error](scuff::device dev) {
+		dev.error = error;
+		return dev;
+	});
+	return m;
 }
 
-static
-auto insert_plugin(plugin&& p) -> void {
+template <typename UpdateFn> static
+auto update(UpdateFn&& fn) -> void {
 	const auto m = DATA_->working_model.lock();
-	*m = insert_plugin(std::move(*m), std::move(p));
+	*m = fn(std::move(*m));
 }
+
+static auto erase_device(id::device id) -> void { update([id](model&& m) { return erase_device(std::move(m), id); }); } 
+static auto erase_group(id::group id) -> void { update([id](model&& m) { return erase_group(std::move(m), id); }); }
+static auto erase_sandbox(id::sandbox id) -> void { update([id](model&& m) { return erase_sandbox(std::move(m), id); }); }
+static auto insert_device(device dev) -> void { update([dev](model&& m) mutable { return insert_device(std::move(m), std::move(dev)); }); }
+static auto insert_group(group g) -> void { update([g](model&& m) mutable { return insert_group(std::move(m), std::move(g)); }); }
+static auto insert_plugfile(plugfile pf) -> void { update([pf](model&& m) mutable { return insert_plugfile(std::move(m), std::move(pf)); }); }
+static auto insert_plugin(plugin p) -> void { update([p](model&& m) mutable { return insert_plugin(std::move(m), std::move(p)); }); }
+static auto insert_sandbox(sandbox sbox) -> void { update([sbox](model&& m) mutable { return insert_sandbox(std::move(m), std::move(sbox)); }); }
+static auto set_error(id::device id, std::string_view error) -> void { update([id, error](model&& m) { return set_error(std::move(m), id, error); }); }
 
 } // scuff

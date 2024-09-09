@@ -25,6 +25,7 @@ static constexpr auto OBJECT_AUDIO_OUT         = "+audio+out";
 static constexpr auto OBJECT_EVENTS_IN         = "+events+in";
 static constexpr auto OBJECT_EVENTS_OUT        = "+events+out";
 static constexpr auto OBJECT_CONTROL_BLOCK     = "+cb";
+static constexpr auto OBJECT_DATA              = "+data";
 static constexpr auto OBJECT_ITEMS             = "+items";
 static constexpr auto OBJECT_INDICES           = "+indices";
 static constexpr auto OBJECT_MAX_STRING_LENGTH = "+msl";
@@ -46,15 +47,62 @@ struct sbox_messages_out {
 	bip::interprocess_mutex mutex;
 };
 
-[[nodiscard]] static
-auto index_pop(size_t* list, size_t* count) -> size_t {
-	return list[--(*count)];
-}
+using audio_buffer = std::array<float, SCUFF_VECTOR_SIZE * SCUFF_CHANNEL_COUNT>;
+using event_buffer = bc::static_vector<scuff::events::event, SCUFF_EVENT_PORT_SIZE>;
 
-static
-auto index_push(size_t* list, size_t* count, size_t index) -> void {
-	list[(*count)++] = index;
-}
+template <typename T>
+struct ab {
+	static constexpr auto A = 0;
+	static constexpr auto B = 0;
+	std::array<T, 2> value;
+};
+
+struct device_flags {
+	enum e {
+		has_gui          = 1 << 0,
+		has_params       = 1 << 1,
+		is_active        = 1 << 2,
+		supports_offline = 1 << 3, // TODO: initialize these flags when device is created
+	};
+	int value = 0;
+};
+
+struct device_data {
+	size_t param_count = 0;
+	device_flags flags;
+	bip::interprocess_mutex mutex;
+};
+
+struct device : segment {
+	ab<event_buffer>* events_in  = nullptr;
+	ab<event_buffer>* events_out = nullptr;
+	device_data* data            = nullptr;
+};
+
+struct device_audio_ports : segment {
+	size_t input_count    = 0;
+	size_t output_count   = 0;
+	ab<audio_buffer>* input_buffers  = nullptr;
+	ab<audio_buffer>* output_buffers = nullptr;
+};
+
+struct sandbox : segment {
+	sbox_messages_in* msgs_in   = nullptr;
+	sbox_messages_out* msgs_out = nullptr;
+};
+
+struct group_data {
+	// This is incremented to signal all
+	// sandboxes in the group to process.
+	std::atomic<uint64_t> epoch = 0;
+	// Each sandbox process decrements this
+	// counter when it is finished processing.
+	ab<std::atomic<uint64_t>> sandboxes_processing;
+};
+
+struct group : segment {
+	group_data* data = nullptr;
+};
 
 struct buffer_cb {
 	buffer_cb(size_t capacity) : capacity{capacity}, free_index_count{capacity}, sem{static_cast<uint32_t>(capacity)} {}
@@ -77,6 +125,16 @@ struct item_buffer : segment {
 	// List of free indices
 	size_t* free_indices;
 };
+
+[[nodiscard]] static
+auto index_pop(size_t* list, size_t* count) -> size_t {
+	return list[--(*count)];
+}
+
+static
+auto index_push(size_t* list, size_t* count, size_t index) -> void {
+	list[(*count)++] = index;
+}
 
 [[nodiscard]] static
 auto calc_item_buffer_seg_size(size_t capacity, size_t item_size) -> size_t {
@@ -225,46 +283,21 @@ auto take(string_buffer* sb, size_t index) -> std::string {
 	return take(sb, index, read_fn);
 }
 
-template <typename T>
-struct ab {
-	static constexpr auto A = 0;
-	static constexpr auto B = 0;
-	std::array<T, 2> value;
-};
-
-struct grp_control_block {
-	// This is incremented to signal all
-	// sandboxes in the group to process.
-	std::atomic<uint64_t> epoch = 0;
-	// Each sandbox process decrements this
-	// counter when it is finished processing.
-	ab<std::atomic<uint64_t>> sandboxes_processing;
-};
-
-struct group : segment {
-	grp_control_block* cb = nullptr;
-};
-
 static
 auto create(group* group, std::string_view id) -> void {
-	static constexpr auto SEG_SIZE = sizeof(grp_control_block) + SEGMENT_OVERHEAD;
-	group->id  = id;
-	group->seg = bip::managed_shared_memory{bip::create_only, id.data(), SEG_SIZE};
-	group->cb  = group->seg.construct<grp_control_block>(OBJECT_CONTROL_BLOCK)();
+	static constexpr auto SEG_SIZE = sizeof(group_data) + SEGMENT_OVERHEAD;
+	group->id   = id;
+	group->seg  = bip::managed_shared_memory{bip::create_only, id.data(), SEG_SIZE};
+	group->data = group->seg.construct<group_data>(OBJECT_DATA)();
 }
 
 [[nodiscard]] static
 auto open(group* group, std::string_view id) -> bool {
 	group->id  = id;
 	group->seg = bip::managed_shared_memory{bip::open_only, id.data()};
-	if (find_shm_obj<grp_control_block>(&group->seg, OBJECT_CONTROL_BLOCK, &group->cb) < 1) { return false; }
+	if (find_shm_obj<group_data>(&group->seg, OBJECT_DATA, &group->data) < 1) { return false; }
 	return true;
 }
-
-struct sandbox : segment {
-	sbox_messages_in* msgs_in   = nullptr;
-	sbox_messages_out* msgs_out = nullptr;
-};
 
 static
 auto create(sandbox* sbox, std::string_view id) -> void {
@@ -287,14 +320,6 @@ auto open(sandbox* sbox, std::string_view id) -> bool {
 	return true;
 }
 
-using audio_buffer = std::array<float, TOM_VECTOR_SIZE * TOM_CHANNEL_COUNT>;
-using event_buffer = bc::static_vector<scuff::events::event, TOM_EVENT_PORT_SIZE>;
-
-struct device : segment {
-	ab<event_buffer>* events_in  = nullptr;
-	ab<event_buffer>* events_out = nullptr;
-};
-
 static
 auto create(device* dev, std::string_view id) -> void {
 	const auto seg_size = (sizeof(ab<event_buffer>) * 2 * 2) + SEGMENT_OVERHEAD;
@@ -302,6 +327,7 @@ auto create(device* dev, std::string_view id) -> void {
 	dev->seg        = bip::managed_shared_memory{bip::create_only, id.data(), seg_size};
 	dev->events_in  = dev->seg.construct<ab<event_buffer>>(OBJECT_EVENTS_IN)();
 	dev->events_out = dev->seg.construct<ab<event_buffer>>(OBJECT_EVENTS_OUT)();
+	dev->data       = dev->seg.construct<device_data>(OBJECT_DATA)();
 }
 
 static
@@ -310,15 +336,9 @@ auto open(device* dev, std::string_view id) -> bool {
 	dev->seg = bip::managed_shared_memory{bip::open_only, id.data()};
 	if (find_shm_obj<ab<event_buffer>>(&dev->seg, OBJECT_EVENTS_IN, &dev->events_in) < 1)   { return false; }
 	if (find_shm_obj<ab<event_buffer>>(&dev->seg, OBJECT_EVENTS_OUT, &dev->events_out) < 1) { return false; }
+	if (find_shm_obj<device_data>(&dev->seg, OBJECT_DATA, &dev->data) < 1)                  { return false; }
 	return true;
 }
-
-struct device_audio_ports : segment {
-	size_t input_count    = 0;
-	size_t output_count   = 0;
-	ab<audio_buffer>* input_buffers  = nullptr;
-	ab<audio_buffer>* output_buffers = nullptr;
-};
 
 static
 auto create(device_audio_ports* ports, std::string_view id, size_t input_port_count, size_t output_port_count) -> void {

@@ -95,7 +95,7 @@ auto process_input_msg_(const scuff::msg::in::commit_changes& msg) -> void {
 }
 
 static
-auto process_input_msg_(const scuff::msg::in::device_add& msg) -> void {
+auto process_input_msg_(const scuff::msg::in::device_create& msg) -> void {
 	// TODO:
 }
 

@@ -121,7 +121,6 @@ auto on_window_close(host::app* app, Event* e) -> void {
 	cassert_no_null(app);
 	switch (p->origin) {
 		case ekGUI_CLOSE_BUTTON: {
-			// TODO:
 			osapp_finish();
 			break;
 		}
