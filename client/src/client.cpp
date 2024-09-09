@@ -192,6 +192,8 @@ auto process_message_(id::sandbox sbox_id, const msg::out::device_create_success
 	const auto return_fn          = sbox.external->return_buffers.devices.take(msg.callback);
 	const auto device_shmid       = scuff::DATA_->instance_id + "+dev+" + std::to_string(msg.dev.value);
 	const auto device_ports_shmid = scuff::DATA_->instance_id + "+dev+" + std::to_string(msg.dev.value) + "+ports";
+	// These shared memory segments were created by the sandbox process
+	// but we're also going to remove them when we're done with them.
 	device.external->shm_device      = shm::device{bip::open_only, shm::segment::remove_when_done, device_shmid};
 	device.external->shm_audio_ports = shm::device_audio_ports{bip::open_only, shm::segment::remove_when_done, device_ports_shmid};
 	return_fn.fn(&return_fn, msg.dev.value);
@@ -282,10 +284,20 @@ auto poll_thread(std::stop_token stop_token) -> void {
 }
 
 static
+auto is_running(const sandbox& sbox) -> bool {
+	return sbox.external->proc && sbox.external->proc->running();
+}
+
+static
+auto is_running(scuff_sbox sbox) -> bool {
+	return is_running(scuff::DATA_->working_model.lock()->sandboxes.at({sbox}));
+}
+
+static
 auto close_all_editors() -> void {
-	const auto model = scuff::DATA_->working_model.lock();
-	for (const auto& sandbox : model->sandboxes) {
-		if (sandbox.external->proc && sandbox.external->proc->running()) {
+	const auto sandboxes = scuff::DATA_->working_model.lock()->sandboxes;
+	for (const auto& sandbox : sandboxes) {
+		if (is_running(sandbox)) {
 			send(sandbox, scuff::msg::in::close_all_editors{});
 		}
 	}
@@ -439,13 +451,6 @@ auto group_create() -> scuff_group {
 	}
 	scuff::insert_group(group);
 	return {group.id.value};
-}
-
-static
-auto is_running(scuff_sbox sbox) -> bool {
-	const auto m        = scuff::DATA_->working_model.lock();
-	const auto& sandbox = m->sandboxes.at({sbox});
-	return sandbox.external->proc && sandbox.external->proc->running();
 }
 
 static
