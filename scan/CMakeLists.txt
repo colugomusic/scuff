@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(scuff-scanner)
+project(scuff-scan)
 include(../CPM.cmake)
 if(UNIX AND NOT APPLE)
 	set(LINUX TRUE)
@@ -22,19 +22,19 @@ CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap         GIT_TAG
 CPMAddPackage(NAME cxxopts     GITHUB_REPOSITORY jarro2783/cxxopts       GIT_TAG v3.2.1                   )
 CPMAddPackage(NAME flux        GITHUB_REPOSITORY tcbrindle/flux          GIT_TAG v0.4.0                   )
 CPMAddPackage(NAME json        GITHUB_REPOSITORY nlohmann/json           GIT_TAG v3.11.3                  )
-add_executable(scuff-scanner ${src})
-set_target_properties(scuff-scanner PROPERTIES CXX_STANDARD 20)
-target_include_directories(scuff-scanner PRIVATE
+add_executable(scuff-scan ${src})
+set_target_properties(scuff-scan PROPERTIES CXX_STANDARD 20)
+target_include_directories(scuff-scan PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/..
 	${clap_SOURCE_DIR}/include
 )
-target_link_libraries(scuff-scanner
+target_link_libraries(scuff-scan
 	Boost::boost
 	cxxopts::cxxopts
 	flux::flux
 	nlohmann_json::nlohmann_json
 )
-target_compile_options(scuff-scanner PRIVATE
+target_compile_options(scuff-scan PRIVATE
 	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror>
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )

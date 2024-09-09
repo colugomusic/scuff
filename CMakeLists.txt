@@ -3,5 +3,5 @@ project(scuff)
 
 add_subdirectory(client)
 add_subdirectory(sbox)
-add_subdirectory(scanner)
+add_subdirectory(scan)
 add_subdirectory(test-host)

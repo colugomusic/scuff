@@ -15,6 +15,8 @@ list (APPEND src
 	../common/slot_buffer.hpp
 	include/scuff/client.h
 	src/client.cpp
+	src/data.hpp
+	src/scan.hpp
 )
 set(BOOST_LIBS_OPTIONAL header filesystem system regex CACHE STRING "Boost libraries to be compiled" FORCE)
 set(immer_BUILD_TESTS OFF)
@@ -24,7 +26,6 @@ set(immer_BUILD_EXTRAS OFF)
 
 CPMAddPackage(NAME boost-cmake       GITHUB_REPOSITORY colugomusic/boost-cmake      GIT_TAG master                            )
 CPMAddPackage(NAME clap              GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea          DOWNLOAD_ONLY YES)
-CPMAddPackage(NAME clog              GITHUB_REPOSITORY colugomusic/clog             GIT_TAG master           DOWNLOAD_ONLY YES)
 CPMAddPackage(NAME cs_libguarded     GITHUB_REPOSITORY copperspice/cs_libguarded    GIT_TAG libguarded-1.4.1 DOWNLOAD_ONLY YES)
 CPMAddPackage(NAME ent               GITHUB_REPOSITORY colugomusic/ent              GIT_TAG main                              )
 CPMAddPackage(NAME immer             GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                            )
@@ -42,7 +43,6 @@ target_include_directories(scuff-client INTERFACE
 target_include_directories(scuff-client PRIVATE
 	include/scuff
 	${clap_SOURCE_DIR}/include
-	${clog_SOURCE_DIR}/include
 	${CMAKE_CURRENT_LIST_DIR}/..
 	${CMAKE_CURRENT_LIST_DIR}/../common
 	${cs_libguarded_SOURCE_DIR}/src

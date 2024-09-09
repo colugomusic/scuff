@@ -1,4 +1,4 @@
-#include <boost/container/static_vector.hpp>
+#include <algorithm>
 #include <cs_plain_guarded.h>
 #include <nappgui.h>
 #include <scuff/client.h>
@@ -17,54 +17,99 @@ struct plugfile_broken  { scuff_plugfile plugfile; };
 struct plugfile_scanned { scuff_plugfile plugfile; };
 struct plugin_broken    { scuff_plugin plugin; };
 struct plugin_scanned   { scuff_plugin plugin; };
+struct scan_error       { std::string error; };
+struct scan_started     {};
+struct scan_complete    {};
 
 using msg = std::variant<
 	plugfile_broken,
 	plugfile_scanned,
 	plugin_broken,
-	plugin_scanned
+	plugin_scanned,
+	scan_complete,
+	scan_error,
+	scan_started
 >;
 
 } // to_main
 
+namespace ui {
+
+static constexpr auto MARGIN       = 10.0f;
+static constexpr auto MARGIN_SMALL = 5.0f;
+
+struct table {
+	Label* title;
+	Layout* layout;
+	TableView* view;
+};
+
+struct plugfile_table : table {
+	uint32_t col_path;
+	uint32_t col_status;
+};
+
+struct plugin_table : table {
+	uint32_t col_vendor;
+	uint32_t col_name;
+	uint32_t col_status;
+};
+
+struct path_edit {
+	Edit* edit;
+	Label* title;
+	Layout* layout;
+};
+
+struct paths {
+	Layout* vbox;
+	path_edit path_edit_sbox_exe;
+	path_edit path_edit_scan_exe;
+};
+
+struct log {
+	Layout* vbox;
+	Label* title;
+	TextView* view;
+};
+
+struct main {
+	Layout* vbox;
+	Layout* table_area;
+	Layout* top_area;
+	Panel* panel;
+	Window* window;
+	Button* btn_rescan;
+	ui::log log;
+	ui::plugfile_table plugfile_table;
+	ui::plugin_table plugin_table;
+	ui::paths paths;
+};
+
+} // ui
+
 struct plugfile {
 	std::string path;
 	std::string status;
+	[[nodiscard]] auto operator <=>(const plugfile&) const = default;
 };
 
 struct plugin {
 	std::string vendor;
 	std::string name;
 	std::string status;
+	[[nodiscard]] auto operator <=>(const plugin&) const = default;
 };
 
-struct plugfile_table {
-	uint32_t col_path;
-	uint32_t col_status;
-	TableView* view;
-	std::vector<plugfile> data;
-};
-
-struct plugin_table {
-	uint32_t col_vendor;
-	uint32_t col_name;
-	uint32_t col_status;
-	TableView* view;
-	std::vector<plugin> data;
+template <typename T>
+struct with_dirt : T {
+	bool dirty = false;
 };
 
 struct app {
-	Layout* layout_main;
-	Layout* layout_tables;
-	Layout* layout_plugfile_table;
-	Layout* layout_plugin_table;
-	Label* lbl_plugfile_table_title;
-	Label* lbl_plugin_table_title;
-	Panel* panel;
-	Window* window;
-	Button* btn_rescan;
-	plugfile_table table_plugfiles;
-	plugin_table table_plugins;
+	ui::main ui;
+	with_dirt<std::vector<plugfile>> plugfiles;
+	with_dirt<std::vector<plugin>> plugins;
 	lg::plain_guarded<std::vector<to_main::msg>> to_main;
 };
 
@@ -87,6 +132,10 @@ auto on_window_close(host::app* app, Event* e) -> void {
 
 static
 auto on_btn_rescan_clicked(host::app* app, Event* e) -> void {
+	app->plugfiles.clear();
+	app->plugfiles.dirty = true;
+	app->plugins.clear();
+	app->plugins.dirty = true;
 	scuff_scan();
 }
 
@@ -95,20 +144,14 @@ auto on_table_plugfiles_data(host::app* app, Event *e) -> void {
 	switch (event_type(e)) {
 		case ekGUI_EVENT_TBL_NROWS: {
 			const auto result = event_result(e, uint32_t);
-			*result = uint32_t(app->table_plugfiles.data.size());
+			*result = uint32_t(app->plugfiles.size());
 			break;
 		}
 		case ekGUI_EVENT_TBL_CELL: {
 			const auto pos  = event_params(e, EvTbPos);
 			const auto cell = event_result(e, EvTbCell);
-			if (pos->col == app->table_plugfiles.col_path) {
-				cell->text = app->table_plugfiles.data[pos->row].path.c_str();
-				break;
-			}
-			if (pos->col == app->table_plugfiles.col_status) {
-				cell->text = app->table_plugfiles.data[pos->row].status.c_str();
-				break;
-			}
+			if (pos->col == app->ui.plugfile_table.col_path)   { cell->text = app->plugfiles[pos->row].path.c_str(); break; }
+			if (pos->col == app->ui.plugfile_table.col_status) { cell->text = app->plugfiles[pos->row].status.c_str(); break; }
 			break;
 		}
 	}
@@ -119,90 +162,143 @@ auto on_table_plugins_data(host::app* app, Event *e) -> void {
 	switch (event_type(e)) {
 		case ekGUI_EVENT_TBL_NROWS: {
 			const auto result = event_result(e, uint32_t);
-			*result = uint32_t(app->table_plugins.data.size());
+			*result = uint32_t(app->plugins.size());
 			break;
 		}
 		case ekGUI_EVENT_TBL_CELL: {
 			const auto pos  = event_params(e, EvTbPos);
 			const auto cell = event_result(e, EvTbCell);
-			if (pos->col == app->table_plugins.col_vendor) {
-				cell->text = app->table_plugins.data[pos->row].vendor.c_str();
-				break;
-			}
-			if (pos->col == app->table_plugins.col_name) {
-				cell->text = app->table_plugins.data[pos->row].name.c_str();
-				break;
-			}
-			if (pos->col == app->table_plugins.col_status) {
-				cell->text = app->table_plugins.data[pos->row].status.c_str();
-				break;
-			}
+			if (pos->col == app->ui.plugin_table.col_vendor) { cell->text = app->plugins[pos->row].vendor.c_str(); break; }
+			if (pos->col == app->ui.plugin_table.col_name)   { cell->text = app->plugins[pos->row].name.c_str(); break; }
+			if (pos->col == app->ui.plugin_table.col_status) { cell->text = app->plugins[pos->row].status.c_str(); break; }
 			break;
 		}
 	}
 }
 
 static
+auto create_table(ui::table* table, const char* title) -> void {
+	table->title  = label_create();
+	table->layout = layout_create(1, 2);
+	table->view   = tableview_create();
+	tableview_header_resizable(table->view, true);
+	label_text(table->title, title);
+	layout_label(table->layout, table->title, 0, 0);
+	layout_tableview(table->layout, table->view, 0, 1);
+	layout_vexpand(table->layout, 1);
+	layout_vmargin(table->layout, 0, ui::MARGIN_SMALL);
+}
+
+static
+auto create_log(ui::log* log) -> void {
+	log->title = label_create();
+	log->view  = textview_create();
+	log->vbox  = layout_create(1, 2);
+	label_text(log->title, "Log");
+	layout_label(log->vbox, log->title, 0, 0);
+	layout_textview(log->vbox, log->view, 0, 1);
+	layout_vmargin(log->vbox, 0, ui::MARGIN_SMALL);
+	layout_vsize(log->vbox, 1, 300.0f);
+}
+
+static
+auto create_path_edit(ui::path_edit* pe, const char* title) -> void {
+	pe->edit = edit_create();
+	pe->layout = layout_create(1, 2);
+	pe->title = label_create();
+	label_text(pe->title, title);
+	layout_label(pe->layout, pe->title, 0, 0);
+	layout_edit(pe->layout, pe->edit, 0, 1);
+	layout_vmargin(pe->layout, 0, ui::MARGIN_SMALL);
+}
+
+static
+auto setup_tables(host::app* app) -> void {
+	app->ui.plugfile_table.col_path    = tableview_new_column_text(app->ui.plugfile_table.view);
+	app->ui.plugfile_table.col_status  = tableview_new_column_text(app->ui.plugfile_table.view);
+	app->ui.plugin_table.col_vendor    = tableview_new_column_text(app->ui.plugin_table.view);
+	app->ui.plugin_table.col_name      = tableview_new_column_text(app->ui.plugin_table.view);
+	app->ui.plugin_table.col_status    = tableview_new_column_text(app->ui.plugin_table.view);
+	tableview_header_title(app->ui.plugfile_table.view, app->ui.plugfile_table.col_path, "Path");
+	tableview_header_title(app->ui.plugfile_table.view, app->ui.plugfile_table.col_status, "Status");
+	tableview_header_title(app->ui.plugin_table.view, app->ui.plugin_table.col_vendor, "Vendor");
+	tableview_header_title(app->ui.plugin_table.view, app->ui.plugin_table.col_name, "Name");
+	tableview_header_title(app->ui.plugin_table.view, app->ui.plugin_table.col_status, "Status");
+	tableview_column_resizable(app->ui.plugfile_table.view, app->ui.plugfile_table.col_path, true);
+	tableview_column_resizable(app->ui.plugin_table.view, app->ui.plugin_table.col_vendor, true);
+	tableview_column_width(app->ui.plugfile_table.view, app->ui.plugfile_table.col_path, 400);
+	tableview_column_width(app->ui.plugin_table.view, app->ui.plugin_table.col_name, 300);
+	tableview_OnData(app->ui.plugfile_table.view, listener(app, on_table_plugfiles_data, host::app));
+	tableview_OnData(app->ui.plugin_table.view, listener(app, on_table_plugins_data, host::app));
+}
+
+static
+auto setup_path_editors(host::app* app) -> void {
+	create_path_edit(&app->ui.paths.path_edit_sbox_exe, "Sandbox exe path");
+	create_path_edit(&app->ui.paths.path_edit_scan_exe, "Scanner exe path");
+	layout_vmargin(app->ui.paths.vbox, 0, ui::MARGIN_SMALL);
+	edit_text(app->ui.paths.path_edit_sbox_exe.edit, "Z:/dv/_bld/scuff/Debug/bin/scuff-sbox.exe");
+	edit_text(app->ui.paths.path_edit_scan_exe.edit, "Z:/dv/_bld/scuff/scan/Debug/scuff-scan.exe");
+}
+
+static
+auto setup_layouts(host::app* app) -> void {
+	panel_layout(app->ui.panel, app->ui.vbox);
+	layout_layout(app->ui.vbox, app->ui.top_area, 0, 0);
+	layout_layout(app->ui.vbox, app->ui.table_area, 0, 1);
+	layout_layout(app->ui.vbox, app->ui.log.vbox, 0, 2);
+	layout_layout(app->ui.top_area, app->ui.paths.vbox, 0, 0);
+	layout_button(app->ui.top_area, app->ui.btn_rescan, 1, 0);
+	layout_halign(app->ui.vbox, 0, 0, ekJUSTIFY);
+	layout_vexpand(app->ui.vbox, 1);
+	layout_layout(app->ui.table_area, app->ui.plugfile_table.layout, 0, 0);
+	layout_layout(app->ui.table_area, app->ui.plugin_table.layout, 1, 0);
+	layout_margin(app->ui.vbox, ui::MARGIN);
+	layout_vmargin(app->ui.vbox, 0, ui::MARGIN);
+	layout_vmargin(app->ui.vbox, 1, ui::MARGIN);
+	layout_hmargin(app->ui.table_area, 0, ui::MARGIN);
+	layout_layout(app->ui.paths.vbox, app->ui.paths.path_edit_sbox_exe.layout, 0, 0);
+	layout_layout(app->ui.paths.vbox, app->ui.paths.path_edit_scan_exe.layout, 0, 1);
+	layout_halign(app->ui.top_area, 0, 0, ekJUSTIFY);
+	layout_halign(app->ui.top_area, 1, 0, ekRIGHT);
+	layout_valign(app->ui.top_area, 1, 0, ekTOP);
+	layout_hmargin(app->ui.top_area, 0, ui::MARGIN);
+	layout_hexpand(app->ui.top_area, 0);
+}
+
+static
+auto setup_window(host::app* app) -> void {
+	window_title(app->ui.window, "scuff-test-host");
+	window_panel(app->ui.window, app->ui.panel);
+	window_origin(app->ui.window, v2df(500, 200));
+	window_size(app->ui.window, s2df(1400, 1000));
+	window_OnClose(app->ui.window, listener(app, on_window_close, host::app));
+	window_show(app->ui.window);
+}
+
+static
+auto setup_buttons(host::app* app) -> void {
+	button_text(app->ui.btn_rescan, "Scan system for installed plugins");
+	button_OnClick(app->ui.btn_rescan, listener(app, on_btn_rescan_clicked, host::app));
+}
+
+static
 auto create_window(host::app* app) -> void {
-	static constexpr auto MARGIN       = 10.0f;
-	static constexpr auto MARGIN_SMALL = 5.0f;
-	app->window                     = window_create(ekWINDOW_STDRES);
-	app->panel                      = panel_create();
-	app->layout_main                = layout_create(1, 2);
-	app->layout_tables              = layout_create(2, 1);
-	app->layout_plugfile_table      = layout_create(1, 2);
-	app->layout_plugin_table        = layout_create(1, 2);
-	app->btn_rescan                 = button_push();
-	app->lbl_plugfile_table_title   = label_create();
-	app->lbl_plugin_table_title     = label_create();
-	app->table_plugfiles.view       = tableview_create();
-	app->table_plugins.view         = tableview_create();
-	app->table_plugfiles.col_path   = tableview_new_column_text(app->table_plugfiles.view);
-	app->table_plugfiles.col_status = tableview_new_column_text(app->table_plugfiles.view);
-	app->table_plugins.col_vendor   = tableview_new_column_text(app->table_plugins.view);
-	app->table_plugins.col_name     = tableview_new_column_text(app->table_plugins.view);
-	app->table_plugins.col_status   = tableview_new_column_text(app->table_plugins.view);
-	tableview_header_title(app->table_plugfiles.view, app->table_plugfiles.col_path, "Path");
-	tableview_header_title(app->table_plugfiles.view, app->table_plugfiles.col_status, "Status");
-	tableview_header_title(app->table_plugins.view, app->table_plugins.col_vendor, "Vendor");
-	tableview_header_title(app->table_plugins.view, app->table_plugins.col_name, "Name");
-	tableview_header_title(app->table_plugins.view, app->table_plugins.col_status, "Status");
-	tableview_header_resizable(app->table_plugfiles.view, true);
-	tableview_header_resizable(app->table_plugins.view, true);
-	tableview_column_resizable(app->table_plugfiles.view, app->table_plugfiles.col_path, true);
-	tableview_column_resizable(app->table_plugins.view, app->table_plugins.col_vendor, true);
-	tableview_column_width(app->table_plugfiles.view, app->table_plugfiles.col_path, 400);
-	tableview_column_width(app->table_plugins.view, app->table_plugins.col_name, 300);
-	tableview_OnData(app->table_plugfiles.view, listener(app, on_table_plugfiles_data, host::app));
-	tableview_OnData(app->table_plugins.view, listener(app, on_table_plugins_data, host::app));
-	label_text(app->lbl_plugfile_table_title, "Plugin Files");
-	label_text(app->lbl_plugin_table_title, "Plugins");
-	panel_layout(app->panel, app->layout_main);
-	layout_vexpand(app->layout_plugfile_table, 1);
-	layout_vexpand(app->layout_plugin_table, 1);
-	layout_label(app->layout_plugfile_table, app->lbl_plugfile_table_title, 0, 0);
-	layout_tableview(app->layout_plugfile_table, app->table_plugfiles.view, 0, 1);
-	layout_label(app->layout_plugin_table, app->lbl_plugin_table_title, 0, 0);
-	layout_tableview(app->layout_plugin_table, app->table_plugins.view, 0, 1);
-	layout_button(app->layout_main, app->btn_rescan, 0, 0);
-	layout_halign(app->layout_main, 0, 0, ekCENTER);
-	layout_vexpand(app->layout_main, 1);
-	layout_layout(app->layout_main, app->layout_tables, 0, 1);
-	layout_layout(app->layout_tables, app->layout_plugfile_table, 0, 0);
-	layout_layout(app->layout_tables, app->layout_plugin_table, 1, 0);
-	layout_margin(app->layout_main, MARGIN);
-	layout_vmargin(app->layout_main, 0, MARGIN);
-	layout_vmargin(app->layout_plugfile_table, 0, MARGIN_SMALL);
-	layout_vmargin(app->layout_plugin_table, 0, MARGIN_SMALL);
-	layout_hmargin(app->layout_tables, 0, MARGIN);
-	button_text(app->btn_rescan, "Scan system for installed plugins");
-	button_OnClick(app->btn_rescan, listener(app, on_btn_rescan_clicked, host::app));
-	window_title(app->window, "scuff-test-host");
-	window_panel(app->window, app->panel);
-	window_origin(app->window, v2df(500, 200));
-	window_size(app->window, s2df(1200, 600));
-	window_OnClose(app->window, listener(app, on_window_close, host::app));
-	window_show(app->window);
+	app->ui.window      = window_create(ekWINDOW_STDRES);
+	app->ui.panel       = panel_create();
+	app->ui.vbox        = layout_create(1, 3);
+	app->ui.top_area    = layout_create(2, 1);
+	app->ui.paths.vbox  = layout_create(1, 2);
+	app->ui.table_area  = layout_create(2, 1);
+	app->ui.btn_rescan  = button_push();
+	create_log(&app->ui.log);
+	create_table(&app->ui.plugfile_table, "Plugin Files");
+	create_table(&app->ui.plugin_table, "Plugins");
+	setup_buttons(app);
+	setup_tables(app);
+	setup_path_editors(app);
+	setup_layouts(app);
+	setup_window(app);
 }
 
 static
@@ -242,12 +338,19 @@ auto on_scuff_sbox_started(const scuff_on_sbox_started* ctx, scuff_sbox sbox) ->
 static
 auto on_scuff_scan_complete(const scuff_on_scan_complete* ctx) -> void {
 	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+	app->to_main.lock()->push_back(to_main::scan_complete{});
 }
 
 static
 auto on_scuff_scan_error(const scuff_on_scan_error* ctx, const char* error) -> void {
 	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
-	log_printf("scuff_scan_error: %s\n", error);
+	app->to_main.lock()->push_back(to_main::scan_error{error});
+}
+
+static
+auto on_scuff_scan_started(const scuff_on_scan_started* ctx) -> void {
+	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+	app->to_main.lock()->push_back(to_main::scan_started{});
 }
 
 template <typename Cb, typename Fn> [[nodiscard]] static
@@ -261,11 +364,11 @@ auto make_scuff_cb(Fn fn, host::app* app) -> Cb {
 static
 auto initialize_scuff(host::app* app) -> void {
 	scuff_config cfg;
-	cfg.gc_interval_ms   = 1000;
-	cfg.sandbox_exe_path = "scuff-sbox.exe";
-	cfg.scanner_exe_path = "Z://dv//_bld//scuff//scanner//Debug//scuff-scanner.exe";
+	cfg.gc_interval_ms                       = 1000;
 	cfg.string_options.max_in_flight_strings = 100;
 	cfg.string_options.max_string_length     = 256;
+	cfg.sandbox_exe_path                     = edit_get_text(app->ui.paths.path_edit_sbox_exe.edit);
+	cfg.scanner_exe_path                     = edit_get_text(app->ui.paths.path_edit_scan_exe.edit);
 	cfg.callbacks.on_plugfile_broken         = make_scuff_cb<scuff_on_plugfile_broken>(on_scuff_plugfile_broken, app);
 	cfg.callbacks.on_plugfile_scanned        = make_scuff_cb<scuff_on_plugfile_scanned>(on_scuff_plugfile_scanned, app);
 	cfg.callbacks.on_plugin_broken           = make_scuff_cb<scuff_on_plugin_broken>(on_scuff_plugin_broken, app);
@@ -274,6 +377,7 @@ auto initialize_scuff(host::app* app) -> void {
 	cfg.callbacks.on_sbox_started            = make_scuff_cb<scuff_on_sbox_started>(on_scuff_sbox_started, app);
 	cfg.callbacks.on_scan_complete           = make_scuff_cb<scuff_on_scan_complete>(on_scuff_scan_complete, app);
 	cfg.callbacks.on_scan_error              = make_scuff_cb<scuff_on_scan_error>(on_scuff_scan_error, app);
+	cfg.callbacks.on_scan_started            = make_scuff_cb<scuff_on_scan_started>(on_scuff_scan_started, app);
 	try {
 		scuff_init(&cfg);
 	} catch (const std::exception& e) {
@@ -284,15 +388,15 @@ auto initialize_scuff(host::app* app) -> void {
 [[nodiscard]] static
 auto create() -> host::app* {
 	const auto app = new host::app;
-	initialize_scuff(app);
 	create_window(app);
+	initialize_scuff(app);
 	return app;
 }
 
 static
 auto destroy(host::app** app) -> void {
 	scuff_shutdown();
-	window_destroy(&(*app)->window);
+	window_destroy(&(*app)->ui.window);
 	delete *app;
 	*app = nullptr;
 }
@@ -310,8 +414,8 @@ auto process_(host::app* app, const to_main::plugfile_broken& msg) -> void {
 	plugfile my_pf;
 	my_pf.path   = scuff_plugfile_get_path(msg.plugfile);
 	my_pf.status = scuff_plugfile_get_error(msg.plugfile);
-	app->table_plugfiles.data.push_back(my_pf);
-	tableview_update(app->table_plugfiles.view);
+	app->plugfiles.push_back(my_pf);
+	app->plugfiles.dirty = true;
 }
 
 static
@@ -319,8 +423,8 @@ auto process_(host::app* app, const to_main::plugfile_scanned& msg) -> void {
 	plugfile my_pf;
 	my_pf.path   = scuff_plugfile_get_path(msg.plugfile);
 	my_pf.status = "Working";
-	app->table_plugfiles.data.push_back(my_pf);
-	tableview_update(app->table_plugfiles.view);
+	app->plugfiles.push_back(my_pf);
+	app->plugfiles.dirty = true;
 }
 
 static
@@ -329,8 +433,8 @@ auto process_(host::app* app, const to_main::plugin_broken& msg) -> void {
 	plugin.name = scuff_plugin_get_name(msg.plugin);
 	plugin.vendor = scuff_plugin_get_vendor(msg.plugin);
 	plugin.status = scuff_plugin_get_error(msg.plugin);
-	app->table_plugins.data.push_back(plugin);
-	tableview_update(app->table_plugins.view);
+	app->plugins.push_back(plugin);
+	app->plugins.dirty = true;
 }
 
 static
@@ -339,8 +443,23 @@ auto process_(host::app* app, const to_main::plugin_scanned& msg) -> void {
 	plugin.name = scuff_plugin_get_name(msg.plugin);
 	plugin.vendor = scuff_plugin_get_vendor(msg.plugin);
 	plugin.status = "Working";
-	app->table_plugins.data.push_back(plugin);
-	tableview_update(app->table_plugins.view);
+	app->plugins.push_back(plugin);
+	app->plugins.dirty = true;
+}
+
+static
+auto process_(host::app* app, const to_main::scan_complete& msg) -> void {
+	textview_writef(app->ui.log.view, "Scan complete\n");
+}
+
+static
+auto process_(host::app* app, const to_main::scan_error& msg) -> void {
+	textview_printf(app->ui.log.view, "%s\n", msg.error.c_str());
+}
+
+static
+auto process_(host::app* app, const to_main::scan_started& msg) -> void {
+	textview_writef(app->ui.log.view, "Scan started\n");
 }
 
 static
@@ -353,6 +472,16 @@ auto update(host::app* app, double prtime, double ctime) -> void {
 	const auto msgs = get_messages_to_main(app);
 	for (const auto& msg : msgs) {
 		process(app, msg);
+	}
+	if (app->plugfiles.dirty) {
+		std::sort(app->plugfiles.begin(), app->plugfiles.end());
+		tableview_update(app->ui.plugfile_table.view);
+		app->plugfiles.dirty = false;
+	}
+	if (app->plugins.dirty) {
+		std::sort(app->plugins.begin(), app->plugins.end());
+		tableview_update(app->ui.plugin_table.view);
+		app->plugins.dirty = false;
 	}
 }
 

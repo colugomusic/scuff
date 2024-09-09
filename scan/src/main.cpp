@@ -99,7 +99,7 @@ auto to_plugfile(const std::filesystem::path& path) -> std::optional<plugfile> {
 auto find_plugfiles(const std::filesystem::path& search_path) -> std::vector<plugfile> {
 	std::vector<plugfile> plugfiles;
 	try {
-		for (const auto& entry : std::filesystem::directory_iterator(search_path)) {
+		for (const auto& entry : std::filesystem::recursive_directory_iterator(search_path)) {
 			if (const auto pf = to_plugfile(entry.path())) {
 				plugfiles.push_back(*pf);
 			}
