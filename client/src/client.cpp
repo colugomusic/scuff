@@ -37,36 +37,6 @@ auto convert(const scuff::events::event& event) -> const scuff_event_header& {
 	return fast_visit([](const auto& event) -> const scuff_event_header& { return event.header; }, event);
 }
 
-[[nodiscard]] static
-auto add_sandbox_to_group(model&& m, id::group group, id::sandbox sbox) -> model {
-	m.groups = m.groups.update_if_exists(group, [sbox](scuff::group g) {
-		g.sandboxes = g.sandboxes.insert(sbox);
-		return g;
-	});
-	return m;
-}
-
-[[nodiscard]] static
-auto erase_sandbox(model&& m, id::sandbox id) -> model {
-	m.sandboxes = m.sandboxes.erase(id);
-	return m;
-}
-
-[[nodiscard]] static
-auto insert_sandbox(model&& m, scuff::sandbox sbox) -> model {
-	m.sandboxes = m.sandboxes.insert(sbox);
-	return m;
-}
-
-[[nodiscard]] static
-auto remove_sandbox_from_group(model&& m, id::group group, id::sandbox sbox) -> model {
-	m.groups = m.groups.update_if_exists(group, [sbox](scuff::group g) {
-		g.sandboxes = g.sandboxes.erase(sbox);
-		return g;
-	});
-	return m;
-}
-
 static
 auto send(const sandbox& sbox, const scuff::msg::in::msg& msg) -> void {
 	const auto lock = std::unique_lock(sbox.external->shm.msgs_in->mutex);
@@ -453,12 +423,12 @@ auto restart(scuff_sbox sbox) -> void {
 }
 
 static
-auto do_scan() -> void {
+auto do_scan(const char* scan_exe_path) -> void {
 	scuff::scan::stop_if_it_is_already_running();
-	scuff::scan::start();
+	scuff::scan::start(scan_exe_path);
 }
 
-auto sandbox_create(scuff_group group_id) -> scuff_sbox {
+auto sandbox_create(scuff_group group_id, const char* sbox_exe_path) -> scuff_sbox {
 	const auto m = scuff::DATA_->working_model.lock();
 	scuff::sandbox sbox;
 	sbox.id = scuff::id::sandbox{scuff::id_gen_++};
@@ -471,7 +441,7 @@ auto sandbox_create(scuff_group group_id) -> scuff_sbox {
 		sbox.external              = std::make_shared<scuff::sandbox_external>();
 		sbox.external->shm         = scuff::make_sandbox_shm(sandbox_shmid);
 		sbox.external->shm_remover = {sbox.external->shm.id};
-		sbox.external->proc        = std::make_unique<bp::child>(scuff::DATA_->sandbox_exe_path, exe_args);
+		sbox.external->proc        = std::make_unique<bp::child>(sbox_exe_path, exe_args);
 		// Add sandbox to group
 		*m = add_sandbox_to_group(std::move(*m), {group_id}, sbox.id);
 	}
@@ -524,11 +494,9 @@ auto scuff_audio_process(scuff_group_process process) -> void {
 
 auto scuff_init(const scuff_config* config) -> bool {
 	if (scuff::initialized_) { return true; }
-	scuff::DATA_                   = std::make_unique<scuff::data>();
-	scuff::DATA_->callbacks        = config->callbacks;
-	scuff::DATA_->instance_id      = "scuff+" + std::to_string(scuff::os::get_process_id());
-	scuff::DATA_->sandbox_exe_path = config->sandbox_exe_path;
-	scuff::DATA_->scanner_exe_path = config->scanner_exe_path;
+	scuff::DATA_              = std::make_unique<scuff::data>();
+	scuff::DATA_->callbacks   = config->callbacks;
+	scuff::DATA_->instance_id = "scuff+" + std::to_string(scuff::os::get_process_id());
 	try {
 		scuff::DATA_->io_thread = std::jthread{scuff::io_thread, std::chrono::milliseconds{config->gc_interval_ms}};
 		scuff::shm::create(&scuff::DATA_->shm_strings, scuff::DATA_->instance_id + "+strings", config->string_options);
@@ -715,13 +683,13 @@ auto scuff_restart(scuff_sbox sbox) -> void {
 	catch (const std::exception& err) { scuff::report_error(err.what()); }
 }
 
-auto scuff_scan() -> void {
-	try                               { scuff::do_scan(); }
+auto scuff_scan(const char* scan_exe_path) -> void {
+	try                               { scuff::do_scan(scan_exe_path); }
 	catch (const std::exception& err) { scuff::report_error(err.what()); }
 }
 
-auto scuff_sandbox_create(scuff_group group_id) -> scuff_sbox {
-	try                               { return scuff::sandbox_create(group_id); }
+auto scuff_sandbox_create(scuff_group group_id, const char* sbox_exe_path) -> scuff_sbox {
+	try                               { return scuff::sandbox_create(group_id, sbox_exe_path); }
 	catch (const std::exception& err) { scuff::report_error(err.what()); return {}; }
 }
 

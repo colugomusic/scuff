@@ -133,7 +133,7 @@ auto on_window_close(host::app* app, Event* e) -> void {
 
 static
 auto on_btn_rescan_clicked(host::app* app, Event* e) -> void {
-	scuff_scan();
+	scuff_scan(edit_get_text(app->ui.paths.path_edit_scan_exe.edit));
 }
 
 static
@@ -367,8 +367,6 @@ auto initialize_scuff(host::app* app) -> void {
 	cfg.gc_interval_ms                       = 1000;
 	cfg.string_options.max_in_flight_strings = 100;
 	cfg.string_options.max_string_length     = 256;
-	cfg.sandbox_exe_path                     = edit_get_text(app->ui.paths.path_edit_sbox_exe.edit);
-	cfg.scanner_exe_path                     = edit_get_text(app->ui.paths.path_edit_scan_exe.edit);
 	cfg.callbacks.on_plugfile_broken         = make_scuff_cb<scuff_on_plugfile_broken>(on_scuff_plugfile_broken, app);
 	cfg.callbacks.on_plugfile_scanned        = make_scuff_cb<scuff_on_plugfile_scanned>(on_scuff_plugfile_scanned, app);
 	cfg.callbacks.on_plugin_broken           = make_scuff_cb<scuff_on_plugin_broken>(on_scuff_plugin_broken, app);

@@ -6,9 +6,9 @@
 #include <deque>
 #include <nlohmann/json.hpp>
 
-// MY APOLOGIES BUT I DO NOT UNDERSTAND HOW TO USE BOOST::ASIO CORRECTLY
-// THIS SEEMS TO WORK
-// IF YOU WANT TO REFACTOR THIS THEN GO AHEAD
+// MY APOLOGIES BUT I DO NOT REALLY UNDERSTAND HOW TO USE BOOST::ASIO CORRECTLY.
+// THIS SEEMS TO WORK.
+// IF YOU WANT TO REFACTOR THIS THEN GO AHEAD.
 
 namespace bp   = boost::process;
 namespace bsys = boost::system;
@@ -18,6 +18,7 @@ namespace scan {
 
 struct scanner {
 	basio::io_context context;
+	std::string_view exe_path;
 	std::deque<basio::streambuf> buffers;
 	std::deque<bp::async_pipe> pipes;
 	std::deque<bp::child> procs;
@@ -27,6 +28,16 @@ struct reader {
 	basio::streambuf* buffer;
 	bp::async_pipe* pipe;
 };
+
+struct scanner_process {
+	reader stderr_reader;
+	reader stdout_reader;
+};
+
+using respond_fn = auto(*)(scan::scanner* scanner, const nlohmann::json& j) -> void;
+
+static auto read_stderr_lines(scan::scanner* scanner, scan::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void;
+static auto read_stdout_lines(scan::scanner* scanner, scan::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void;
 
 [[nodiscard]] static
 auto add_buffer(scan::scanner* scanner) -> basio::streambuf* {
@@ -41,8 +52,19 @@ auto add_pipe(scan::scanner* scanner) -> bp::async_pipe* {
 }
 
 static
-auto start_scanner_process(scan::scanner* scanner, const std::string& exe, const std::vector<std::string>& args, bp::async_pipe* pipe_out, bp::async_pipe* pipe_err) -> void {
-	scanner->procs.emplace_back(os::start_child_process(exe, args, bp::std_out > *pipe_out, bp::std_err > *pipe_err, scanner->context));
+auto start_scanner_process(scan::scanner* scanner, const std::vector<std::string>& args, bp::async_pipe* pipe_out, bp::async_pipe* pipe_err) -> void {
+	scanner->procs.emplace_back(os::start_child_process(scanner->exe_path.data(), args, bp::std_out > *pipe_out, bp::std_err > *pipe_err, scanner->context));
+}
+
+[[nodiscard]] static
+auto start_scanner_process(scan::scanner* scanner, const std::vector<std::string>& args) -> scanner_process {
+	scanner_process proc;
+	proc.stderr_reader.buffer = add_buffer(scanner);
+	proc.stdout_reader.buffer = add_buffer(scanner);
+	proc.stderr_reader.pipe   = add_pipe(scanner);
+	proc.stdout_reader.pipe   = add_pipe(scanner);
+	start_scanner_process(scanner, args, proc.stdout_reader.pipe, proc.stderr_reader.pipe);
+	return proc;
 }
 
 [[nodiscard]] static
@@ -75,8 +97,7 @@ auto read_broken_plugfile(const nlohmann::json& j) -> void {
 	pf.id    = id::plugfile{id_gen_++};
 	pf.path  = path;
 	pf.error = error;
-	const auto model = DATA_->working_model.lock();
-	model->plugfiles = model->plugfiles.insert(pf);
+	insert_plugfile(std::move(pf));
 	DATA_->callbacks.on_plugfile_broken.fn(&DATA_->callbacks.on_plugfile_broken, pf.id.value);
 }
 
@@ -97,28 +118,17 @@ auto read_broken_plugin(const nlohmann::json& j) -> void {
 		plugin.name    = name;
 		plugin.vendor  = vendor;
 		plugin.version = version;
-		const auto model = DATA_->working_model.lock();
-		model->plugins = model->plugins.insert(plugin);
+		insert_plugin(std::move(plugin));
 		DATA_->callbacks.on_plugin_broken.fn(&DATA_->callbacks.on_plugin_broken, plugin.id.value);
 	}
 }
 
-static auto read_stderr_line(scan::scanner* scanner, scan::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void;
-static auto read_stdout_line(scan::scanner* scanner, scan::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void;
-
 static
 auto async_scan_clap_file(scan::scanner* scanner, const std::string& path) -> void {
-	const auto exe           = DATA_->scanner_exe_path;
-	const auto exe_args      = make_exe_args_for_scanning_plugin(path);
-	const auto stderr_buf    = add_buffer(scanner);
-	const auto stdout_buf    = add_buffer(scanner);
-	const auto stderr_pipe   = add_pipe(scanner);
-	const auto stdout_pipe   = add_pipe(scanner);
-	const auto stderr_reader = scan::reader{stderr_buf, stderr_pipe};
-	const auto stdout_reader = scan::reader{stdout_buf, stdout_pipe};
-	start_scanner_process(scanner, exe, exe_args, stdout_pipe, stderr_pipe);
-	async_read_lines(scanner, stderr_reader, read_stderr_line);
-	async_read_lines(scanner, stdout_reader, read_stdout_line);
+	const auto exe_args = make_exe_args_for_scanning_plugin(path);
+	const auto proc     = start_scanner_process(scanner, exe_args);
+	async_read_lines(scanner, proc.stderr_reader, read_stderr_lines);
+	async_read_lines(scanner, proc.stdout_reader, read_stdout_lines);
 }
 
 static
@@ -128,8 +138,7 @@ auto read_plugfile(scan::scanner* scanner, const nlohmann::json& j) -> void {
 	plugfile pf;
 	pf.id   = id::plugfile{id_gen_++};
 	pf.path = path;
-	const auto model = DATA_->working_model.lock();
-	model->plugfiles = model->plugfiles.insert(pf);
+	insert_plugfile(std::move(pf));
 	DATA_->callbacks.on_plugfile_scanned.fn(&DATA_->callbacks.on_plugfile_scanned, pf.id.value);
 	basio::post(scanner->context, [scanner, path] { async_scan_clap_file(scanner, path); });
 }
@@ -150,21 +159,20 @@ auto read_plugin(scan::scanner*, const nlohmann::json& j) -> void {
 		plugin.name    = name;
 		plugin.vendor  = vendor;
 		plugin.version = version;
-		const auto model = DATA_->working_model.lock();
-		model->plugins = model->plugins.insert(plugin);
+		insert_plugin(std::move(plugin));
 		DATA_->callbacks.on_plugin_scanned.fn(&DATA_->callbacks.on_plugin_scanned, plugin.id.value);
 	}
 }
 
 static
-auto read_error(scan::scanner*, const nlohmann::json& j) -> void {
+auto stderr_respond(scan::scanner*, const nlohmann::json& j) -> void {
 	const std::string type = j["type"];
 	if (type == "broken-plugfile") { read_broken_plugfile(j); return; }
 	if (type == "broken-plugin")   { read_broken_plugin(j); return; }
 }
 
 static
-auto read_output(scan::scanner* scanner, const nlohmann::json& j) -> void {
+auto stdout_respond(scan::scanner* scanner, const nlohmann::json& j) -> void {
 	const std::string type = j["type"];
 	if (type == "plugfile") { read_plugfile(scanner, j); return; }
 	if (type == "plugin")   { read_plugin(scanner, j); return; }
@@ -180,8 +188,7 @@ auto report_exception(const std::exception& err) -> void {
 	report_error(err.what());
 }
 
-static
-auto read_stderr_line(scan::scanner* scanner, scan::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void {
+auto read_lines(scan::scanner* scanner, scan::reader reader, const bsys::error_code& ec, size_t bytes_transferred, respond_fn respond) -> void {
 	if (ec) {
 		return;
 	}
@@ -189,56 +196,42 @@ auto read_stderr_line(scan::scanner* scanner, scan::reader reader, const bsys::e
 	auto line = std::string{};
 	std::getline(is, line);
 	if (!line.empty()) {
-		try { read_error(scanner, nlohmann::json::parse(line)); }
-		catch (const std::exception& err) {
-			report_exception(err);
-		}
+		try                               { respond(scanner, nlohmann::json::parse(line)); }
+		catch (const std::exception& err) { report_exception(err); }
 	}
 	// continue reading
-	async_read_lines(scanner, reader, read_stderr_line);
+	basio::async_read_until(*reader.pipe, *reader.buffer, '\n', [scanner, reader, respond](const bsys::error_code& ec, size_t bytes_transferred) {
+		read_lines(scanner, reader, ec, bytes_transferred, respond);
+	});
 }
 
 static
-auto read_stdout_line(scan::scanner* scanner, scan::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void {
-	if (ec) {
-		return;
-	}
-	auto is   = std::istream{reader.buffer};
-	auto line = std::string{};
-	std::getline(is, line);
-	if (!line.empty()) {
-		try { read_output(scanner, nlohmann::json::parse(line)); }
-		catch (const std::exception& err) {
-			report_exception(err);
-		}
-	}
-	// continue reading
-	async_read_lines(scanner, reader, read_stdout_line);
+auto read_stderr_lines(scan::scanner* scanner, scan::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void {
+	read_lines(scanner, reader, ec, bytes_transferred, stderr_respond);
+}
+
+static
+auto read_stdout_lines(scan::scanner* scanner, scan::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void {
+	read_lines(scanner, reader, ec, bytes_transferred, stdout_respond);
 }
 
 static
 auto scan_system_for_installed_plugins(scan::scanner* scanner) -> void {
-	const auto exe = DATA_->scanner_exe_path;
-	if (!(std::filesystem::exists(exe) && std::filesystem::is_regular_file(exe))) {
-		const auto err = std::format("Scanner executable not found: {}", exe);
+	if (!(std::filesystem::exists(scanner->exe_path) && std::filesystem::is_regular_file(scanner->exe_path))) {
+		const auto err = std::format("Scanner executable not found: {}", scanner->exe_path);
 		report_error(err);
 		return;
 	}
-	const auto exe_args      = make_exe_args_for_plugin_listing();
-	const auto stderr_buf    = add_buffer(scanner);
-	const auto stdout_buf    = add_buffer(scanner);
-	const auto stderr_pipe   = add_pipe(scanner);
-	const auto stdout_pipe   = add_pipe(scanner);
-	const auto stderr_reader = scan::reader{stderr_buf, stderr_pipe};
-	const auto stdout_reader = scan::reader{stdout_buf, stdout_pipe};
-	start_scanner_process(scanner, exe, exe_args, stdout_pipe, stderr_pipe);
-	async_read_lines(scanner, stderr_reader, read_stderr_line);
-	async_read_lines(scanner, stdout_reader, read_stdout_line);
+	const auto exe_args = make_exe_args_for_plugin_listing();
+	const auto proc     = start_scanner_process(scanner, exe_args);
+	async_read_lines(scanner, proc.stderr_reader, read_stderr_lines);
+	async_read_lines(scanner, proc.stdout_reader, read_stdout_lines);
 }
 
 static
-auto thread(std::stop_token token) -> void {
+auto thread(std::stop_token token, std::string scan_exe_path) -> void {
 	scan::scanner scanner;
+	scanner.exe_path = scan_exe_path;
 	DATA_->callbacks.on_scan_started.fn(&DATA_->callbacks.on_scan_started);
 	basio::post(scanner.context, [&scanner] { scan_system_for_installed_plugins(&scanner); });
 	while (!(token.stop_requested() || scanner.context.stopped())) {
@@ -253,8 +246,8 @@ auto is_running() -> bool {
 }
 
 static
-auto start() -> void {
-	DATA_->scan_thread = std::jthread{scan::thread};
+auto start(const char* scan_exe_path) -> void {
+	DATA_->scan_thread = std::jthread{scan::thread, scan_exe_path};
 }
 
 static

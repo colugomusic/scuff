@@ -116,8 +116,6 @@ struct data {
 	shm::string_buffer       shm_strings;
 	shm::segment_remover     shm_strings_remover;
 	std::string              instance_id;
-	std::string              sandbox_exe_path;
-	std::string              scanner_exe_path;
 	scuff_callbacks          callbacks;
 	basio::io_context        io_context;
 	std::jthread             io_thread;
@@ -135,5 +133,59 @@ struct data {
 static std::atomic_bool      initialized_ = false;
 static std::atomic_int       id_gen_      = 0;
 static std::unique_ptr<data> DATA_;
+
+[[nodiscard]] static
+auto add_sandbox_to_group(model&& m, id::group group, id::sandbox sbox) -> model {
+	m.groups = m.groups.update_if_exists(group, [sbox](scuff::group g) {
+		g.sandboxes = g.sandboxes.insert(sbox);
+		return g;
+	});
+	return m;
+}
+
+[[nodiscard]] static
+auto erase_sandbox(model&& m, id::sandbox id) -> model {
+	m.sandboxes = m.sandboxes.erase(id);
+	return m;
+}
+
+[[nodiscard]] static
+auto insert_plugfile(model&& m, plugfile&& pf) -> model {
+	m.plugfiles = m.plugfiles.insert(pf);
+	return m;
+}
+
+[[nodiscard]] static
+auto insert_plugin(model&& m, plugin&& p) -> model {
+	m.plugins = m.plugins.insert(p);
+	return m;
+}
+
+[[nodiscard]] static
+auto insert_sandbox(model&& m, scuff::sandbox sbox) -> model {
+	m.sandboxes = m.sandboxes.insert(sbox);
+	return m;
+}
+
+[[nodiscard]] static
+auto remove_sandbox_from_group(model&& m, id::group group, id::sandbox sbox) -> model {
+	m.groups = m.groups.update_if_exists(group, [sbox](scuff::group g) {
+		g.sandboxes = g.sandboxes.erase(sbox);
+		return g;
+	});
+	return m;
+}
+
+static
+auto insert_plugfile(plugfile&& pf) -> void {
+	const auto m = DATA_->working_model.lock();
+	*m = insert_plugfile(std::move(*m), std::move(pf));
+}
+
+static
+auto insert_plugin(plugin&& p) -> void {
+	const auto m = DATA_->working_model.lock();
+	*m = insert_plugin(std::move(*m), std::move(p));
+}
 
 } // scuff

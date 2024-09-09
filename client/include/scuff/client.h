@@ -108,8 +108,6 @@ typedef struct scuff_callbacks_t {
 typedef struct scuff_config_t {
 	scuff_callbacks callbacks;
 	scuff_string_options string_options;
-	const char* sandbox_exe_path;
-	const char* scanner_exe_path;
 	size_t gc_interval_ms;
 } scuff_config;
 
@@ -219,7 +217,7 @@ void            scuff_group_erase(scuff_group group);
 // - Data can travel between sandboxes in the same group.
 // - If starting the sandbox process fails, the sandbox will still be created,
 //   but it will be in an error state.
-scuff_sbox      scuff_sandbox_create(scuff_group group);
+scuff_sbox      scuff_sandbox_create(scuff_group group, const char* sbox_exe_path);
 
 // Erase a sandbox.
 // It's OK to do this while the audio thread is processing. The sandbox will be
@@ -279,7 +277,7 @@ void            scuff_restart(scuff_sbox sbox);
 
 // Scan the system for plugins. If the scanner process is already
 // running, it is restarted.
-void            scuff_scan(void);
+void            scuff_scan(const char* scan_exe_path);
 
 // Find a scanned plugin with the given string ID.
 scuff_plugin    scuff_plugin_find(scuff_plugin_id plugin_id);
