@@ -18,6 +18,7 @@ struct scanner {
 	std::deque<basio::streambuf> buffers;
 	std::deque<bp::async_pipe> pipes;
 	std::deque<bp::child> procs;
+	int flags = 0;
 };
 
 struct reader {
@@ -157,6 +158,8 @@ auto read_plugin(scan::scanner*, const nlohmann::json& j) -> void {
 		plugin.version = version;
 		insert_plugin(std::move(plugin));
 		DATA_->callbacks.on_plugin_scanned.fn(&DATA_->callbacks.on_plugin_scanned, plugin.id.value);
+		// TODO: if flags & scuff_scan_flag_reload_failed_devices,
+		//       reload any unloaded devices which use this plugin 
 	}
 }
 
@@ -225,9 +228,10 @@ auto scan_system_for_installed_plugins(scan::scanner* scanner) -> void {
 }
 
 static
-auto thread(std::stop_token token, std::string scan_exe_path) -> void {
+auto thread(std::stop_token token, std::string scan_exe_path, int flags) -> void {
 	scan::scanner scanner;
 	scanner.exe_path = scan_exe_path;
+	scanner.flags    = flags;
 	DATA_->callbacks.on_scan_started.fn(&DATA_->callbacks.on_scan_started);
 	basio::post(scanner.context, [&scanner] { scan_system_for_installed_plugins(&scanner); });
 	while (!(token.stop_requested() || scanner.context.stopped())) {
@@ -242,8 +246,8 @@ auto is_running() -> bool {
 }
 
 static
-auto start(const char* scan_exe_path) -> void {
-	DATA_->scan_thread = std::jthread{scan::thread, scan_exe_path};
+auto start(const char* scan_exe_path, int flags) -> void {
+	DATA_->scan_thread = std::jthread{scan::thread, scan_exe_path, flags};
 }
 
 static

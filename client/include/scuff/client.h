@@ -60,6 +60,8 @@ typedef struct scuff_event_writer_t {
 
 typedef struct scuff_event_reader_t {
 	void* ctx;
+	// Must be able to push at least SCUFF_EVENT_PORT_SIZE events.
+	// Otherwise events will be dropped.
 	void (*push)(const struct scuff_event_reader_t*, const scuff_event_header* event);
 } scuff_event_reader;
 

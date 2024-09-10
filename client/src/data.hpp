@@ -68,6 +68,7 @@ struct sandbox {
 	id::sandbox id;
 	id::group group;
 	immer::box<std::string> error;
+	immer::set<id::device> devices;
 	sbox_flags flags;
 	sandbox_external::shptr external;
 };
@@ -121,6 +122,15 @@ static std::atomic_int       id_gen_      = 0;
 static std::unique_ptr<data> DATA_;
 
 [[nodiscard]] static
+auto add_device_to_sandbox(model&& m, id::sandbox sbox, id::device dev) -> model {
+	m.sandboxes = m.sandboxes.update_if_exists(sbox, [dev](scuff::sandbox s) {
+		s.devices = s.devices.insert(dev);
+		return s;
+	});
+	return m;
+}
+
+[[nodiscard]] static
 auto add_sandbox_to_group(model&& m, id::group group, id::sandbox sbox) -> model {
 	m.groups = m.groups.update_if_exists(group, [sbox](scuff::group g) {
 		g.sandboxes = g.sandboxes.insert(sbox);
@@ -148,32 +158,41 @@ auto erase_sandbox(model&& m, id::sandbox id) -> model {
 }
 
 [[nodiscard]] static
-auto insert_device(model&& m, device&& dev) -> model {
-	m.devices = m.devices.insert(dev);
+auto insert_device(model&& m, device dev) -> model {
+	m.devices = m.devices.insert(std::move(dev));
 	return m;
 }
 
 [[nodiscard]]
-auto insert_group(model&& m, group&& g) -> model {
-	m.groups = m.groups.insert(g);
+auto insert_group(model&& m, group g) -> model {
+	m.groups = m.groups.insert(std::move(g));
 	return m;
 }
 
 [[nodiscard]] static
-auto insert_plugfile(model&& m, plugfile&& pf) -> model {
+auto insert_plugfile(model&& m, plugfile pf) -> model {
 	m.plugfiles = m.plugfiles.insert(std::move(pf));
 	return m;
 }
 
 [[nodiscard]] static
-auto insert_plugin(model&& m, plugin&& p) -> model {
+auto insert_plugin(model&& m, plugin p) -> model {
 	m.plugins = m.plugins.insert(std::move(p));
 	return m;
 }
 
 [[nodiscard]] static
-auto insert_sandbox(model&& m, scuff::sandbox&& sbox) -> model {
+auto insert_sandbox(model&& m, scuff::sandbox sbox) -> model {
 	m.sandboxes = m.sandboxes.insert(std::move(sbox));
+	return m;
+}
+
+[[nodiscard]] static
+auto remove_device_from_sandbox(model&& m, id::sandbox sbox, id::device dev) -> model {
+	m.sandboxes = m.sandboxes.update_if_exists(sbox, [dev](scuff::sandbox s) {
+		s.devices = s.devices.erase(dev);
+		return s;
+	});
 	return m;
 }
 

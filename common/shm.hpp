@@ -27,6 +27,7 @@ static constexpr auto OBJECT_AUDIO_OUT = "+audio+out";
 static constexpr auto OBJECT_DATA      = "+data";
 
 using string = boost::static_string<SCUFF_SHM_STRING_MAX>;
+using blob   = bc::static_vector<std::byte, SCUFF_SHM_BLOB_MAX>;
 
 struct segment {
 	struct remove_when_done_t {};
@@ -154,7 +155,8 @@ struct device_data {
 struct sandbox_data {
 	sbox_msg_buffer<msg::in::msg> msgs_in;
 	sbox_msg_buffer<msg::out::msg> msgs_out;
-	slot_buffer<shm::string, SCUFF_MAX_SBOX_STRINGS> strings;
+	slot_buffer<shm::string, SCUFF_SHM_STRING_BUF_SZ> strings;
+	slot_buffer<shm::blob, SCUFF_SHM_BLOB_BUF_SZ> strings;
 };
 
 struct group_data {

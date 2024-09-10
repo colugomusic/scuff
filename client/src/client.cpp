@@ -80,7 +80,7 @@ static
 auto write_events(const scuff::device& dev, const scuff_event_writer& writer, size_t backside) -> void {
 	auto& ab               = dev.external->shm_device.data->events_in;
 	auto& buffer           = ab.value[backside];
-	const auto event_count = writer.count(&writer);
+	const auto event_count = std::min(writer.count(&writer), size_t(SCUFF_EVENT_PORT_SIZE));
 	for (size_t j = 0; j < event_count; j++) {
 		const auto header = writer.get(&writer, j);
 		buffer.push_back(convert(*header)); // TODO: remember to clear this in the sandbox process
@@ -331,13 +331,15 @@ auto device_create(scuff_sbox sbox_id, scuff_plugin_type type, scuff_plugin_id p
 	if (!dev.plugin) {
 		set_error(dev.id, "Plugin not found.");
 		scuff::DATA_->callbacks.on_device_error.fn(&scuff::DATA_->callbacks.on_device_error, dev.id.value);
-		scuff::insert_device(dev);
+		*m = scuff::add_device_to_sandbox(std::move(*m), {sbox_id}, dev.id);
+		*m = scuff::insert_device(std::move(*m), dev);
 		return;
 	}
 	const auto str_plugin_id = sbox.external->shm.data->strings.put(plugin_id);
 	const auto callback      = sbox.external->return_buffers.devices.put(fn);
 	send(sbox, msg::in::device_create{dev.id, type, str_plugin_id, callback});
-	scuff::insert_device(dev);
+	*m = scuff::add_device_to_sandbox(std::move(*m), {sbox_id}, dev.id);
+	*m = scuff::insert_device(std::move(*m), dev);
 }
 
 auto device_disconnect(scuff_device dev_out, size_t port_out, scuff_device dev_in, size_t port_in) -> void {
@@ -559,9 +561,8 @@ auto restart(scuff_sbox sbox, const char* sbox_exe_path) -> void {
 
 static
 auto do_scan(const char* scan_exe_path, int flags) -> void {
-	// TODO: handle the flags
 	scuff::scan::stop_if_it_is_already_running();
-	scuff::scan::start(scan_exe_path);
+	scuff::scan::start(scan_exe_path, flags);
 }
 
 auto sandbox_create(scuff_group group_id, const char* sbox_exe_path) -> scuff_sbox {
@@ -569,14 +570,14 @@ auto sandbox_create(scuff_group group_id, const char* sbox_exe_path) -> scuff_sb
 	scuff::sandbox sbox;
 	sbox.id = scuff::id::sandbox{scuff::id_gen_++};
 	try {
-		const auto& group          = m->groups.at({group_id});
-		const auto group_shmid     = group.external->shm.id();
-		const auto sandbox_shmid   = scuff::DATA_->instance_id + "+sbox+" + std::to_string(sbox.id.value);
-		const auto exe_args        = scuff::make_sbox_exe_args(group_shmid, sandbox_shmid);
-		sbox.group                 = {group_id};
-		sbox.external              = std::make_shared<scuff::sandbox_external>();
-		sbox.external->shm         = shm::sandbox{bip::create_only, shm::segment::remove_when_done, sandbox_shmid};
-		sbox.external->proc        = std::make_unique<bp::child>(sbox_exe_path, exe_args);
+		const auto& group        = m->groups.at({group_id});
+		const auto group_shmid   = group.external->shm.id();
+		const auto sandbox_shmid = scuff::DATA_->instance_id + "+sbox+" + std::to_string(sbox.id.value);
+		const auto exe_args      = scuff::make_sbox_exe_args(group_shmid, sandbox_shmid);
+		sbox.group               = {group_id};
+		sbox.external            = std::make_shared<scuff::sandbox_external>();
+		sbox.external->shm       = shm::sandbox{bip::create_only, shm::segment::remove_when_done, sandbox_shmid};
+		sbox.external->proc      = std::make_unique<bp::child>(sbox_exe_path, exe_args);
 		// Add sandbox to group
 		*m = add_sandbox_to_group(std::move(*m), {group_id}, sbox.id);
 	}

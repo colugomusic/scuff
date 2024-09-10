@@ -17,6 +17,9 @@ struct device_disconnect      { scuff::id::device out_dev; size_t out_port; scuf
 struct device_erase           { scuff::id::device dev; };
 struct device_gui_hide        { scuff::id::device dev; };
 struct device_gui_show        { scuff::id::device dev; };
+struct device_load_bytes      { scuff::id::device dev; size_t BYTES_bytes; };
+struct device_load_done       { scuff::id::device dev; };
+struct device_save            { scuff::id::device dev; size_t callback; };
 struct device_set_render_mode { scuff::id::device dev; scuff_render_mode mode; };
 struct event                  { scuff::id::device dev; scuff::events::event event; };
 struct find_param             { scuff::id::device dev; size_t STR_param_id; size_t callback; };
@@ -33,6 +36,9 @@ using msg = std::variant<
 	device_erase,
 	device_gui_hide,
 	device_gui_show,
+	device_load_bytes,
+	device_load_done,
+	device_save,
 	device_set_render_mode,
 	event,
 	find_param,
@@ -51,6 +57,8 @@ struct device_params_changed   { scuff::id::device dev; };
 struct return_param            { scuff::idx::param param; size_t callback; };
 struct return_param_value      { double value; size_t callback; };
 struct return_param_value_text { size_t STR_text; size_t callback; };
+struct return_saved_bytes      { scuff::id::device dev; size_t BYTES_bytes; size_t callback; };
+struct return_saved_bytes_done { scuff::id::device dev; size_t callback; };
 
 using msg = std::variant<
 	device_create_error,
@@ -58,7 +66,9 @@ using msg = std::variant<
 	device_params_changed,
 	return_param,
 	return_param_value,
-	return_param_value_text
+	return_param_value_text,
+	return_saved_bytes,
+	return_saved_bytes_done
 >;
 
 } // scuff::msg::out
