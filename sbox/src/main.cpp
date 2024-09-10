@@ -156,7 +156,8 @@ auto process_input_msg_(const scuff::msg::in::set_sample_rate& msg) -> void {
 
 static
 auto process_input_msg(const scuff::msg::in::msg& msg) -> void {
-	fast_visit([](const auto& msg) { process_input_msg_(msg); }, msg);
+	// TODO:
+	//fast_visit([](const auto& msg) { process_input_msg_(msg); }, msg);
 }
 
 static

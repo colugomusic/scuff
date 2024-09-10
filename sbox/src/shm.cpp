@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/c_constants.h"
 #include "common/shm.hpp"
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/interprocess/sync/named_mutex.hpp>
@@ -15,16 +16,19 @@ namespace sbox::shm {
 
 struct model {
 	scuff::shm::group group;
-	scuff::shm::sandbox sandbox;
+	bip::message_queue mq;
+	model(std::string_view group, std::string_view mq)
+		: group{bip::open_only, group}
+		, mq{bip::open_only, mq.data()}
+	{
+	}
 };
 
 static std::unique_ptr<model> M_;
 
-auto open(std::string_view group, std::string_view sandbox) -> bool {
+auto open(std::string_view group, std::string_view mq) -> bool {
 	try {
-		M_ = std::make_unique<model>();
-		M_->group   = scuff::shm::group{bip::open_only, group};
-		M_->sandbox = scuff::shm::sandbox{bip::open_only, sandbox};
+		M_ = std::make_unique<model>(group, mq);
 	}
 	catch (const std::exception& err) {
 		log_printf(err.what());
@@ -38,7 +42,7 @@ auto destroy() -> void {
 }
 
 auto receive_input_messages(std::vector<scuff::msg::in::msg>* msgs) -> void {
-	M_->sandbox.data->msgs_in.take(msgs);
+	// TODO: M_->sandbox.data->msgs_in.take(msgs);
 }
 
 } // sbox::shm

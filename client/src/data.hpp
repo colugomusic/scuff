@@ -42,10 +42,36 @@ struct device_external {
 
 struct sandbox_external {
 	using shptr = std::shared_ptr<sandbox_external>;
-	shm::sandbox shm;
-	std::unique_ptr<bp::child> proc;
-	lg::plain_guarded<std::deque<msg::in::msg>> msg_queue;
+	bp::child proc;
 	return_buffers return_buffers;
+	sandbox_external(bp::child&& proc, std::string_view shmid)
+		: proc{std::move(proc)}
+		, shm_{bip::create_only, shm::segment::remove_when_done, shmid}
+	{}
+	auto enqueue(msg::in::msg msg) -> void {
+		msg_sender_.enqueue(std::move(msg));
+	}
+	[[nodiscard]]
+	auto get_shmid() const -> std::string_view {
+		return shm_.id();
+	}
+	[[nodiscard]]
+	auto receive_msgs() -> std::vector<msg::out::msg> {
+		auto fn = [&shm = shm_](std::byte* bytes, size_t count) -> size_t {
+			return shm.receive_bytes(bytes, count);
+		};
+		return msg_receiver_.receive(fn);
+	}
+	auto send_msgs() -> void {
+		auto fn = [&shm = shm_](const std::byte* bytes, size_t count) -> size_t {
+			return shm.send_bytes(bytes, count);
+		};
+		return msg_sender_.send(fn);
+	}
+private:
+	shm::sandbox shm_;
+	msg::sender<msg::in::msg> msg_sender_;
+	msg::receiver<msg::out::msg> msg_receiver_;
 };
 
 struct group_external {
@@ -81,6 +107,7 @@ struct group {
 
 struct plugin {
 	id::plugin id;
+	id::plugfile plugfile;
 	ext::id::plugin ext_id;
 	immer::box<std::string> error;
 	immer::box<std::string> name;

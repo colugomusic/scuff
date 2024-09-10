@@ -9,8 +9,9 @@
 #include <boost/interprocess/segment_manager.hpp>
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
+#include <boost/interprocess/ipc/message_queue.hpp>
 #include <boost/container/static_vector.hpp>
-#include <boost/static_string.hpp>
+//#include <boost/static_string.hpp>
 #include <deque>
 #include <mutex>
 #include <numeric>
@@ -26,8 +27,8 @@ static constexpr auto OBJECT_AUDIO_IN  = "+audio+in";
 static constexpr auto OBJECT_AUDIO_OUT = "+audio+out";
 static constexpr auto OBJECT_DATA      = "+data";
 
-using string = boost::static_string<SCUFF_SHM_STRING_MAX>;
-using blob   = bc::static_vector<std::byte, SCUFF_SHM_BLOB_MAX>;
+//using string = boost::static_string<SCUFF_SHM_STRING_MAX>;
+//using blob   = bc::static_vector<std::byte, SCUFF_SHM_BLOB_MAX>;
 
 struct segment {
 	struct remove_when_done_t {};
@@ -65,22 +66,24 @@ private:
 	bool remove_when_done_ = false;
 };
 
-template <typename MsgT>
-struct sbox_msg_buffer {
-	auto take(std::vector<MsgT>* out) -> void {
+struct msg_buffer {
+	[[nodiscard]]
+	auto read(std::byte* bytes, size_t count) -> size_t {
 		const auto lock = std::unique_lock{mutex_};
-		std::copy(list_.begin(), list_.end(), std::back_inserter(*out));
-		list_.clear();
+		count = std::min(count, bytes_.size());
+		std::copy(bytes_.begin(), bytes_.begin() + count, bytes);
+		bytes_.erase(bytes_.begin(), bytes_.begin() + count);
+		return count;
 	}
 	[[nodiscard]]
-	auto push_as_many_as_possible(const std::deque<MsgT>& msgs) -> size_t {
+	auto write(const std::byte* bytes, size_t count) -> size_t {
 		const auto lock = std::unique_lock{mutex_};
-		const auto count = std::min(msgs.size(), list_.capacity() - list_.size());
-		std::copy(msgs.begin(), msgs.begin() + count, std::back_inserter(list_));
+		count = std::min(count, bytes_.capacity() - bytes_.size());
+		bytes_.insert(bytes_.end(), bytes, bytes + count);
 		return count;
 	}
 private:
-	bc::static_vector<MsgT, 100> list_;
+	bc::static_vector<std::byte, SCUFF_MSG_BUFFER_SIZE> bytes_;
 	bip::interprocess_mutex mutex_;
 };
 
@@ -94,45 +97,45 @@ struct ab {
 	std::array<T, 2> value;
 };
 
-template <typename T, size_t N>
-struct slot_buffer {
-	slot_buffer()
-		: sem_{static_cast<uint32_t>(N)}
-	{
-		free_indices_.resize(N);
-		std::iota(free_indices_.rbegin(), free_indices_.rend(), 0);
-	}
-	auto put(T item) -> size_t {
-		sem_.wait(); // Wait for space to be available
-		const auto lock = std::unique_lock{mutex_};
-		assert (free_indices_.size() > 0);
-		const auto index = pop_free_index();
-		items_[index] = item;
-		return index;
-	}
-	auto take(size_t index) -> T {
-		const auto lock = std::unique_lock{mutex_};
-		assert (index < N);
-		const auto item = items_[index];
-		push_free_index(index);
-		sem_.post(); // Signal that space is available
-		return item;
-	}
-private:
-	auto pop_free_index() -> size_t {
-		assert (!free_indices_.empty());
-		const auto index = free_indices_.back();
-		free_indices_.pop_back();
-		return index;
-	}
-	auto push_free_index(size_t index) -> void {
-		free_indices_.push_back(index);
-	}
-	bip::interprocess_mutex mutex_;
-	bip::interprocess_semaphore sem_;
-	bc::static_vector<T, N> items_;
-	bc::static_vector<size_t, N> free_indices_;
-};
+//template <typename T, size_t N>
+//struct slot_buffer {
+//	slot_buffer()
+//		: sem_{static_cast<uint32_t>(N)}
+//	{
+//		free_indices_.resize(N);
+//		std::iota(free_indices_.rbegin(), free_indices_.rend(), 0);
+//	}
+//	auto put(T item) -> size_t {
+//		sem_.wait(); // Wait for space to be available
+//		const auto lock = std::unique_lock{mutex_};
+//		assert (free_indices_.size() > 0);
+//		const auto index = pop_free_index();
+//		items_[index] = item;
+//		return index;
+//	}
+//	auto take(size_t index) -> T {
+//		const auto lock = std::unique_lock{mutex_};
+//		assert (index < N);
+//		const auto item = items_[index];
+//		push_free_index(index);
+//		sem_.post(); // Signal that space is available
+//		return item;
+//	}
+//private:
+//	auto pop_free_index() -> size_t {
+//		assert (!free_indices_.empty());
+//		const auto index = free_indices_.back();
+//		free_indices_.pop_back();
+//		return index;
+//	}
+//	auto push_free_index(size_t index) -> void {
+//		free_indices_.push_back(index);
+//	}
+//	bip::interprocess_mutex mutex_;
+//	bip::interprocess_semaphore sem_;
+//	bc::static_vector<T, N> items_;
+//	bc::static_vector<size_t, N> free_indices_;
+//};
 
 struct device_flags {
 	enum e {
@@ -153,10 +156,8 @@ struct device_data {
 };
 
 struct sandbox_data {
-	sbox_msg_buffer<msg::in::msg> msgs_in;
-	sbox_msg_buffer<msg::out::msg> msgs_out;
-	slot_buffer<shm::string, SCUFF_SHM_STRING_BUF_SZ> strings;
-	slot_buffer<shm::blob, SCUFF_SHM_BLOB_BUF_SZ> strings;
+	msg_buffer msgs_in;
+	msg_buffer msgs_out;
 };
 
 struct group_data {
@@ -211,6 +212,8 @@ struct sandbox : segment {
 	sandbox() = default;
 	sandbox(bip::create_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id, SEGMENT_SIZE} { create(); }
 	sandbox(bip::open_only_t, std::string_view id) : segment{id} { open(); }
+	[[nodiscard]] auto send_bytes(const std::byte* bytes, size_t count) const -> size_t { return data->msgs_out.write(bytes, count); }
+	[[nodiscard]] auto receive_bytes(std::byte* bytes, size_t count) const -> size_t { return data->msgs_in.read(bytes, count); }
 private:
 	auto create() -> void {
 		data = seg().construct<sandbox_data>(OBJECT_DATA)();
