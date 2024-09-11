@@ -6,8 +6,10 @@
 #include "types.hpp"
 #include "events.hpp"
 #include <clap/id.h>
+#include <concepts>
 #include <cs_plain_guarded.h>
 #include <deque>
+#include <iterator>
 #include <variant>
 #include <vector>
 
@@ -51,10 +53,146 @@ using msg = std::variant<
 	set_sample_rate
 >;
 
+inline
+auto serialize_(const close_all_editors& msg, std::vector<std::byte>* bytes) -> void {
+	::serialize(size_t(0), bytes);
+}
+
+inline
+auto serialize_(const commit_changes& msg, std::vector<std::byte>* bytes) -> void {
+	::serialize(size_t(0), bytes);
+}
+
+inline
+auto serialize_(const device_create& msg, std::vector<std::byte>* bytes) -> void {
+	const size_t size =
+		sizeof(msg.callback) +
+		sizeof(msg.dev) +
+		sizeof(msg.type) + 
+		msg.plugfile_path.size() + 1 +
+		msg.plugin_id.size() + 1;
+	::serialize(size, bytes);
+	::serialize(msg.dev.value, bytes);
+	::serialize(msg.type, bytes);
+	::serialize(msg.plugfile_path, bytes);
+	::serialize(msg.plugin_id, bytes);
+	::serialize(msg.callback, bytes);
+}
+
+inline
+auto serialize_(const device_connect& msg, std::vector<std::byte>* bytes) -> void {
+	::serialize(sizeof(msg), bytes);
+	::serialize(msg.out_dev.value, bytes);
+	::serialize(msg.out_port, bytes);
+	::serialize(msg.in_dev.value, bytes);
+	::serialize(msg.in_port, bytes);
+}
+
+inline
+auto serialize_(const device_disconnect& msg, std::vector<std::byte>* bytes) -> void {
+	::serialize(sizeof(msg), bytes);
+	::serialize(msg.out_dev.value, bytes);
+	::serialize(msg.out_port, bytes);
+	::serialize(msg.in_dev.value, bytes);
+	::serialize(msg.in_port, bytes);
+}
+
+inline
+auto serialize_(const device_erase& msg, std::vector<std::byte>* bytes) -> void {
+	::serialize(sizeof(msg), bytes);
+	::serialize(msg.dev.value, bytes);
+}
+
+inline
+auto serialize_(const device_gui_hide& msg, std::vector<std::byte>* bytes) -> void {
+	::serialize(sizeof(msg), bytes);
+	::serialize(msg.dev.value, bytes);
+}
+
+inline
+auto serialize_(const device_gui_show& msg, std::vector<std::byte>* bytes) -> void {
+	::serialize(sizeof(msg), bytes);
+	::serialize(msg.dev.value, bytes);
+}
+
+inline
+auto serialize_(const device_load& msg, std::vector<std::byte>* bytes) -> void {
+	const size_t size = sizeof(msg.dev) + msg.state.size();
+	::serialize(size, bytes);
+	::serialize(msg.dev.value, bytes);
+	std::copy(msg.state.begin(), msg.state.end(), std::back_inserter(*bytes));
+}
+
+inline
+auto serialize_(const device_save& msg, std::vector<std::byte>* bytes) -> void {
+	::serialize(sizeof(msg), bytes);
+	::serialize(msg.dev.value, bytes);
+	::serialize(msg.callback, bytes);
+}
+
+inline
+auto serialize_(const device_set_render_mode& msg, std::vector<std::byte>* bytes) -> void {
+	::serialize(sizeof(msg), bytes);
+	::serialize(msg.dev.value, bytes);
+	::serialize(msg.mode, bytes);
+}
+
+inline
+auto serialize_(const event& msg, std::vector<std::byte>* bytes) -> void {
+	const size_t size = sizeof(msg) + sizeof(msg.dev) + scuff::events::size_of(msg.event);
+	::serialize(size, bytes);
+	::serialize(msg.dev.value, bytes);
+	scuff::events::serialize(msg.event, bytes);
+}
+
+inline
+auto serialize_(const find_param& msg, std::vector<std::byte>* bytes) -> void {
+	const size_t size =
+		sizeof(msg.dev) +
+		msg.param_id.size() + 1 +
+		sizeof(msg.callback);
+	::serialize(size, bytes);
+	::serialize(msg.dev.value, bytes);
+	::serialize(msg.param_id, bytes);
+	::serialize(msg.callback, bytes);
+}
+
+inline
+auto serialize_(const get_param_value& msg, std::vector<std::byte>* bytes) -> void {
+	::serialize(sizeof(msg), bytes);
+	::serialize(msg.dev.value, bytes);
+	::serialize(msg.param.value, bytes);
+	::serialize(msg.callback, bytes);
+}
+
+inline
+auto serialize_(const get_param_value_text& msg, std::vector<std::byte>* bytes) -> void {
+	const size_t size =
+		sizeof(msg.dev) +
+		sizeof(msg.param) +
+		sizeof(msg.value) +
+		sizeof(msg.callback);
+	::serialize(size, bytes);
+	::serialize(msg.dev.value, bytes);
+	::serialize(msg.param.value, bytes);
+	::serialize(msg.value, bytes);
+	::serialize(msg.callback, bytes);
+}
+
+inline
+auto serialize_(const set_sample_rate& msg, std::vector<std::byte>* bytes) -> void {
+	const size_t size = sizeof(msg) + sizeof(msg.sr);
+	::serialize(size, bytes);
+	::serialize(msg.sr, bytes);
+}
+
 [[nodiscard]] inline
-auto serialize(const msg& msg) -> std::vector<std::byte> {
-	// TODO:
-	return {};
+auto serialize(const scuff::msg::in::msg& msg) -> std::vector<std::byte> {
+	std::vector<std::byte> bytes;
+	const auto type = msg.index();
+	::serialize(type, &bytes);
+	fast_visit([&bytes](const auto& msg) { serialize_(msg, &bytes); }, msg);
+	return bytes;
 }
 
 } // scuff::msg::in
