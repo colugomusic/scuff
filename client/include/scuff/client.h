@@ -67,7 +67,7 @@ typedef struct scuff_on_sbox_started_t          { void* ctx; void (*fn)(const st
 typedef struct scuff_on_scan_complete_t         { void* ctx; void (*fn)(const struct scuff_on_scan_complete_t* ctx); } scuff_on_scan_complete;
 typedef struct scuff_on_scan_error_t            { void* ctx; void (*fn)(const struct scuff_on_scan_error_t*, const char* error); } scuff_on_scan_error;
 typedef struct scuff_on_scan_started_t          { void* ctx; void (*fn)(const struct scuff_on_scan_started_t* ctx ); } scuff_on_scan_started;
-typedef struct scuff_return_device_t            { void* ctx; void (*fn)(const struct scuff_return_device_t*, scuff_device dev); } scuff_return_device; 
+typedef struct scuff_return_device_t            { void* ctx; void (*fn)(const struct scuff_return_device_t*, scuff_device dev, bool success); } scuff_return_device; 
 typedef struct scuff_return_double_t            { void* ctx; void (*fn)(const struct scuff_return_double_t*, double value); } scuff_return_double;
 typedef struct scuff_return_param_t             { void* ctx; void (*fn)(const struct scuff_return_param_t*, scuff_param param); } scuff_return_param;
 typedef struct scuff_return_string_t            { void* ctx; void (*fn)(const struct scuff_return_string_t*, const char* text); } scuff_return_string; 

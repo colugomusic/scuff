@@ -15,7 +15,7 @@ namespace basio = boost::asio;
 
 namespace scuff {
 
-using return_device = std::function<void(id::device dev_id)>;
+using return_device = std::function<void(id::device dev_id, bool success)>;
 using return_state  = std::function<void(const std::vector<std::byte>& bytes)>;
 
 using return_device_fns = slot_buffer<return_device>;

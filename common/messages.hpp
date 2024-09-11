@@ -55,18 +55,16 @@ using msg = std::variant<
 
 namespace scuff::msg::out {
 
-struct device_create_error     { scuff_device dev_id; size_t callback; };
-struct device_create_success   { scuff_device dev_id; size_t callback; };
 struct device_params_changed   { scuff_device dev_id; };
+struct return_created_device   { scuff_device dev_id; bool success; size_t callback; };
 struct return_param            { scuff_param param_idx; size_t callback; };
 struct return_param_value      { double value; size_t callback; };
 struct return_param_value_text { std::string text; size_t callback; };
 struct return_state            { scuff_device dev_id; std::vector<std::byte> bytes; size_t callback; };
 
 using msg = std::variant<
-	device_create_error,
-	device_create_success,
 	device_params_changed,
+	return_created_device,
 	return_param,
 	return_param_value,
 	return_param_value_text,
