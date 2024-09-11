@@ -384,9 +384,9 @@ auto device_duplicate(scuff_device src_dev_id, scuff_sbox sbox_id, scuff_return_
 		// if the plugin is available.
 		// When the new device is created, call this function with it:
 		const auto return_fn = [fn, src_state](id::device dev_id) {
-			const auto m        = scuff::DATA_->working_model.lock();
-			const auto& dev     = m->devices.at(dev_id);
-			const auto& sbox    = m->sandboxes.at(dev.sbox);
+			const auto m     = scuff::DATA_->working_model.lock();
+			const auto& dev  = m->devices.at(dev_id);
+			const auto& sbox = m->sandboxes.at(dev.sbox);
 			// Now send a message to the destination sandbox to load the saved state into the new device.
 			sbox.external->enqueue(scuff::msg::in::device_load{dev_id.value, src_state});
 			// Return device to user
