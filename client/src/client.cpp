@@ -389,6 +389,8 @@ auto device_duplicate(scuff_device src_dev_id, scuff_sbox sbox_id, scuff_return_
 			const auto& sbox    = m->sandboxes.at(dev.sbox);
 			// Now send a message to the destination sandbox to load the saved state into the new device.
 			sbox.external->enqueue(scuff::msg::in::device_load{dev_id.value, src_state});
+			// Return device to user
+			fn.fn(&fn, dev_id.value);
 		};
 		*m = device_create(std::move(*m), sbox, type, plugin_ext_id, plugin, return_fn);
 	});
