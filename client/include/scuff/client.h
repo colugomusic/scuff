@@ -4,34 +4,8 @@
 #include "c_events.h"
 #include "c_plugin_type.h"
 #include "c_render_mode.h"
+#include "c_types.h"
 #include <stdbool.h>
-#include <stdint.h>
-
-typedef double      scuff_sample_rate;
-
-// This refers to a .clap or .vst3 file, or a VST2 shared library.
-typedef int64_t     scuff_plugfile;
-
-// This refers to an instance of a plugin.
-typedef int64_t     scuff_device;
-
-// This refers to a group of sandboxes. Sandboxes all belong to a group.
-typedef int64_t     scuff_group;
-
-// This refers to a plugin.
-typedef int64_t     scuff_plugin;
-
-// This refers to a sandbox.
-typedef int64_t     scuff_sbox;
-
-// A device parameter index.
-typedef size_t      scuff_param;
-
-// A plugin parameter string id.
-typedef const char* scuff_param_id;
-
-// A plugin string id.
-typedef const char* scuff_plugin_id;
 
 enum {
 	scuff_scan_flag_reload_failed_devices = 1 << 0, // If a plugin is scanned which wasn't previously known,

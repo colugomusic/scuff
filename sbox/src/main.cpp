@@ -90,11 +90,6 @@ auto process_input_msg_(const scuff::msg::in::close_all_editors& msg) -> void {
 }
 
 static
-auto process_input_msg_(const scuff::msg::in::commit_changes& msg) -> void {
-	// TODO:
-}
-
-static
 auto process_input_msg_(const scuff::msg::in::device_create& msg) -> void {
 	// TODO:
 }

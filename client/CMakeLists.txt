@@ -7,9 +7,11 @@ list (APPEND src
 	../common/c_events.h
 	../common/c_plugin_type.h
 	../common/c_render_mode.h
+	../common/c_types.h
 	../common/events.hpp
 	../common/messages.hpp
 	../common/os.hpp
+	../common/serialization.hpp
 	../common/shm.hpp
 	../common/types.hpp
 	../common/slot_buffer.hpp

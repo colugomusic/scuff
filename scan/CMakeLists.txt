@@ -10,7 +10,6 @@ list (APPEND src
 	src/constants.hpp
 	src/main.cpp
 	src/os.hpp
-	src/util.cpp
 	src/util.hpp
 	$<$<BOOL:${APPLE}>:src/os-mac.mm>
 	$<$<BOOL:${LINUX}>:src/os-lin.cpp>

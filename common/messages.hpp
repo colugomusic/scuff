@@ -3,10 +3,10 @@
 #include "c_constants.h"
 #include "c_plugin_type.h"
 #include "c_render_mode.h"
+#include "c_types.h"
 #include "types.hpp"
 #include "events.hpp"
 #include <clap/id.h>
-#include <concepts>
 #include <cs_plain_guarded.h>
 #include <deque>
 #include <iterator>
@@ -18,25 +18,23 @@ namespace lg = libguarded;
 namespace scuff::msg::in {
 
 struct close_all_editors      {};
-struct commit_changes         {};
-struct device_create          { scuff::id::device dev; scuff_plugin_type type; std::string plugfile_path; std::string plugin_id; size_t callback; };
-struct device_connect         { scuff::id::device out_dev; size_t out_port; scuff::id::device in_dev; size_t in_port; };
-struct device_disconnect      { scuff::id::device out_dev; size_t out_port; scuff::id::device in_dev; size_t in_port; };
-struct device_erase           { scuff::id::device dev; };
-struct device_gui_hide        { scuff::id::device dev; };
-struct device_gui_show        { scuff::id::device dev; };
-struct device_load            { scuff::id::device dev; std::vector<std::byte> state; };
-struct device_save            { scuff::id::device dev; size_t callback; };
-struct device_set_render_mode { scuff::id::device dev; scuff_render_mode mode; };
-struct event                  { scuff::id::device dev; scuff::events::event event; };
-struct find_param             { scuff::id::device dev; std::string param_id; size_t callback; };
-struct get_param_value        { scuff::id::device dev; scuff::idx::param param; size_t callback; };
-struct get_param_value_text   { scuff::id::device dev; scuff::idx::param param; double value; size_t callback; };
+struct device_create          { scuff_device dev_id; scuff_plugin_type type; std::string plugfile_path; std::string plugin_id; size_t callback; };
+struct device_connect         { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
+struct device_disconnect      { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
+struct device_erase           { scuff_device dev_id; };
+struct device_gui_hide        { scuff_device dev_id; };
+struct device_gui_show        { scuff_device dev_id; };
+struct device_load            { scuff_device dev_id; std::vector<std::byte> state; };
+struct device_save            { scuff_device dev_id; size_t callback; };
+struct device_set_render_mode { scuff_device dev_id; scuff_render_mode mode; };
+struct event                  { scuff_device dev_id; scuff::event event; };
+struct find_param             { scuff_device dev_id; std::string param_id; size_t callback; };
+struct get_param_value        { scuff_device dev_id; scuff_param param_idx; size_t callback; };
+struct get_param_value_text   { scuff_device dev_id; scuff_param param_idx; double value; size_t callback; };
 struct set_sample_rate        { double sr; };
 
 using msg = std::variant<
 	close_all_editors,
-	commit_changes,
 	device_create,
 	device_connect,
 	device_disconnect,
@@ -53,159 +51,17 @@ using msg = std::variant<
 	set_sample_rate
 >;
 
-inline
-auto serialize_(const close_all_editors& msg, std::vector<std::byte>* bytes) -> void {
-	::serialize(size_t(0), bytes);
-}
-
-inline
-auto serialize_(const commit_changes& msg, std::vector<std::byte>* bytes) -> void {
-	::serialize(size_t(0), bytes);
-}
-
-inline
-auto serialize_(const device_create& msg, std::vector<std::byte>* bytes) -> void {
-	const size_t size =
-		sizeof(msg.callback) +
-		sizeof(msg.dev) +
-		sizeof(msg.type) + 
-		msg.plugfile_path.size() + 1 +
-		msg.plugin_id.size() + 1;
-	::serialize(size, bytes);
-	::serialize(msg.dev.value, bytes);
-	::serialize(msg.type, bytes);
-	::serialize(msg.plugfile_path, bytes);
-	::serialize(msg.plugin_id, bytes);
-	::serialize(msg.callback, bytes);
-}
-
-inline
-auto serialize_(const device_connect& msg, std::vector<std::byte>* bytes) -> void {
-	::serialize(sizeof(msg), bytes);
-	::serialize(msg.out_dev.value, bytes);
-	::serialize(msg.out_port, bytes);
-	::serialize(msg.in_dev.value, bytes);
-	::serialize(msg.in_port, bytes);
-}
-
-inline
-auto serialize_(const device_disconnect& msg, std::vector<std::byte>* bytes) -> void {
-	::serialize(sizeof(msg), bytes);
-	::serialize(msg.out_dev.value, bytes);
-	::serialize(msg.out_port, bytes);
-	::serialize(msg.in_dev.value, bytes);
-	::serialize(msg.in_port, bytes);
-}
-
-inline
-auto serialize_(const device_erase& msg, std::vector<std::byte>* bytes) -> void {
-	::serialize(sizeof(msg), bytes);
-	::serialize(msg.dev.value, bytes);
-}
-
-inline
-auto serialize_(const device_gui_hide& msg, std::vector<std::byte>* bytes) -> void {
-	::serialize(sizeof(msg), bytes);
-	::serialize(msg.dev.value, bytes);
-}
-
-inline
-auto serialize_(const device_gui_show& msg, std::vector<std::byte>* bytes) -> void {
-	::serialize(sizeof(msg), bytes);
-	::serialize(msg.dev.value, bytes);
-}
-
-inline
-auto serialize_(const device_load& msg, std::vector<std::byte>* bytes) -> void {
-	const size_t size = sizeof(msg.dev) + msg.state.size();
-	::serialize(size, bytes);
-	::serialize(msg.dev.value, bytes);
-	std::copy(msg.state.begin(), msg.state.end(), std::back_inserter(*bytes));
-}
-
-inline
-auto serialize_(const device_save& msg, std::vector<std::byte>* bytes) -> void {
-	::serialize(sizeof(msg), bytes);
-	::serialize(msg.dev.value, bytes);
-	::serialize(msg.callback, bytes);
-}
-
-inline
-auto serialize_(const device_set_render_mode& msg, std::vector<std::byte>* bytes) -> void {
-	::serialize(sizeof(msg), bytes);
-	::serialize(msg.dev.value, bytes);
-	::serialize(msg.mode, bytes);
-}
-
-inline
-auto serialize_(const event& msg, std::vector<std::byte>* bytes) -> void {
-	const size_t size = sizeof(msg) + sizeof(msg.dev) + scuff::events::size_of(msg.event);
-	::serialize(size, bytes);
-	::serialize(msg.dev.value, bytes);
-	scuff::events::serialize(msg.event, bytes);
-}
-
-inline
-auto serialize_(const find_param& msg, std::vector<std::byte>* bytes) -> void {
-	const size_t size =
-		sizeof(msg.dev) +
-		msg.param_id.size() + 1 +
-		sizeof(msg.callback);
-	::serialize(size, bytes);
-	::serialize(msg.dev.value, bytes);
-	::serialize(msg.param_id, bytes);
-	::serialize(msg.callback, bytes);
-}
-
-inline
-auto serialize_(const get_param_value& msg, std::vector<std::byte>* bytes) -> void {
-	::serialize(sizeof(msg), bytes);
-	::serialize(msg.dev.value, bytes);
-	::serialize(msg.param.value, bytes);
-	::serialize(msg.callback, bytes);
-}
-
-inline
-auto serialize_(const get_param_value_text& msg, std::vector<std::byte>* bytes) -> void {
-	const size_t size =
-		sizeof(msg.dev) +
-		sizeof(msg.param) +
-		sizeof(msg.value) +
-		sizeof(msg.callback);
-	::serialize(size, bytes);
-	::serialize(msg.dev.value, bytes);
-	::serialize(msg.param.value, bytes);
-	::serialize(msg.value, bytes);
-	::serialize(msg.callback, bytes);
-}
-
-inline
-auto serialize_(const set_sample_rate& msg, std::vector<std::byte>* bytes) -> void {
-	const size_t size = sizeof(msg) + sizeof(msg.sr);
-	::serialize(size, bytes);
-	::serialize(msg.sr, bytes);
-}
-
-[[nodiscard]] inline
-auto serialize(const scuff::msg::in::msg& msg) -> std::vector<std::byte> {
-	std::vector<std::byte> bytes;
-	const auto type = msg.index();
-	::serialize(type, &bytes);
-	fast_visit([&bytes](const auto& msg) { serialize_(msg, &bytes); }, msg);
-	return bytes;
-}
-
 } // scuff::msg::in
 
 namespace scuff::msg::out {
 
-struct device_create_error     { scuff::id::device dev; size_t callback; };
-struct device_create_success   { scuff::id::device dev; size_t callback; };
-struct device_params_changed   { scuff::id::device dev; };
-struct return_param            { scuff::idx::param param; size_t callback; };
+struct device_create_error     { scuff_device dev_id; size_t callback; };
+struct device_create_success   { scuff_device dev_id; size_t callback; };
+struct device_params_changed   { scuff_device dev_id; };
+struct return_param            { scuff_param param_idx; size_t callback; };
 struct return_param_value      { double value; size_t callback; };
 struct return_param_value_text { std::string text; size_t callback; };
-struct return_state            { scuff::id::device dev; std::vector<std::byte> bytes; size_t callback; };
+struct return_state            { scuff_device dev_id; std::vector<std::byte> bytes; size_t callback; };
 
 using msg = std::variant<
 	device_create_error,
@@ -217,12 +73,86 @@ using msg = std::variant<
 	return_state
 >;
 
-inline
-auto deserialize(const std::vector<std::byte>& bytes, msg* out) -> void {
-	// TODO:
+} // scuff::msg::out
+
+template <> inline
+auto serialize<scuff::msg::in::device_create>(const scuff::msg::in::device_create& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
+	serialize(msg.type, bytes);
+	serialize(std::string_view{msg.plugfile_path}, bytes);
+	serialize(std::string_view{msg.plugin_id}, bytes);
+	serialize(msg.callback, bytes);
 }
 
-} // scuff::msg::out
+template <> inline
+auto serialize<scuff::msg::in::device_load>(const scuff::msg::in::device_load& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
+	serialize(msg.state, bytes);
+}
+
+template <> inline
+auto serialize<scuff::msg::in::event>(const scuff::msg::in::event& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
+	serialize(msg.event, bytes);
+}
+
+template <> inline
+auto serialize<scuff::msg::in::find_param>(const scuff::msg::in::find_param& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
+	serialize(std::string_view{msg.param_id}, bytes);
+	serialize(msg.callback, bytes);
+}
+
+static
+auto deserialize(std::span<const std::byte>* bytes, scuff::msg::in::device_create* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->type);
+	deserialize(bytes, &msg->plugfile_path);
+	deserialize(bytes, &msg->plugin_id);
+	deserialize(bytes, &msg->callback);
+}
+
+static
+auto deserialize(std::span<const std::byte>* bytes, scuff::msg::in::device_load* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->state);
+}
+
+static
+auto deserialize(std::span<const std::byte>* bytes, scuff::msg::in::event* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->event);
+}
+
+static
+auto deserialize(std::span<const std::byte>* bytes, scuff::msg::in::find_param* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->param_id);
+	deserialize(bytes, &msg->callback);
+}
+
+template <> inline
+auto deserialize<scuff::msg::out::return_param_value_text>(std::span<const std::byte>* bytes, scuff::msg::out::return_param_value_text* msg) -> void {
+	deserialize(bytes, &msg->text);
+	deserialize(bytes, &msg->callback);
+}
+
+template <> inline
+auto deserialize<scuff::msg::out::return_state>(std::span<const std::byte>* bytes, scuff::msg::out::return_state* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->bytes);
+	deserialize(bytes, &msg->callback);
+}
+
+static
+auto deserialize(const std::vector<std::byte>& bytes, scuff::msg::in::msg* out) -> void {
+	deserialize(bytes, out, "input message");
+}
+
+static
+auto deserialize(const std::vector<std::byte>& bytes, scuff::msg::out::msg* out) -> void {
+	deserialize(bytes, out, "output message");
+}
 
 namespace scuff::msg {
 
@@ -247,7 +177,11 @@ struct sender {
 			if (local_queue->empty()) {
 				return;
 			}
-			buffer_          = serialize(local_queue->front());
+			auto data     = serialize(local_queue->front());
+			auto msg_size = data.size();
+			buffer_.clear();
+			serialize(msg_size, &buffer_);
+			serialize(data, &buffer_);
 			bytes_remaining_ = buffer_.size();
 			local_queue->pop_front();
 		}

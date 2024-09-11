@@ -88,7 +88,7 @@ private:
 };
 
 using audio_buffer = std::array<float, SCUFF_VECTOR_SIZE * SCUFF_CHANNEL_COUNT>;
-using event_buffer = bc::static_vector<scuff::events::event, SCUFF_EVENT_PORT_SIZE>;
+using event_buffer = bc::static_vector<scuff::event, SCUFF_EVENT_PORT_SIZE>;
 
 template <typename T>
 struct ab {
