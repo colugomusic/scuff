@@ -167,7 +167,7 @@ auto process_message_(id::sandbox sbox_id, const msg::out::device_create_error& 
 	const auto sbox      = m->sandboxes.at(sbox_id);
 	const auto return_fn = sbox.external->return_buffers.devices.take(msg.callback);
 	*m = set_error(std::move(*m), {msg.dev_id}, "Failed to create.");
-	return_fn.fn(&return_fn, msg.dev_id);
+	return_fn({msg.dev_id});
 	DATA_->callbacks.on_device_error.fn(&DATA_->callbacks.on_device_error, msg.dev_id);
 }
 
@@ -184,7 +184,7 @@ auto process_message_(id::sandbox sbox_id, const msg::out::device_create_success
 	// but we're also going to remove them when we're done with them.
 	device.external->shm_device      = shm::device{bip::open_only, shm::segment::remove_when_done, device_shmid};
 	device.external->shm_audio_ports = shm::device_audio_ports{bip::open_only, shm::segment::remove_when_done, device_ports_shmid};
-	return_fn.fn(&return_fn, msg.dev_id);
+	return_fn({msg.dev_id});
 	publish(*m); // Device may not have been published yet.
 }
 
@@ -218,10 +218,18 @@ auto process_message_(id::sandbox sbox_id, const msg::out::return_param_value_te
 }
 
 static
+auto process_message_(id::sandbox sbox_id, const msg::out::return_state& msg) -> void {
+	const auto m    = DATA_->working_model.lock();
+	const auto sbox = m->sandboxes.at(sbox_id);
+	const auto return_fn = sbox.external->return_buffers.states.take(msg.callback);
+	return_fn(msg.bytes);
+}
+
+static
 auto process_message(id::sandbox sbox_id, const msg::out::msg& msg) -> void {
-	// TODO: const auto proc = [sbox_id](const auto& msg) -> void { process_message_(sbox_id, msg); };
-	// try                               { fast_visit(proc, msg); }
-	// catch (const std::exception& err) { report_error(err.what()); }
+	 const auto proc = [sbox_id](const auto& msg) -> void { process_message_(sbox_id, msg); };
+	 try                               { fast_visit(proc, msg); }
+	 catch (const std::exception& err) { report_error(err.what()); }
 }
 
 static
@@ -277,7 +285,19 @@ auto close_all_editors() -> void {
 }
 
 static
-auto device_connect(scuff_device dev_out, size_t port_out, scuff_device dev_in, size_t port_in) -> void {
+auto device_connect(scuff_device dev_out_id, size_t port_out, scuff_device dev_in_id, size_t port_in) -> void {
+	const auto m        = DATA_->working_model.lock();
+	const auto& dev_out = m->devices.at({dev_out_id});
+	const auto& dev_in  = m->devices.at({dev_in_id});
+	if (dev_out.sbox == dev_in.sbox) {
+		// Devices are in the same sandbox so we can create a direct connection within the sandbox.
+		const auto& sbox = m->sandboxes.at(dev_out.sbox);
+		sbox.external->enqueue(scuff::msg::in::device_connect{dev_out_id, port_out, dev_in_id, port_in});
+		return;
+	}
+	// Devices are in different sandboxes so the connection is handled by the client.
+	const auto& sbox_out = m->sandboxes.at(dev_out.sbox);
+	const auto& sbox_in  = m->sandboxes.at(dev_in.sbox);
 	// TODO:
 }
 
@@ -297,36 +317,82 @@ auto plugin_find(scuff_plugin_id plugin_id) -> scuff_plugin {
 	return plugin_find(*m, plugin_id);
 }
 
-static
-auto device_create(scuff_sbox sbox_id, scuff_plugin_type type, scuff_plugin_id plugin_id, scuff_return_device fn) -> void {
-	const auto m      = scuff::DATA_->working_model.lock();
-	const auto& sbox  = m->sandboxes.at({sbox_id});
+[[nodiscard]] static
+auto device_create(model&& m, const sandbox& sbox, scuff_plugin_type type, ext::id::plugin plugin_ext_id, id::plugin plugin_id, return_device return_fn) -> model {
 	scuff::device dev;
 	dev.id            = scuff::id::device{scuff::id_gen_++};
-	dev.sbox          = {sbox_id};
-	dev.plugin_ext_id = {plugin_id};
-	dev.plugin        = id::plugin{plugin_find(*m, plugin_id)};
+	dev.sbox          = {sbox.id};
+	dev.plugin_ext_id = plugin_ext_id;
+	dev.plugin        = plugin_id;
+	dev.type          = type;
+	m = scuff::add_device_to_sandbox(std::move(m), {sbox.id}, dev.id);
+	m = scuff::insert_device(std::move(m), dev);
 	if (!dev.plugin) {
-		set_error(dev.id, "Plugin not found.");
+		// We don't have this plugin yet so put the device into an error
+		// state and call the return function immediately.
+		m = set_error(std::move(m), dev.id, "Plugin not found.");
 		scuff::DATA_->callbacks.on_device_error.fn(&scuff::DATA_->callbacks.on_device_error, dev.id.value);
-		*m = scuff::add_device_to_sandbox(std::move(*m), {sbox_id}, dev.id);
-		*m = scuff::insert_device(std::move(*m), dev);
-		return;
+		return_fn(dev.id);
+		return m;
 	}
-	const auto callback = sbox.external->return_buffers.devices.put(fn);
-	const auto plugin   = m->plugins.at(dev.plugin);
-	const auto plugfile = m->plugfiles.at(plugin.plugfile);
-	sbox.external->enqueue(msg::in::device_create{dev.id.value, type, plugfile.path, plugin_id, callback});
-	*m = scuff::add_device_to_sandbox(std::move(*m), {sbox_id}, dev.id);
-	*m = scuff::insert_device(std::move(*m), dev);
+	// Plugin is available so we need to send a message to the sandbox to create the remote device.
+	const auto callback = sbox.external->return_buffers.devices.put(return_fn);
+	const auto plugin   = m.plugins.at(dev.plugin);
+	const auto plugfile = m.plugfiles.at(plugin.plugfile);
+	sbox.external->enqueue(msg::in::device_create{dev.id.value, type, plugfile.path, plugin_ext_id.value, callback});
+	return m;
 }
 
-auto device_disconnect(scuff_device dev_out, size_t port_out, scuff_device dev_in, size_t port_in) -> void {
+static
+auto device_create(scuff_sbox sbox_id, scuff_plugin_type type, scuff_plugin_id plugin_ext_id, scuff_return_device fn) -> void {
+	const auto m         = scuff::DATA_->working_model.lock();
+	const auto& sbox     = m->sandboxes.at({sbox_id});
+	const auto plugin_id = id::plugin{plugin_find(*m, plugin_ext_id)};
+	const auto return_fn = [fn](id::device dev_id) { fn.fn(&fn, dev_id.value); };
+	*m = device_create(std::move(*m), sbox, type, {plugin_ext_id}, plugin_id, return_fn);
+}
+
+auto device_disconnect(scuff_device dev_out_id, size_t port_out, scuff_device dev_in_id, size_t port_in) -> void {
+	const auto m        = DATA_->working_model.lock();
+	const auto& dev_out = m->devices.at({dev_out_id});
+	const auto& dev_in  = m->devices.at({dev_in_id});
+	if (dev_out.sbox == dev_in.sbox) {
+		// Devices are in the same sandbox so remove the remote connection.
+		const auto& sbox = m->sandboxes.at(dev_out.sbox);
+		sbox.external->enqueue(scuff::msg::in::device_disconnect{dev_out_id, port_out, dev_in_id, port_in});
+		return;
+	}
+	// Devices are in different sandboxes.
+	const auto& sbox_out = m->sandboxes.at(dev_out.sbox);
+	const auto& sbox_in  = m->sandboxes.at(dev_in.sbox);
 	// TODO:
 }
 
-auto device_duplicate(scuff_device dev, scuff_sbox sbox, scuff_return_device fn) -> void {
-	// TODO: similar to create()?
+auto device_duplicate(scuff_device src_dev_id, scuff_sbox sbox_id, scuff_return_device fn) -> void {
+	const auto m             = scuff::DATA_->working_model.lock();
+	const auto src_dev       = m->devices.at({src_dev_id});
+	const auto src_sbox      = m->sandboxes.at(src_dev.sbox);
+	const auto plugin_ext_id = src_dev.plugin_ext_id;
+	const auto plugin        = src_dev.plugin;
+	const auto type          = src_dev.type;
+	// We're going to send a message to the source sandbox to save the source device.
+	// When the saved state is returned, call this function with it:
+	const auto save_cb       = src_sbox.external->return_buffers.states.put([plugin_ext_id, plugin, type, sbox_id, fn](const std::vector<std::byte>& src_state) {
+		const auto m         = scuff::DATA_->working_model.lock();
+		const auto& sbox     = m->sandboxes.at({sbox_id});
+		// Now we're going to send a message to the destination sandbox to actually create the new device,
+		// if the plugin is available.
+		// When the new device is created, call this function with it:
+		const auto return_fn = [fn, src_state](id::device dev_id) {
+			const auto m        = scuff::DATA_->working_model.lock();
+			const auto& dev     = m->devices.at(dev_id);
+			const auto& sbox    = m->sandboxes.at(dev.sbox);
+			// Now send a message to the destination sandbox to load the saved state into the new device.
+			sbox.external->enqueue(scuff::msg::in::device_load{dev_id.value, src_state});
+		};
+		*m = device_create(std::move(*m), sbox, type, plugin_ext_id, plugin, return_fn);
+	});
+	src_sbox.external->enqueue(scuff::msg::in::device_save{src_dev_id, save_cb});
 }
 
 static
