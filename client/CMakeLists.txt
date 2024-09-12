@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(scuff-client)
+if (NOT TARGET scuff::common)
+	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../common ${CMAKE_BINARY_DIR}/common)
+endif()
 include(../CPM.cmake)
 list (APPEND src
 	include/scuff/client.h
@@ -12,7 +15,6 @@ set(immer_BUILD_TESTS OFF)
 set(immer_BUILD_EXAMPLES OFF)
 set(immer_BUILD_DOCS OFF)
 set(immer_BUILD_EXTRAS OFF)
-
 CPMAddPackage(NAME boost-cmake       GITHUB_REPOSITORY colugomusic/boost-cmake      GIT_TAG master                            )
 CPMAddPackage(NAME clap              GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea          DOWNLOAD_ONLY YES)
 CPMAddPackage(NAME ent               GITHUB_REPOSITORY colugomusic/ent              GIT_TAG main                              )

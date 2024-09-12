@@ -16,6 +16,10 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors&
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
+	const auto m = app->working_model.lock();
+	sbox::device dev;
+	dev.id   = {msg.dev_id};
+	dev.type = msg.type;
 	// TODO:
 }
 

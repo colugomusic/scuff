@@ -30,11 +30,17 @@ struct device {
 	id::device id;
 	device_flags flags;
 	device_ui ui;
+	scuff_plugin_type type;
 	immer::box<std::string> name;
+};
+
+struct clap_device {
+	id::device id;
 };
 
 struct model {
 	immer::table<device> devices;
+	immer::table<clap_device> clap_devices;
 };
 
 struct app {

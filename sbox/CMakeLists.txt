@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(scuff-sbox)
+if (NOT TARGET scuff::common)
+	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../common ${CMAKE_BINARY_DIR}/common)
+endif()
 include(../CPM.cmake)
 list (APPEND scuff-sbox_SRCFILES
 	src/cmdline.hpp
