@@ -5,6 +5,8 @@ if (NOT TARGET scuff::common)
 endif()
 include(../CPM.cmake)
 list (APPEND scuff-sbox_SRCFILES
+	src/clap.hpp
+	src/clap_data.hpp
 	src/cmdline.hpp
 	src/data.hpp
 	src/main.cpp

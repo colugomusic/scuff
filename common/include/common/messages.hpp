@@ -168,6 +168,19 @@ auto serialize<scuff::msg::out::report_error>(const scuff::msg::out::report_erro
 	serialize(std::string_view{msg.text}, bytes);
 }
 
+template <> inline
+auto serialize<scuff::msg::out::return_param_value_text>(const scuff::msg::out::return_param_value_text& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(std::string_view{msg.text}, bytes);
+	serialize(msg.callback, bytes);
+}
+
+template <> inline
+auto serialize<scuff::msg::out::return_state>(const scuff::msg::out::return_state& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
+	serialize(msg.bytes, bytes);
+	serialize(msg.callback, bytes);
+}
+
 namespace scuff::msg {
 
 template <typename MsgT>

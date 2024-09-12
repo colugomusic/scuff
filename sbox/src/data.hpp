@@ -1,5 +1,6 @@
 #pragma once
 
+#include "clap_data.hpp"
 #include "common/audio_sync.hpp"
 #include "common/shm.hpp"
 #include "options.hpp"
@@ -34,13 +35,9 @@ struct device {
 	immer::box<std::string> name;
 };
 
-struct clap_device {
-	id::device id;
-};
-
 struct model {
 	immer::table<device> devices;
-	immer::table<clap_device> clap_devices;
+	immer::table<clap::device> clap_devices;
 };
 
 struct app {
@@ -51,8 +48,8 @@ struct app {
 	msg::receiver<msg::in::msg> msg_receiver;
 
 	// Copy of the model shared by non-audio threads. If a thread modifies
-	// the model in a way that affects the audio thread then it should publish
-	// the changes by calling publish().
+	// the model in a way that affects the audio thread then it should
+	// cublish the changes.
 	lg::plain_guarded<model>    working_model;
 
 	// Copy of the model seen by the audio thread.
