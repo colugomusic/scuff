@@ -19,6 +19,7 @@ namespace scuff::msg::in {
 
 // These messages are sent from the client to a sandbox process.
 
+struct clean_shutdown         {};
 struct close_all_editors      {};
 struct device_create          { scuff_device dev_id; scuff_plugin_type type; std::string plugfile_path; std::string plugin_id; size_t callback; };
 struct device_connect         { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
@@ -36,6 +37,7 @@ struct get_param_value_text   { scuff_device dev_id; scuff_param param_idx; doub
 struct set_sample_rate        { double sr; };
 
 using msg = std::variant<
+	clean_shutdown,
 	close_all_editors,
 	device_create,
 	device_connect,

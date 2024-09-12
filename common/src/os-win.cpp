@@ -87,5 +87,11 @@ auto restore_stream(FILE* stream, int old) -> void {
 	}
 }
 
+auto set_realtime_priority(std::jthread* thread) -> void {
+	const auto handle = thread->native_handle();
+	SetPriorityClass(handle, REALTIME_PRIORITY_CLASS);
+	SetThreadPriority(handle, THREAD_PRIORITY_TIME_CRITICAL);
+}
+
 } // os
 } // scuff

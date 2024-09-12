@@ -44,6 +44,7 @@ struct app {
 	std::string                 instance_id;
 	sbox::options               options;
 	shm::sandbox                shm;
+	std::jthread                audio_thread;
 	msg::sender<msg::out::msg>  msg_sender;
 	msg::receiver<msg::in::msg> msg_receiver;
 

@@ -1,7 +1,9 @@
 #pragma once
 
 #include <clap/clap.h>
+#pragma warning(push, 0)
 #include <immer/vector.hpp>
+#pragma warning(pop)
 
 namespace scuff::sbox::clap {
 
@@ -37,7 +39,7 @@ struct plugin {
 };
 
 struct param {
-	clap_id id;
+	clap_id id = 0;
 };
 
 struct device {

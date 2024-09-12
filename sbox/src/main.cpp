@@ -1,3 +1,4 @@
+#include "common/os.hpp"
 #include "common/shm.hpp"
 #include "common/visit.hpp"
 #include "cmdline.hpp"
@@ -43,6 +44,11 @@ auto on_window_close(sbox::app* app, Event* e) -> void {
 	}
 }
 
+static
+auto audio_thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
+	// TODO:
+}
+
 [[nodiscard]] static
 auto create() -> sbox::app* {
 	const auto app = new sbox::app;
@@ -64,11 +70,17 @@ auto create() -> sbox::app* {
 	}
 	const auto shmid = shm::sandbox::make_id(app->options.instance_id, app->options.sbox_id);
 	app->shm = shm::sandbox{bip::open_only, shmid.c_str()};
+	app->audio_thread = std::jthread{audio_thread_proc, app};
+	scuff::os::set_realtime_priority(&app->audio_thread);
 	return app;
 }
 
 static
 auto destroy(sbox::app** app) -> void {
+	if ((*app)->audio_thread.joinable()) {
+		(*app)->audio_thread.request_stop();
+		(*app)->audio_thread.join();
+	}
 	delete *app;
 }
 

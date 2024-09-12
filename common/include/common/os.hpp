@@ -3,6 +3,7 @@
 #include <clap/entry.h>
 #include <cstdio>
 #include <filesystem>
+#include <thread>
 #include <vector>
 
 namespace scuff::os {
@@ -14,7 +15,8 @@ namespace scuff::os {
 [[nodiscard]] auto is_clap_file(const std::filesystem::path& path) -> bool;
 [[nodiscard]] auto is_vst3_file(const std::filesystem::path& path) -> bool;
 [[nodiscard]] auto redirect_stream(FILE* stream) -> int;
-[[nodiscard]] auto restore_stream(FILE* stream, int old) -> void;
+auto restore_stream(FILE* stream, int old) -> void;
+auto set_realtime_priority(std::jthread* thread) -> void;
 
 } // scuff::os
 

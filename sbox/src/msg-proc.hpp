@@ -10,6 +10,11 @@ auto get_device_type(const sbox::app& app, id::device dev_id) -> scuff_plugin_ty
 }
 
 static
+auto process_input_msg_(sbox::app* app, const scuff::msg::in::clean_shutdown& msg) -> void {
+	// TODO:
+}
+
+static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors& msg) -> void {
 	const auto devices = app->working_model.lock()->devices;
 	for (const auto& dev : devices) {

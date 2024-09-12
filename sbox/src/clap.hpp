@@ -30,7 +30,7 @@ auto load(sbox::app* app, id::device dev_id, const std::vector<std::byte>& state
 			const auto bytes = reinterpret_cast<std::span<std::byte>*>(stream->ctx);
 			auto clap_bytes  = static_cast<std::byte*>(buffer);
 			const auto read_size = std::min(size, static_cast<uint64_t>(bytes->size()));
-			std::copy(bytes, bytes + read_size, clap_bytes);
+			std::copy(bytes->data(), bytes->data() + read_size, clap_bytes);
 			*bytes = bytes->subspan(read_size);
 			return read_size;
 		};

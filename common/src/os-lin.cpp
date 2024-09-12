@@ -1,5 +1,7 @@
 #include "os.hpp"
 #include <dlfcn.h>
+#include <pthread.h>
+#include <sched.h>
 #include <unistd.h>
 
 namespace scuff {
@@ -60,6 +62,13 @@ auto restore_stream(FILE* stream, int old) -> void {
 		dup2(old, fileno(stream));
 		close(old);
 	}
+}
+
+auto set_realtime_priority(std::jthread* thread) -> void {
+	const auto handle = thread->native_handle();
+	struct sched_param param;
+	param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+	pthread_setschedparam(handle, SCHED_FIFO, &param);
 }
 
 } // os
