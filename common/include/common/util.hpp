@@ -4,7 +4,7 @@
 #include <flux.hpp>
 #include <vector>
 
-namespace scanner {
+namespace scuff {
 namespace util {
 
 [[nodiscard]] static
@@ -19,4 +19,4 @@ auto has_extension_case_insensitive(const std::filesystem::path& path, std::stri
 }
 
 } // util
-} // scanner
+} // scuff

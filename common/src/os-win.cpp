@@ -1,12 +1,12 @@
-#include "constants.hpp"
-#include "os.hpp"
-#include "util.hpp"
+#include "common/c_constants.h"
+#include "common/os.hpp"
+#include "common/util.hpp"
 #include <flux.hpp>
 #include <io.h>
 #include <optional>
 #include <ShlObj.h>
 
-namespace scanner {
+namespace scuff {
 namespace os {
 
 [[nodiscard]] static
@@ -27,7 +27,7 @@ auto could_be_a_vst2_file(const std::filesystem::path& path) -> bool {
 
 auto find_clap_entry(const std::filesystem::path& path) -> const clap_plugin_entry_t* {
 	if (auto lib = LoadLibrary((LPCSTR)(path.generic_string().c_str()))) {
-		return reinterpret_cast<clap_plugin_entry_t*>(GetProcAddress(lib, "clap_entry"));
+		return reinterpret_cast<clap_plugin_entry_t*>(GetProcAddress(lib, SCUFF_CLAP_SYMBOL_ENTRY));
 	}
 	return nullptr;
 }
@@ -61,11 +61,11 @@ auto get_system_search_paths() -> std::vector<std::filesystem::path> {
 auto is_clap_file(const std::filesystem::path& path) -> bool {
 	return
 		!std::filesystem::is_directory(path) &&
-		util::has_extension_case_insensitive(path, CLAP_EXT);
+		scuff::util::has_extension_case_insensitive(path, SCUFF_CLAP_EXT);
 }
 
 auto is_vst3_file(const std::filesystem::path& path) -> bool {
-	return util::has_extension_case_insensitive(path, VST3_EXT);
+	return scuff::util::has_extension_case_insensitive(path, SCUFF_VST3_EXT);
 }
 
 auto redirect_stream(FILE* stream) -> int {
@@ -88,4 +88,4 @@ auto restore_stream(FILE* stream, int old) -> void {
 }
 
 } // os
-} // scanner
+} // scuff

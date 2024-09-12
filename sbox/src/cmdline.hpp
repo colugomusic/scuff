@@ -3,7 +3,7 @@
 #include "options.hpp"
 #include <nappgui.h>
 
-namespace sbox::cmdline {
+namespace scuff::sbox::cmdline {
 
 static constexpr auto ARGV_BUFFER_SIZE = 256;
 
@@ -36,16 +36,20 @@ auto get_options() -> sbox::options {
 	const auto argc = osapp_argc();
 	for (uint32_t i = 0; i < argc; i++) {
 		char value[ARGV_BUFFER_SIZE];
+		if (get_option("--instance-id", &i, value)) {
+			options.instance_id = value;
+			continue;
+		}
 		if (get_option("--group", &i, value)) {
-			options.group = value;
+			options.group_id.value = std::stoi(value);
 			continue;
 		}
 		if (get_option("--sandbox", &i, value)) {
-			options.sandbox = value;
+			options.sbox_id.value = std::stoi(value);
 			continue;
 		}
 	}
 	return options;
 }
 
-} // sbox::cmdline
+} // scuff::sbox::cmdline

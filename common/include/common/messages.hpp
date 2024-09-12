@@ -17,6 +17,8 @@ namespace lg = libguarded;
 
 namespace scuff::msg::in {
 
+// These messages are sent from the client to a sandbox process.
+
 struct close_all_editors      {};
 struct device_create          { scuff_device dev_id; scuff_plugin_type type; std::string plugfile_path; std::string plugin_id; size_t callback; };
 struct device_connect         { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
@@ -55,7 +57,10 @@ using msg = std::variant<
 
 namespace scuff::msg::out {
 
+// These messages are sent back from a sandbox process to the client.
+
 struct device_params_changed   { scuff_device dev_id; };
+struct report_error            { std::string text; };
 struct return_created_device   { scuff_device dev_id; bool success; size_t callback; };
 struct return_param            { scuff_param param_idx; size_t callback; };
 struct return_param_value      { double value; size_t callback; };
@@ -64,6 +69,7 @@ struct return_state            { scuff_device dev_id; std::vector<std::byte> byt
 
 using msg = std::variant<
 	device_params_changed,
+	report_error,
 	return_created_device,
 	return_param,
 	return_param_value,
@@ -72,6 +78,62 @@ using msg = std::variant<
 >;
 
 } // scuff::msg::out
+
+template <> inline
+auto deserialize<scuff::msg::in::device_create>(std::span<const std::byte>* bytes, scuff::msg::in::device_create* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->type);
+	deserialize(bytes, &msg->plugfile_path);
+	deserialize(bytes, &msg->plugin_id);
+	deserialize(bytes, &msg->callback);
+}
+
+template <> inline
+auto deserialize<scuff::msg::in::device_load>(std::span<const std::byte>* bytes, scuff::msg::in::device_load* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->state);
+}
+
+template <> inline
+auto deserialize<scuff::msg::in::event>(std::span<const std::byte>* bytes, scuff::msg::in::event* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->event);
+}
+
+template <> inline
+auto deserialize<scuff::msg::in::find_param>(std::span<const std::byte>* bytes, scuff::msg::in::find_param* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->param_id);
+	deserialize(bytes, &msg->callback);
+}
+
+template <> inline
+auto deserialize<scuff::msg::out::report_error>(std::span<const std::byte>* bytes, scuff::msg::out::report_error* msg) -> void {
+	deserialize(bytes, &msg->text);
+}
+
+template <> inline
+auto deserialize<scuff::msg::out::return_param_value_text>(std::span<const std::byte>* bytes, scuff::msg::out::return_param_value_text* msg) -> void {
+	deserialize(bytes, &msg->text);
+	deserialize(bytes, &msg->callback);
+}
+
+template <> inline
+auto deserialize<scuff::msg::out::return_state>(std::span<const std::byte>* bytes, scuff::msg::out::return_state* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->bytes);
+	deserialize(bytes, &msg->callback);
+}
+
+static
+auto deserialize(const std::vector<std::byte>& bytes, scuff::msg::in::msg* out) -> void {
+	deserialize(bytes, out, "input message");
+}
+
+static
+auto deserialize(const std::vector<std::byte>& bytes, scuff::msg::out::msg* out) -> void {
+	deserialize(bytes, out, "output message");
+}
 
 template <> inline
 auto serialize<scuff::msg::in::device_create>(const scuff::msg::in::device_create& msg, std::vector<std::byte>* bytes) -> void {
@@ -101,55 +163,9 @@ auto serialize<scuff::msg::in::find_param>(const scuff::msg::in::find_param& msg
 	serialize(msg.callback, bytes);
 }
 
-static
-auto deserialize(std::span<const std::byte>* bytes, scuff::msg::in::device_create* msg) -> void {
-	deserialize(bytes, &msg->dev_id);
-	deserialize(bytes, &msg->type);
-	deserialize(bytes, &msg->plugfile_path);
-	deserialize(bytes, &msg->plugin_id);
-	deserialize(bytes, &msg->callback);
-}
-
-static
-auto deserialize(std::span<const std::byte>* bytes, scuff::msg::in::device_load* msg) -> void {
-	deserialize(bytes, &msg->dev_id);
-	deserialize(bytes, &msg->state);
-}
-
-static
-auto deserialize(std::span<const std::byte>* bytes, scuff::msg::in::event* msg) -> void {
-	deserialize(bytes, &msg->dev_id);
-	deserialize(bytes, &msg->event);
-}
-
-static
-auto deserialize(std::span<const std::byte>* bytes, scuff::msg::in::find_param* msg) -> void {
-	deserialize(bytes, &msg->dev_id);
-	deserialize(bytes, &msg->param_id);
-	deserialize(bytes, &msg->callback);
-}
-
 template <> inline
-auto deserialize<scuff::msg::out::return_param_value_text>(std::span<const std::byte>* bytes, scuff::msg::out::return_param_value_text* msg) -> void {
-	deserialize(bytes, &msg->text);
-	deserialize(bytes, &msg->callback);
-}
-
-template <> inline
-auto deserialize<scuff::msg::out::return_state>(std::span<const std::byte>* bytes, scuff::msg::out::return_state* msg) -> void {
-	deserialize(bytes, &msg->dev_id);
-	deserialize(bytes, &msg->bytes);
-	deserialize(bytes, &msg->callback);
-}
-
-static
-auto deserialize(const std::vector<std::byte>& bytes, scuff::msg::in::msg* out) -> void {
-	deserialize(bytes, out, "input message");
-}
-
-static
-auto deserialize(const std::vector<std::byte>& bytes, scuff::msg::out::msg* out) -> void {
-	deserialize(bytes, out, "output message");
+auto serialize<scuff::msg::out::report_error>(const scuff::msg::out::report_error& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(std::string_view{msg.text}, bytes);
 }
 
 namespace scuff::msg {

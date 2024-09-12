@@ -11,7 +11,6 @@
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
 #include <boost/interprocess/ipc/message_queue.hpp>
 #include <boost/container/static_vector.hpp>
-//#include <boost/static_string.hpp>
 #include <deque>
 #include <mutex>
 #include <numeric>
@@ -26,9 +25,6 @@ static constexpr auto SEGMENT_OVERHEAD = 2048;
 static constexpr auto OBJECT_AUDIO_IN  = "+audio+in";
 static constexpr auto OBJECT_AUDIO_OUT = "+audio+out";
 static constexpr auto OBJECT_DATA      = "+data";
-
-//using string = boost::static_string<SCUFF_SHM_STRING_MAX>;
-//using blob   = bc::static_vector<std::byte, SCUFF_SHM_BLOB_MAX>;
 
 struct segment {
 	struct remove_when_done_t {};
@@ -97,46 +93,6 @@ struct ab {
 	std::array<T, 2> value;
 };
 
-//template <typename T, size_t N>
-//struct slot_buffer {
-//	slot_buffer()
-//		: sem_{static_cast<uint32_t>(N)}
-//	{
-//		free_indices_.resize(N);
-//		std::iota(free_indices_.rbegin(), free_indices_.rend(), 0);
-//	}
-//	auto put(T item) -> size_t {
-//		sem_.wait(); // Wait for space to be available
-//		const auto lock = std::unique_lock{mutex_};
-//		assert (free_indices_.size() > 0);
-//		const auto index = pop_free_index();
-//		items_[index] = item;
-//		return index;
-//	}
-//	auto take(size_t index) -> T {
-//		const auto lock = std::unique_lock{mutex_};
-//		assert (index < N);
-//		const auto item = items_[index];
-//		push_free_index(index);
-//		sem_.post(); // Signal that space is available
-//		return item;
-//	}
-//private:
-//	auto pop_free_index() -> size_t {
-//		assert (!free_indices_.empty());
-//		const auto index = free_indices_.back();
-//		free_indices_.pop_back();
-//		return index;
-//	}
-//	auto push_free_index(size_t index) -> void {
-//		free_indices_.push_back(index);
-//	}
-//	bip::interprocess_mutex mutex_;
-//	bip::interprocess_semaphore sem_;
-//	bc::static_vector<T, N> items_;
-//	bc::static_vector<size_t, N> free_indices_;
-//};
-
 struct device_flags {
 	enum e {
 		has_gui          = 1 << 0,
@@ -197,6 +153,10 @@ struct group : segment {
 	group() = default;
 	group(bip::create_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id, SEGMENT_SIZE} { create(); }
 	group(bip::open_only_t, std::string_view id) : segment{id} { open(); }
+	[[nodiscard]] static
+	auto make_id(std::string_view instance_id, id::group group_id) -> std::string {
+		return std::format("{}+group+{}", instance_id, group_id.value);
+	}
 private:
 	auto create() -> void {
 		data = seg().construct<group_data>(OBJECT_DATA)();
@@ -214,6 +174,10 @@ struct sandbox : segment {
 	sandbox(bip::open_only_t, std::string_view id) : segment{id} { open(); }
 	[[nodiscard]] auto send_bytes(const std::byte* bytes, size_t count) const -> size_t { return data->msgs_out.write(bytes, count); }
 	[[nodiscard]] auto receive_bytes(std::byte* bytes, size_t count) const -> size_t { return data->msgs_in.read(bytes, count); }
+	[[nodiscard]] static
+	auto make_id(std::string_view instance_id, id::sandbox sbox_id) -> std::string {
+		return std::format("{}+sbox+{}", instance_id, sbox_id.value);
+	}
 private:
 	auto create() -> void {
 		data = seg().construct<sandbox_data>(OBJECT_DATA)();
@@ -229,6 +193,10 @@ struct device : segment {
 	device() = default;
 	device(bip::create_only_t, std::string_view id) : segment{id, SEGMENT_SIZE} { create(); }
 	device(bip::open_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id} { open(); }
+	[[nodiscard]] static
+	auto make_id(std::string_view instance_id, id::device dev_id) -> std::string {
+		return std::format("{}+dev+{}", instance_id, dev_id.value);
+	}
 private:
 	auto create() -> void {
 		data = seg().construct<device_data>(OBJECT_DATA)();
@@ -253,6 +221,10 @@ struct device_audio_ports : segment {
 		: segment{segment::remove_when_done, id}
 	{
 		open();
+	}
+	[[nodiscard]] static
+	auto make_id(std::string_view instance_id, id::device dev_id) -> std::string {
+		return std::format("{}+dev+{}+ports", instance_id, dev_id.value);
 	}
 private:
 	auto create(size_t input_port_count, size_t output_port_count) -> void {

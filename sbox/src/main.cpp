@@ -1,14 +1,13 @@
+#include "common/shm.hpp"
 #include "common/visit.hpp"
-#include "app.hpp"
 #include "cmdline.hpp"
-#include "device.hpp"
-#include "plugfile.hpp"
-#include "shm.hpp"
+#include "data.hpp"
+#include "msg-proc.hpp"
 #include <iostream>
 #include <optional>
 #include <string_view>
 
-namespace sbox {
+namespace scuff::sbox {
 
 [[nodiscard]] static
 auto create_panel(View* view) -> Panel* {
@@ -46,128 +45,39 @@ auto on_window_close(sbox::app* app, Event* e) -> void {
 
 [[nodiscard]] static
 auto create() -> sbox::app* {
-	device::create();
-	plugfile::create();
-	const auto app = heap_new0(sbox::app);
-	app->options  = cmdline::get_options();
-	if (app->options.group.empty()) {
+	const auto app = new sbox::app;
+	app->options = cmdline::get_options();
+	if (app->options.instance_id.empty()) {
+		log_printf("Missing required option --instance-id");
+		osapp_finish();
+		return app;
+	}
+	if (!app->options.group_id) {
 		log_printf("Missing required option --group");
 		osapp_finish();
 		return app;
 	}
-	if (app->options.sandbox.empty()) {
+	if (!app->options.sbox_id) {
 		log_printf("Missing required option --sandbox");
 		osapp_finish();
 		return app;
 	}
-	if (!shm::open(app->options.group, app->options.sandbox)) {
-		osapp_finish();
-		return app;
-	}
-	//app->view = view_create();
-	//app->panel = create_panel(app->view);
-	//app->window = create_window(app->panel);
-	//window_origin(app->window, v2df(500, 200));
-	//window_OnClose(app->window, listener(app, on_window_close, tom));
-	//window_show(app->window);
+	const auto shmid = shm::sandbox::make_id(app->options.instance_id, app->options.sbox_id);
+	app->shm = shm::sandbox{bip::open_only, shmid.c_str()};
 	return app;
 }
 
 static
 auto destroy(sbox::app** app) -> void {
-	if ((*app)->window) {
-		window_destroy(&(*app)->window);
-	}
-	device::destroy();
-	plugfile::destroy();
-	shm::destroy();
-	heap_delete(app, sbox::app);
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::close_all_editors& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::device_create& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::device_connect& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::device_disconnect& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::device_erase& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::device_gui_hide& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::device_gui_show& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::device_set_render_mode& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::event& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::find_param& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::get_param_value& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::get_param_value_text& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg_(const scuff::msg::in::set_sample_rate& msg) -> void {
-	// TODO:
-}
-
-static
-auto process_input_msg(const scuff::msg::in::msg& msg) -> void {
-	// TODO:
-	//fast_visit([](const auto& msg) { process_input_msg_(msg); }, msg);
+	delete *app;
 }
 
 static
 auto update(sbox::app* app, const real64_t prtime, const real64_t ctime) -> void {
-	static std::vector<scuff::msg::in::msg> input_msgs;
-	input_msgs.clear();
-	shm::receive_input_messages(&input_msgs);
-	for (const auto& msg : input_msgs) {
-		process_input_msg(msg);
-	}
+	process_messages(app);
 }
 
-} // sbox
-
-static constexpr auto UPDATE_INTERVAL = 0.1;
+} // scuff::sbox
 
 #include <osmain.h>
-osmain_sync(UPDATE_INTERVAL, sbox::create, sbox::destroy, sbox::update, "", sbox::app)
+osmain_sync(0.1, scuff::sbox::create, scuff::sbox::destroy, scuff::sbox::update, "", scuff::sbox::app)

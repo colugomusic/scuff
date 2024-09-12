@@ -1,7 +1,8 @@
-#include "os.hpp"
-#include "util.hpp"
+#include "common/os.hpp"
+#include "common/util.hpp"
 #include <clap/factory/plugin-factory.h>
 #include <cxxopts.hpp>
+#include <flux.hpp>
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <flux.hpp>
@@ -17,8 +18,8 @@ concept IsMemberFn = requires(ClassType obj, T t, Args... args) {
 };
 
 struct stream_redirector {
-	stream_redirector(FILE* stream) : stream{stream}, old{os::redirect_stream(stream)} {}
-	~stream_redirector() { os::restore_stream(stream, old); }
+	stream_redirector(FILE* stream) : stream{stream}, old{scuff::os::redirect_stream(stream)} {}
+	~stream_redirector() { scuff::os::restore_stream(stream, old); }
 	template <typename ClassType, typename Fn, typename... Args>
 	requires IsMemberFn<ClassType, Fn, Args...>
 	static
@@ -76,7 +77,7 @@ auto parse_options(int argc, const char* argv[]) -> options {
 
 [[nodiscard]] static
 auto get_plugfile_search_paths(const options& opts) -> std::vector<std::filesystem::path> {
-	auto system_search_paths     = os::get_system_search_paths();
+	auto system_search_paths     = scuff::os::get_system_search_paths();
 	auto additional_search_paths = opts.additional_search_paths;
 	auto paths =
 		flux::chain(flux::ref(system_search_paths), flux::ref(additional_search_paths))
@@ -89,9 +90,9 @@ auto get_plugfile_search_paths(const options& opts) -> std::vector<std::filesyst
 
 [[nodiscard]] static
 auto to_plugfile(const std::filesystem::path& path) -> std::optional<plugfile> {
-	if (os::is_clap_file(path))         { return plugfile{plugfile_type::clap, path}; }
-	if (os::is_vst3_file(path))         { return plugfile{plugfile_type::vst3, path}; }
-	if (os::could_be_a_vst2_file(path)) { return plugfile{plugfile_type::possible_vst2, path}; }
+	if (scuff::os::is_clap_file(path))         { return plugfile{plugfile_type::clap, path}; }
+	if (scuff::os::is_vst3_file(path))         { return plugfile{plugfile_type::vst3, path}; }
+	if (scuff::os::could_be_a_vst2_file(path)) { return plugfile{plugfile_type::possible_vst2, path}; }
 	return std::nullopt;
 }
 
@@ -161,7 +162,7 @@ auto report_plugin(const plugfile& pf, const clap_plugin_descriptor& desc) -> vo
 
 static
 auto scan_clap_plugfile_safe(const plugfile& pf) -> void {
-	const auto entry = os::find_clap_entry(pf.path);
+	const auto entry = scuff::os::find_clap_entry(pf.path);
 	if (!entry) {
 		report_broken_plugfile(pf, "Couldn't resolve clap_entry");
 		return;
@@ -222,7 +223,7 @@ auto scan_clap_plugin(const plugfile& pf, const clap_plugin_factory_t& factory, 
 
 static
 auto scan_clap_plugfile_full(const plugfile& pf) -> void {
-	const auto entry = os::find_clap_entry(pf.path);
+	const auto entry = scuff::os::find_clap_entry(pf.path);
 	if (!entry) {
 		report_broken_plugfile(pf, "Couldn't resolve clap_entry");
 		return;

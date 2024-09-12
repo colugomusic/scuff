@@ -2,19 +2,12 @@ cmake_minimum_required(VERSION 3.20)
 project(scuff-sbox)
 include(../CPM.cmake)
 list (APPEND scuff-sbox_SRCFILES
-	../common/messages.hpp
-	../common/shm.hpp
-	src/app.hpp
 	src/cmdline.hpp
-	src/device.cpp
-	src/device.hpp
-	src/dll.hpp
+	src/data.hpp
 	src/main.cpp
+	src/msg-proc.hpp
 	src/options.hpp
-	src/plugfile.cpp
 	src/plugfile.hpp
-	src/shm.cpp
-	src/shm.hpp
 )
 set(BOOST_LIBS_OPTIONAL
 	header
@@ -23,8 +16,8 @@ set(BOOST_LIBS_OPTIONAL
 )
 CPMAddPackage(NAME boost-cmake   GITHUB_REPOSITORY colugomusic/boost-cmake   GIT_TAG master                                                       )
 CPMAddPackage(NAME clap          GITHUB_REPOSITORY free-audio/clap           GIT_TAG c2c1dea          DOWNLOAD_ONLY YES                           )
-CPMAddPackage(NAME cs_libguarded GITHUB_REPOSITORY copperspice/cs_libguarded GIT_TAG libguarded-1.4.1 DOWNLOAD_ONLY YES                           )
 CPMAddPackage(NAME ent           GITHUB_REPOSITORY colugomusic/ent           GIT_TAG main                                                         )
+CPMAddPackage(NAME immer         GITHUB_REPOSITORY arximboldi/immer          GIT_TAG v0.8.1                                                       )
 CPMAddPackage(NAME nappgui       GITHUB_REPOSITORY frang75/nappgui_src       GIT_TAG v1.4.2           OPTIONS "NAPPGUI_DEMO OFF" "NAPPGUI_WEB OFF")
 set(NAPPGUI_ROOT_PATH ${nappgui_SOURCE_DIR})
 nap_generate_tools()
@@ -33,11 +26,12 @@ nap_target_cxx_standard(scuff-sbox 20)
 target_include_directories(scuff-sbox PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/..
 	${clap_SOURCE_DIR}/include
-	${cs_libguarded_SOURCE_DIR}/src
 )
 target_link_libraries(scuff-sbox
 	Boost::boost
 	ent
+	immer
+	scuff::common
 	${NAPPGUI_LIBRARIES}
 )
 target_compile_options(scuff-sbox PRIVATE

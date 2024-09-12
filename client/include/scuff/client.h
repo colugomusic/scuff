@@ -1,10 +1,10 @@
 #pragma once
 
-#include "c_constants.h"
-#include "c_events.h"
-#include "c_plugin_type.h"
-#include "c_render_mode.h"
-#include "c_types.h"
+#include "common/c_constants.h"
+#include "common/c_events.h"
+#include "common/c_plugin_type.h"
+#include "common/c_render_mode.h"
+#include "common/c_types.h"
 #include <stdbool.h>
 
 enum {
@@ -54,7 +54,7 @@ typedef struct scuff_group_process_t {
 
 // Users should assume that any of these callbacks can be called from any non-realtime thread.
 // Every callback must be provided when calling scuff_init.
-typedef struct scuff_on_device_error_t          { void* ctx; void (*fn)(const struct scuff_on_device_error_t*, scuff_device dev); } scuff_on_device_error;
+typedef struct scuff_on_device_error_t          { void* ctx; void (*fn)(const struct scuff_on_device_error_t*, scuff_device dev, const char* error); } scuff_on_device_error;
 typedef struct scuff_on_device_params_changed_t { void* ctx; void (*fn)(const struct scuff_on_device_params_changed_t*, scuff_device dev); } scuff_on_device_params_changed;
 typedef struct scuff_on_error_t                 { void* ctx; void (*fn)(const struct scuff_on_error_t*, const char* error); } scuff_on_error;
 typedef struct scuff_on_plugfile_broken_t       { void* ctx; void (*fn)(const struct scuff_on_plugfile_broken_t*, scuff_plugfile plugfile); } scuff_on_plugfile_broken;
@@ -62,7 +62,7 @@ typedef struct scuff_on_plugfile_scanned_t      { void* ctx; void (*fn)(const st
 typedef struct scuff_on_plugin_broken_t         { void* ctx; void (*fn)(const struct scuff_on_plugin_broken_t*, scuff_plugin plugin); } scuff_on_plugin_broken;
 typedef struct scuff_on_plugin_scanned_t        { void* ctx; void (*fn)(const struct scuff_on_plugin_scanned_t*, scuff_plugin plugin); } scuff_on_plugin_scanned;
 typedef struct scuff_on_sbox_crashed_t          { void* ctx; void (*fn)(const struct scuff_on_sbox_crashed_t*, scuff_sbox sbox); } scuff_on_sbox_crashed;
-typedef struct scuff_on_sbox_error_t            { void* ctx; void (*fn)(const struct scuff_on_sbox_error_t*, scuff_sbox sbox); } scuff_on_sbox_error;
+typedef struct scuff_on_sbox_error_t            { void* ctx; void (*fn)(const struct scuff_on_sbox_error_t*, scuff_sbox sbox, const char* error); } scuff_on_sbox_error;
 typedef struct scuff_on_sbox_started_t          { void* ctx; void (*fn)(const struct scuff_on_sbox_started_t*, scuff_sbox sbox); } scuff_on_sbox_started;
 typedef struct scuff_on_scan_complete_t         { void* ctx; void (*fn)(const struct scuff_on_scan_complete_t* ctx); } scuff_on_scan_complete;
 typedef struct scuff_on_scan_error_t            { void* ctx; void (*fn)(const struct scuff_on_scan_error_t*, const char* error); } scuff_on_scan_error;

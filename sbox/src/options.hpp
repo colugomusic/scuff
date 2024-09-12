@@ -1,12 +1,14 @@
 #pragma once
 
+#include "common/types.hpp"
 #include <string>
 
-namespace sbox {
+namespace scuff::sbox {
 
 struct options {
-	std::string group;
-	std::string sandbox;
+	std::string instance_id;
+	id::group group_id;
+	id::sandbox sbox_id;
 };
 
-} // sbox
+} // scuff::sbox

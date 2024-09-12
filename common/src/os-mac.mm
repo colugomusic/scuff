@@ -1,19 +1,25 @@
 #include "os.hpp"
-#include <dlfcn.h>
+#include <CoreFoundation/CoreFoundation.h>
+#include <Foundation/Foundation.h>
 #include <unistd.h>
 
-namespace scanner {
+namespace scuff {
 namespace os {
 
 auto could_be_a_vst2_file(const std::filesystem::path& path) -> bool {
-	return path.extension() == ".so";
+	return path.extension() == ".dylib";
 }
 
 auto find_clap_entry(const std::filesystem::path& path) -> const clap_plugin_entry_t* {
-	if (auto handle = dlopen(path.u8string().c_str(), RTLD_LOCAL | RTLD_LAZY)) {
-		return reinterpret_cast<clap_plugin_entry_t*>(dlsym(handle, "clap_entry"));
-	}
-	return nullptr;
+	auto ps = path.u8string();
+	auto cs = CFStringCreateWithBytes(kCFAllocatorDefault, (uint8_t *)ps.c_str(), ps.size(), kCFStringEncodingUTF8, false);
+	auto bundleURL = CFURLCreateWithFileSystemPath(kCFAllocatorDefault, cs, kCFURLPOSIXPathStyle, true);
+	auto bundle = CFBundleCreate(kCFAllocatorDefault, bundleURL); 
+	auto db = CFBundleGetDataPointerForName(bundle, CFSTR("clap_entry")); 
+	CFRelease(bundle);
+	CFRelease(bundleURL);
+	CFRelease(cs); 
+	return (clap_plugin_entry_t *)db;
 }
 
 auto get_env_search_paths(char path_delimiter) -> std::vector<std::filesystem::path> {
@@ -27,8 +33,19 @@ auto get_env_search_paths(char path_delimiter) -> std::vector<std::filesystem::p
 
 auto get_system_search_paths() -> std::vector<std::filesystem::path> {
 	std::vector<std::filesystem::path> paths;
-	paths.push_back("/usr/lib/clap");
-	paths.push_back(std::filesystem::path(getenv("HOME")) / std::filesystem::path(".clap"));
+	auto *fileManager = [NSFileManager defaultManager];
+	auto *userLibURLs = [fileManager URLsForDirectory:NSLibraryDirectory inDomains:NSUserDomainMask];
+	auto *sysLibURLs = [fileManager URLsForDirectory:NSLibraryDirectory inDomains:NSLocalDomainMask];
+	if (userLibURLs) {
+		auto *u = [userLibURLs objectAtIndex:0];
+		auto p = std::filesystem::path{[u fileSystemRepresentation]} / "Audio" / "Plug-Ins" / "CLAP";
+		paths.push_back(p);
+	}
+	if (sysLibURLs) {
+		auto *u = [sysLibURLs objectAtIndex:0];
+		auto p = std::filesystem::path{[u fileSystemRepresentation]} / "Audio" / "Plug-Ins" / "CLAP";
+		paths.push_back(p);
+	}
 	auto env_paths = get_env_search_paths(':');
 	paths.insert(paths.end(), env_paths.begin(), env_paths.end());
 	return paths;
@@ -36,7 +53,7 @@ auto get_system_search_paths() -> std::vector<std::filesystem::path> {
 
 auto is_clap_file(const std::filesystem::path& path) -> bool {
 	return
-		!std::filesystem::is_directory(path) &&
+		std::filesystem::is_directory(path) &&
 		util::has_extension_case_insensitive(path, CLAP_EXT);
 }
 
@@ -63,4 +80,4 @@ auto restore_stream(FILE* stream, int old) -> void {
 }
 
 } // os
-} // scanner
+} // scuff
