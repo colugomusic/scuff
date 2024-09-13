@@ -1,8 +1,22 @@
 #pragma once
 
 #include "data.hpp"
+#include <optional>
 
 namespace scuff::sbox::clap {
+
+[[nodiscard]] static
+auto get_param_value(const sbox::app& app, id::device dev_id, scuff_param param_idx) -> std::optional<double> {
+	const auto dev = app.working_model.lock()->clap_devices.at(dev_id);
+	if (dev.iface_plugin.params) {
+		const auto param = dev.params[param_idx];
+		double value;
+		if (dev.iface_plugin.params->get_value(dev.iface_plugin.plugin, param.id, &value)) {
+			return value;
+		}
+	}
+	return std::nullopt;
+}
 
 [[nodiscard]] static
 auto get_param_value_text(const sbox::app& app, id::device dev_id, scuff_param param_idx, double value) -> std::string {
