@@ -60,4 +60,12 @@ auto save(sbox::app* app, id::device dev_id) -> std::vector<std::byte> {
 	return {};
 }
 
+[[nodiscard]] static
+auto set_sample_rate(const sbox::app& app, id::device dev_id, double sr) -> bool {
+	const auto m   = *app.working_model.lock();
+	const auto dev = m.clap_devices.at(dev_id);
+	dev.iface_plugin.plugin->deactivate(dev.iface_plugin.plugin);
+	return dev.iface_plugin.plugin->activate(dev.iface_plugin.plugin, sr, SCUFF_VECTOR_SIZE, SCUFF_VECTOR_SIZE);
+}
+
 } // scuff::sbox::clap

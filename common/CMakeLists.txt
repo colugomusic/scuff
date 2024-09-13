@@ -6,7 +6,7 @@ if(UNIX AND NOT APPLE)
 else()
 	set(LINUX FALSE)
 endif()
-list (APPEND src
+list (APPEND headers
 	include/common/audio_sync.hpp
 	include/common/c_constants.h
 	include/common/c_events.h
@@ -22,6 +22,8 @@ list (APPEND src
 	include/common/speen.hpp
 	include/common/types.hpp
 	include/common/visit.hpp
+)
+list (APPEND sources
 	$<$<BOOL:${APPLE}>:${CMAKE_CURRENT_LIST_DIR}/src/os-mac.mm>
 	$<$<BOOL:${LINUX}>:${CMAKE_CURRENT_LIST_DIR}/src/os-lin.cpp>
 	$<$<BOOL:${WIN32}>:${CMAKE_CURRENT_LIST_DIR}/src/os-win.cpp>
@@ -31,7 +33,9 @@ CPMAddPackage(NAME cs_libguarded GITHUB_REPOSITORY copperspice/cs_libguarded GIT
 CPMAddPackage(NAME flux          GITHUB_REPOSITORY tcbrindle/flux            GIT_TAG v0.4.0           DOWNLOAD_ONLY YES)
 add_library(scuff-common INTERFACE)
 add_library(scuff::common ALIAS scuff-common)
-target_sources(scuff-common INTERFACE ${src})
+target_sources(scuff-common INTERFACE ${sources})
+source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX common/headers FILES ${headers})
+source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX common/sources FILES ${sources})
 target_compile_features(scuff-common INTERFACE
 	cxx_std_20
 )

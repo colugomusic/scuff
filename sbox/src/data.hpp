@@ -27,12 +27,20 @@ struct device_ui {
 	Window* window;
 };
 
+struct port_conn {
+	id::device other_device;
+	size_t other_port_index;
+	bool external = false;
+};
+
 struct device {
 	id::device id;
 	device_flags flags;
 	device_ui ui;
 	scuff_plugin_type type;
 	immer::box<std::string> name;
+	immer::vector<port_conn> input_conns;
+	immer::vector<port_conn> output_conns;
 };
 
 struct model {

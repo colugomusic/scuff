@@ -11,6 +11,8 @@
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
 #include <boost/interprocess/ipc/message_queue.hpp>
 #include <boost/container/static_vector.hpp>
+#include <boost/static_string.hpp>
+#include <clap/id.h>
 #include <deque>
 #include <mutex>
 #include <numeric>
@@ -87,11 +89,7 @@ using audio_buffer = std::array<float, SCUFF_VECTOR_SIZE * SCUFF_CHANNEL_COUNT>;
 using event_buffer = bc::static_vector<scuff::event, SCUFF_EVENT_PORT_SIZE>;
 
 template <typename T>
-struct ab {
-	static constexpr auto A = 0;
-	static constexpr auto B = 0;
-	std::array<T, 2> value;
-};
+using ab = std::array<T, 2>;
 
 struct device_flags {
 	enum e {
@@ -123,6 +121,18 @@ struct group_data {
 	// Each sandbox process decrements this
 	// counter when it is finished processing.
 	ab<std::atomic<uint64_t>> sandboxes_processing;
+};
+
+struct param_info {
+	boost::static_string<SCUFF_PARAM_ID_MAX> id;
+	boost::static_string<SCUFF_PARAM_NAME_MAX> name;
+	double min_value;
+	double max_value;
+	double default_value;
+	struct {
+		void* cookie;
+		clap_id id;
+	} clap;
 };
 
 template <typename T> static
@@ -190,7 +200,6 @@ private:
 struct device : segment {
 	static constexpr auto SEGMENT_SIZE = sizeof(device_data) + SEGMENT_OVERHEAD;
 	device_data* data = nullptr;
-	device() = default;
 	device(bip::create_only_t, std::string_view id) : segment{id, SEGMENT_SIZE} { create(); }
 	device(bip::open_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id} { open(); }
 	[[nodiscard]] static
@@ -223,8 +232,8 @@ struct device_audio_ports : segment {
 		open();
 	}
 	[[nodiscard]] static
-	auto make_id(std::string_view instance_id, id::device dev_id) -> std::string {
-		return std::format("{}+dev+{}+ports", instance_id, dev_id.value);
+	auto make_id(std::string_view instance_id, id::device dev_id, uint64_t uid) -> std::string {
+		return std::format("{}+dev+{}+ports+uid", instance_id, dev_id.value, uid);
 	}
 private:
 	auto create(size_t input_port_count, size_t output_port_count) -> void {
@@ -237,6 +246,36 @@ private:
 	auto open() -> void {
 		input_count  = find_shm_obj<ab<audio_buffer>>(&seg(), OBJECT_AUDIO_IN, &input_buffers);
 		output_count = find_shm_obj<ab<audio_buffer>>(&seg(), OBJECT_AUDIO_OUT, &output_buffers);
+	}
+};
+
+struct device_param_info : segment {
+	size_t count    = 0;
+	param_info* arr = nullptr;
+	device_param_info() = default;
+	device_param_info(bip::create_only_t, std::string_view shmid, size_t param_count)
+		: segment{shmid, sizeof(shm::param_info) * param_count + SEGMENT_OVERHEAD}
+	{
+		create(param_count);
+	}
+	device_param_info(bip::open_only_t, segment::remove_when_done_t, std::string_view shmid)
+		: segment{shmid}
+	{
+		open();
+	}
+	[[nodiscard]] static
+	auto make_id(std::string_view instance_id, id::device dev_id, uint64_t uid) -> std::string {
+		return std::format("{}+dev+{}+params+{}", instance_id, dev_id.value, uid);
+	}
+private:
+	auto create(size_t param_count) -> void {
+		if (param_count > 0) {
+			count = param_count;
+			arr = seg().construct<param_info>(OBJECT_DATA)[param_count]();
+		}
+	}
+	auto open() -> void {
+		count = find_shm_obj<param_info>(&seg(), OBJECT_DATA, &arr);
 	}
 };
 

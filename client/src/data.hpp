@@ -20,14 +20,12 @@ using return_state  = std::function<void(const std::vector<std::byte>& bytes)>;
 
 using return_device_fns = slot_buffer<return_device>;
 using return_double_fns = slot_buffer<scuff_return_double>;
-using return_param_fns  = slot_buffer<scuff_return_param>;
 using return_state_fns  = slot_buffer<return_state>;
 using return_string_fns = slot_buffer<scuff_return_string>;
 
 struct return_buffers {
 	return_device_fns devices;
 	return_double_fns doubles;
-	return_param_fns  params;
 	return_state_fns states;
 	return_string_fns strings;
 };
@@ -40,9 +38,9 @@ struct sbox_flags {
 };
 
 struct device_external {
-	using shptr = std::shared_ptr<device_external>;
-	shm::device_audio_ports shm_audio_ports;
-	shm::device shm_device;
+	std::shared_ptr<shm::device_audio_ports> shm_audio_ports;
+	std::shared_ptr<shm::device_param_info>  shm_param_info;
+	std::shared_ptr<shm::device> shm_device;
 };
 
 struct sandbox_external {
@@ -93,7 +91,7 @@ struct device {
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
 	immer::box<std::string> name;
-	device_external::shptr external;
+	immer::box<device_external> external;
 };
 
 struct sandbox {

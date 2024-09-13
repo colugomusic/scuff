@@ -10,40 +10,6 @@
 
 namespace scuff::sbox {
 
-[[nodiscard]] static
-auto create_panel(View* view) -> Panel* {
-	const auto panel = panel_create();
-	const auto layout = layout_create(1, 1);
-	layout_view(layout, view, 0, 0);
-	panel_layout(panel, layout);
-	return panel;
-}
-
-[[nodiscard]] static
-auto create_window(Panel* panel) -> Window* {
-	const auto window = window_create(ekWINDOW_STD | ekWINDOW_RESIZE);
-	window_panel(window, panel);
-	window_title(window, "tom");
-	return window;
-}
-
-static
-auto on_window_close(sbox::app* app, Event* e) -> void {
-	const auto p     = event_params(e, EvWinClose);
-	const auto close = event_result(e, bool_t);
-	cassert_no_null(app);
-	switch (p->origin) {
-		case ekGUI_CLOSE_BUTTON: {
-			// TODO:
-			osapp_finish();
-			break;
-		}
-		case ekGUI_CLOSE_DEACT: {
-			cassert_default();
-		}
-	}
-}
-
 static
 auto audio_thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 	// TODO:

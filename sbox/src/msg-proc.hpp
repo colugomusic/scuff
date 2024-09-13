@@ -1,12 +1,24 @@
 #pragma once
 
 #include "clap.hpp"
+#include <format>
+#include <immer/vector_transient.hpp>
 
 namespace scuff::sbox {
 
 [[nodiscard]] static
 auto get_device_type(const sbox::app& app, id::device dev_id) -> scuff_plugin_type {
 	return app.working_model.lock()->devices.at(dev_id).type;
+}
+
+static
+auto set_sample_rate(sbox::app* app, const sbox::device& dev, double sr) -> void {
+	if (dev.type == scuff_plugin_type::clap) {
+		if (!clap::set_sample_rate(*app, dev.id, sr)) {
+			app->msg_sender.enqueue(scuff::msg::out::report_error{std::format("Failed to set sample rate for device {}", dev.id)});
+		}
+		return;
+	}
 }
 
 static
@@ -44,18 +56,75 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& msg) -> void {
-	// TODO:
+	const auto m       = app->working_model.lock();
+	const auto in_dev  = m->devices.find({msg.in_dev_id});
+	const auto out_dev = m->devices.find({msg.out_dev_id});
+	if (in_dev) {
+		auto dev   = *in_dev;
+		auto conns = dev.input_conns.transient();
+		while(conns.size() <= msg.in_port) { conns.push_back({}); }
+		port_conn conn;
+		conn.other_device     = {msg.out_dev_id};
+		conn.other_port_index = msg.out_port;
+		conn.external         = !out_dev;
+		conns.set(msg.in_port, conn);
+		dev.input_conns = conns.persistent();
+		m->devices = m->devices.insert(dev);
+	}
+	if (out_dev) {
+		auto dev   = *out_dev;
+		auto conns = dev.output_conns.transient();
+		while(conns.size() <= msg.out_port) { conns.push_back({}); }
+		port_conn conn;
+		conn.other_device     = {msg.in_dev_id};
+		conn.other_port_index = msg.in_port;
+		conn.external         = !in_dev;
+		conns.set(msg.out_port, conn);
+		dev.output_conns = conns.persistent();
+		m->devices = m->devices.insert(dev);
+	}
+	app->published_model.set(*m);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect& msg) -> void {
-	// TODO:
+	const auto m       = app->working_model.lock();
+	const auto in_dev  = m->devices.find({msg.in_dev_id});
+	const auto out_dev = m->devices.find({msg.out_dev_id});
+	if (in_dev) {
+		auto dev = *in_dev;
+		dev.input_conns = dev.input_conns.set(msg.in_port, {});
+		m->devices = m->devices.insert(dev);
+	}
+	if (out_dev) {
+		auto dev = *out_dev;
+		dev.output_conns = dev.output_conns.set(msg.out_port, {});
+		m->devices = m->devices.insert(dev);
+	}
+	app->published_model.set(*m);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg) -> void {
 	const auto m = app->working_model.lock();
-	// TODO:
+	const auto dev_id = id::device{msg.dev_id};
+	const auto devices = m->devices;
+	// Remove any internal connections to this device
+	for (auto dev : devices) {
+		for (size_t port_idx = 0; port_idx < dev.input_conns.size(); port_idx) {
+			const auto& conn = dev.input_conns[port_idx];
+			if (conn.other_device == dev_id) {
+				dev.input_conns = dev.input_conns.set(port_idx, {});
+			}
+		}
+		for (size_t port_idx = 0; port_idx < dev.output_conns.size(); port_idx) {
+			const auto& conn = dev.output_conns[port_idx];
+			if (conn.other_device == dev_id) {
+				dev.output_conns = dev.output_conns.set(port_idx, {});
+			}
+		}
+		m->devices = m->devices.insert(dev);
+	}
 	m->devices      = m->devices.erase({msg.dev_id});
 	m->clap_devices = m->clap_devices.erase({msg.dev_id});
 	app->published_model.set(*m);
@@ -113,11 +182,6 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::event& msg) -> voi
 }
 
 static
-auto process_input_msg_(sbox::app* app, const scuff::msg::in::find_param& msg) -> void {
-	// TODO:
-}
-
-static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value& msg) -> void {
 	// TODO:
 }
@@ -135,7 +199,10 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value_te
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::set_sample_rate& msg) -> void {
-	// TODO: deactivate all devices and re-activate with the new sample rate
+	const auto m = *app->working_model.lock();
+	for (const auto& dev : m.devices) {
+		set_sample_rate(app, dev, msg.sr);
+	}
 }
 
 static

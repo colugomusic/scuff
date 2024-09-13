@@ -69,7 +69,6 @@ typedef struct scuff_on_scan_error_t            { void* ctx; void (*fn)(const st
 typedef struct scuff_on_scan_started_t          { void* ctx; void (*fn)(const struct scuff_on_scan_started_t* ctx ); } scuff_on_scan_started;
 typedef struct scuff_return_device_t            { void* ctx; void (*fn)(const struct scuff_return_device_t*, scuff_device dev, bool success); } scuff_return_device; 
 typedef struct scuff_return_double_t            { void* ctx; void (*fn)(const struct scuff_return_double_t*, double value); } scuff_return_double;
-typedef struct scuff_return_param_t             { void* ctx; void (*fn)(const struct scuff_return_param_t*, scuff_param param); } scuff_return_param;
 typedef struct scuff_return_string_t            { void* ctx; void (*fn)(const struct scuff_return_string_t*, const char* text); } scuff_return_string; 
 
 typedef struct scuff_callbacks_t {
@@ -218,10 +217,9 @@ bool            scuff_is_running(scuff_sbox sbox);
 // Return true if the plugin scanner process is currently running.
 bool            scuff_is_scanning(void);
 
-// Find the parameter with the given id asynchronously.
-// When the result is ready, call the given function with it.
-// If the parameter was not found then the result will be SCUFF_INVALID_INDEX.
-void            scuff_param_find(scuff_device dev, scuff_param_id param_id, scuff_return_param fn);
+// Find the device parameter with the given id.
+// - This will return SCUFF_INVALID_INDEX if the device hasn't finished being created yet.
+scuff_param     scuff_param_find(scuff_device dev, scuff_param_id param_id);
 
 // Begin a parameter gesture (CLAP)
 void            scuff_param_gesture_begin(scuff_device dev, scuff_param param);

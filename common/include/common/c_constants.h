@@ -7,6 +7,8 @@
 #define SCUFF_GC_INTERVAL_MS    1000
 #define SCUFF_INVALID_INDEX     SIZE_MAX
 #define SCUFF_MSG_BUFFER_SIZE   4096
+#define SCUFF_PARAM_ID_MAX      64
+#define SCUFF_PARAM_NAME_MAX    64
 #define SCUFF_POLL_SLEEP_MS     10
 #define SCUFF_VECTOR_SIZE       64       // Hard-coded for now just to make things easier.
 #define SCUFF_VST3_EXT          ".vst3"

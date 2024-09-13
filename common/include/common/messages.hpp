@@ -24,14 +24,14 @@ struct close_all_editors      {};
 struct device_create          { scuff_device dev_id; scuff_plugin_type type; std::string plugfile_path; std::string plugin_id; size_t callback; };
 struct device_connect         { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
 struct device_disconnect      { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
-struct device_erase           { scuff_device dev_id; };
+struct device_erase           { scuff_device dev_id; }; // This is sent to every sandbox in the device's sandbox group, so that they can clear any
+                                                        // connections to the device.
 struct device_gui_hide        { scuff_device dev_id; };
 struct device_gui_show        { scuff_device dev_id; };
 struct device_load            { scuff_device dev_id; std::vector<std::byte> state; };
 struct device_save            { scuff_device dev_id; size_t callback; };
 struct device_set_render_mode { scuff_device dev_id; scuff_render_mode mode; };
 struct event                  { scuff_device dev_id; scuff::event event; };
-struct find_param             { scuff_device dev_id; std::string param_id; size_t callback; };
 struct get_param_value        { scuff_device dev_id; scuff_param param_idx; size_t callback; };
 struct get_param_value_text   { scuff_device dev_id; scuff_param param_idx; double value; size_t callback; };
 struct set_sample_rate        { double sr; };
@@ -49,7 +49,6 @@ using msg = std::variant<
 	device_save,
 	device_set_render_mode,
 	event,
-	find_param,
 	get_param_value,
 	get_param_value_text,
 	set_sample_rate
@@ -61,19 +60,17 @@ namespace scuff::msg::out {
 
 // These messages are sent back from a sandbox process to the client.
 
-struct device_params_changed   { scuff_device dev_id; };
-struct report_error            { std::string text; };
-struct return_created_device   { scuff_device dev_id; bool success; size_t callback; };
-struct return_param            { scuff_param param_idx; size_t callback; };
-struct return_param_value      { double value; size_t callback; };
-struct return_param_value_text { std::string text; size_t callback; };
-struct return_state            { scuff_device dev_id; std::vector<std::byte> bytes; size_t callback; };
+struct device_param_info_changed { scuff_device dev_id; std::string new_shmid; };
+struct report_error              { std::string text; };
+struct return_created_device     { scuff_device dev_id; std::string ports_shmid; std::string param_info_shmid; size_t callback; };
+struct return_param_value        { double value; size_t callback; };
+struct return_param_value_text   { std::string text; size_t callback; };
+struct return_state              { scuff_device dev_id; std::vector<std::byte> bytes; size_t callback; };
 
 using msg = std::variant<
-	device_params_changed,
+	device_param_info_changed,
 	report_error,
 	return_created_device,
-	return_param,
 	return_param_value,
 	return_param_value_text,
 	return_state
@@ -103,9 +100,16 @@ auto deserialize<scuff::msg::in::event>(std::span<const std::byte>* bytes, scuff
 }
 
 template <> inline
-auto deserialize<scuff::msg::in::find_param>(std::span<const std::byte>* bytes, scuff::msg::in::find_param* msg) -> void {
+auto deserialize<scuff::msg::out::device_param_info_changed>(std::span<const std::byte>* bytes, scuff::msg::out::device_param_info_changed* msg) -> void {
 	deserialize(bytes, &msg->dev_id);
-	deserialize(bytes, &msg->param_id);
+	deserialize(bytes, &msg->new_shmid);
+}
+
+template <> inline
+auto deserialize<scuff::msg::out::return_created_device>(std::span<const std::byte>* bytes, scuff::msg::out::return_created_device* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->ports_shmid);
+	deserialize(bytes, &msg->param_info_shmid);
 	deserialize(bytes, &msg->callback);
 }
 
@@ -159,9 +163,16 @@ auto serialize<scuff::msg::in::event>(const scuff::msg::in::event& msg, std::vec
 }
 
 template <> inline
-auto serialize<scuff::msg::in::find_param>(const scuff::msg::in::find_param& msg, std::vector<std::byte>* bytes) -> void {
+auto serialize<scuff::msg::out::device_param_info_changed>(const scuff::msg::out::device_param_info_changed& msg, std::vector<std::byte>* bytes) -> void {
 	serialize(msg.dev_id, bytes);
-	serialize(std::string_view{msg.param_id}, bytes);
+	serialize(std::string_view{msg.new_shmid}, bytes);
+}
+
+template <> inline
+auto serialize<scuff::msg::out::return_created_device>(const scuff::msg::out::return_created_device& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
+	serialize(std::string_view{msg.ports_shmid}, bytes);
+	serialize(std::string_view{msg.param_info_shmid}, bytes);
 	serialize(msg.callback, bytes);
 }
 
