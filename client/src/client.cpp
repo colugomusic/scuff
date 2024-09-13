@@ -16,27 +16,6 @@ auto publish(model m) -> void {
 	DATA_->published_model.set(std::move(m));
 }
 
-template <typename EventT> [[nodiscard]] static
-auto convert(const scuff_event_header& header) -> const EventT& {
-	return *reinterpret_cast<const EventT*>(&header);
-}
-
-[[nodiscard]] static
-auto convert(const scuff_event_header& header) -> scuff::event {
-	switch (header.type) {
-		case scuff_event_type_param_gesture_begin: { return convert<scuff_event_param_gesture_begin>(header); }
-		case scuff_event_type_param_gesture_end:   { return convert<scuff_event_param_gesture_end>(header); }
-		case scuff_event_type_param_value:         { return convert<scuff_event_param_value>(header); }
-	}
-	assert (false && "Invalid event header");
-	return {};
-}
-
-[[nodiscard]] static
-auto convert(const scuff::event& event) -> const scuff_event_header& {
-	return fast_visit([](const auto& event) -> const scuff_event_header& { return event.header; }, event);
-}
-
 [[nodiscard]] static
 auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id) -> std::vector<std::string> {
 	std::vector<std::string> args;
@@ -119,8 +98,20 @@ auto read_events(const scuff::device& dev, const scuff_event_reader& reader, siz
 	const auto event_count = buffer.size();
 	for (size_t j = 0; j < event_count; j++) {
 		const auto& event  = buffer[j];
-		const auto& header = convert(event);
-		reader.push(&reader, &header);
+		if (scuff::is_clap_event(event)) {
+			scuff_event_clap e;
+			e.header.type = scuff_event_type_clap;
+			e.event       = &scuff::clap::convert(event);
+			reader.push(&reader, &e.header);
+			continue;
+		}
+		if (scuff::is_vst_event(event)) {
+			scuff_event_vst e;
+			e.header.type = scuff_event_type_vst;
+			// ... Not implemented yet ...
+			reader.push(&reader, &e.header);
+			continue;
+		}
 	}
 	buffer.clear();
 }
@@ -579,27 +570,11 @@ auto param_find(scuff_device dev_id, scuff_param_id param_id) -> scuff_param {
 }
 
 static
-auto param_gesture_begin(scuff_device dev, scuff_param param) -> void {
+auto push_event(scuff_device dev, const scuff_event_header* event) -> void {
 	const auto m = scuff::DATA_->working_model.lock();
 	const auto& device = m->devices.at({dev});
 	const auto& sbox   = m->sandboxes.at(device.sbox);
-	sbox.external->enqueue(scuff::msg::in::event{dev, scuff_event_param_gesture_begin{/*TODO:*/}});
-}
-
-static
-auto param_gesture_end(scuff_device dev, scuff_param param) -> void {
-	const auto m = scuff::DATA_->working_model.lock();
-	const auto& device = m->devices.at({dev});
-	const auto& sbox   = m->sandboxes.at(device.sbox);
-	sbox.external->enqueue(scuff::msg::in::event{dev, scuff_event_param_gesture_end{/*TODO:*/}});
-}
-
-static
-auto param_set_value(scuff_device dev, scuff_param param, double value) -> void {
-	const auto m       = scuff::DATA_->working_model.lock();
-	const auto& device = m->devices.at({dev});
-	const auto& sbox   = m->sandboxes.at(device.sbox);
-	sbox.external->enqueue(scuff::msg::in::event{dev, scuff_event_param_value{/*TODO:*/}});
+	sbox.external->enqueue(scuff::msg::in::event{dev, convert(*event)});
 }
 
 static
@@ -866,18 +841,8 @@ auto scuff_param_find(scuff_device dev, scuff_param_id param_id) -> scuff_param 
 	catch (const std::exception& err) { scuff::report_error(err.what()); return SCUFF_INVALID_INDEX; }
 }
 
-auto scuff_param_gesture_begin(scuff_device dev, scuff_param param) -> void {
-	try                               { scuff::param_gesture_begin(dev, param); }
-	catch (const std::exception& err) { scuff::report_error(err.what()); }
-}
-
-auto scuff_param_gesture_end(scuff_device dev, scuff_param param) -> void {
-	try                               { scuff::param_gesture_end(dev, param); }
-	catch (const std::exception& err) { scuff::report_error(err.what()); }
-}
-
-auto scuff_param_set_value(scuff_device dev, scuff_param param, double value) -> void {
-	try                               { scuff::param_set_value(dev, param, value); }
+auto scuff_push_event(scuff_device dev, const scuff_event_header* event) -> void {
+	try                               { scuff::push_event(dev, event); }
 	catch (const std::exception& err) { scuff::report_error(err.what()); }
 }
 

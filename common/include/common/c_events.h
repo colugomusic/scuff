@@ -1,24 +1,22 @@
 #pragma once
 
+#include <clap/events.h>
+
 typedef enum scuff_event_type_t {
-	scuff_event_type_param_gesture_begin,
-	scuff_event_type_param_gesture_end,
-	scuff_event_type_param_value
+	scuff_event_type_clap,
+	scuff_event_type_vst,
 } scuff_event_type;
 
 typedef struct scuff_event_header_t {
 	scuff_event_type type;
 } scuff_event_header;
 
-typedef struct scuff_event_param_gesture_begin_t {
+typedef struct scuff_event_clap_t {
 	scuff_event_header header;
-} scuff_event_param_gesture_begin;
+	const clap_event_header_t* event;
+} scuff_event_clap;
 
-typedef struct scuff_event_param_gesture_end_t {
+typedef struct scuff_event_vst_t {
 	scuff_event_header header;
-} scuff_event_param_gesture_end;
-
-typedef struct scuff_event_param_value_t {
-	scuff_event_header header;
-	double value;
-} scuff_event_param_value;
+	// Not implemented
+} scuff_event_vst;

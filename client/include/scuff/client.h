@@ -221,15 +221,6 @@ bool            scuff_is_scanning(void);
 // - This will return SCUFF_INVALID_INDEX if the device hasn't finished being created yet.
 scuff_param     scuff_param_find(scuff_device dev, scuff_param_id param_id);
 
-// Begin a parameter gesture (CLAP)
-void            scuff_param_gesture_begin(scuff_device dev, scuff_param param);
-
-// End a parameter gesture (CLAP)
-void            scuff_param_gesture_end(scuff_device dev, scuff_param param);
-
-// Set a parameter value.
-void            scuff_param_set_value(scuff_device dev, scuff_param param, double value);
-
 // Get the current value of the parameter, asynchronously.
 // When the result is ready, call the given function with it.
 void            scuff_param_get_value(scuff_device dev, scuff_param param, scuff_return_double fn);
@@ -258,6 +249,9 @@ const char*     scuff_plugin_get_vendor(scuff_plugin plugin);
 
 // Returns the plugin version string.
 const char*     scuff_plugin_get_version(scuff_plugin plugin);
+
+// Push a device event
+void            scuff_push_event(scuff_device dev, const scuff_event_header* event);
 
 // Restart the sandbox.
 void            scuff_restart(scuff_sbox sbox, const char* sbox_exe_path);

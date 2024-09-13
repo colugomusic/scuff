@@ -15,7 +15,7 @@ static
 auto set_sample_rate(sbox::app* app, const sbox::device& dev, double sr) -> void {
 	if (dev.type == scuff_plugin_type::clap) {
 		if (!clap::set_sample_rate(*app, dev.id, sr)) {
-			app->msg_sender.enqueue(scuff::msg::out::report_error{std::format("Failed to set sample rate for device {}", dev.id)});
+			app->msg_sender.enqueue(scuff::msg::out::report_error{std::format("Failed to set sample rate for device {}", dev.id.value)});
 		}
 		return;
 	}
