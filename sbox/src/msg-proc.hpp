@@ -178,12 +178,19 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_set_render_
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::event& msg) -> void {
-	// TODO:
+	// TODO: push event onto device's event queue
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value& msg) -> void {
-	// TODO:
+	const auto dev_id = id::device{msg.dev_id};
+	const auto type = get_device_type(*app, dev_id);
+	if (type == scuff_plugin_type::clap) {
+		if (const auto value = clap::get_param_value(*app, dev_id, msg.param_idx)) {
+			app->msg_sender.enqueue(scuff::msg::out::return_param_value{*value, msg.callback});
+		}
+		return;
+	}
 }
 
 static
