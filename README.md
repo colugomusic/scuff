@@ -53,3 +53,8 @@ This is fine! Each sandbox process is simply reading from the front buffers of t
 ![scuff05](https://github.com/user-attachments/assets/9a9c716f-bea6-4023-95c0-97ce088747af)
 
 Here the DAW is reading device 1's output signal from the front buffer. The DAW can do this for any device (perhaps is wants to animate a signal level meter, or split the signal and send it somewhere else.) The data is all there in shared memory and the DAW is free to read it. The DAW is also routing a second input into device 3 (maybe it's something like a vocoder or sidechain compressor which takes in a second audio input). This just works the same as device 1's input at the start of the chain - the audio signal is written to the back buffer of that audio port in shared memory.
+
+### Scenario 6
+![scuff06](https://github.com/user-attachments/assets/5cc893fe-95e2-485b-b3f6-49d9bbf51adc)
+
+A feedback loop like this within a single sandbox is also fine. When the feedback loop is detected the output of the feedbacking device will simply be written to the back buffer of the target input instead of continuing the process chain immediately. If the feedback loop occurs across multiple sandboxes then it is resolved automatically by the double buffering system without us having to do anything more.
