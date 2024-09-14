@@ -27,7 +27,7 @@ A collection of sandboxes which can be processed as a group. Audio and event dat
 
 ## Basic concept
 
-Here are some basic example scenarios and I will try to describe how they will work in this system. The arrows represent audio signal flow and I am ignoring event data.
+Here are some basic example scenarios and I will try to describe how they will work in this system. The arrows represent audio signal flow and I am ignoring event data. Each of these illustrates a single sandbox group. Clients are free to create as many sandbox groups as they like.
 
 ### Scenario 1
 ![scuff01](https://github.com/user-attachments/assets/049b3659-bd3a-4e4f-9c97-8f42e7ebca41)
