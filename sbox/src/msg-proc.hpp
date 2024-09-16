@@ -39,18 +39,13 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors&
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
 	const auto m = app->working_model.lock();
-	sbox::device dev;
-	dev.id   = {msg.dev_id};
-	dev.type = msg.type;
 	if (msg.type == scuff_plugin_type::clap) {
-		sbox::clap::device clap_dev;
-		// TODO:
-		m->clap_devices = m->clap_devices.insert(clap_dev);
+		*m = clap::create_device(std::move(*m), app, {msg.dev_id}, msg.plugfile_path, msg.plugin_id, msg.callback);
 	}
 	else {
 		// Not implemented yet
+		throw std::runtime_error("Unsupported device type");
 	}
-	m->devices = m->devices.insert(dev);
 	app->published_model.set(*m);
 }
 

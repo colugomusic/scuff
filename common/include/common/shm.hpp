@@ -232,8 +232,8 @@ struct device_audio_ports : segment {
 		open();
 	}
 	[[nodiscard]] static
-	auto make_id(std::string_view instance_id, id::device dev_id, uint64_t uid) -> std::string {
-		return std::format("{}+dev+{}+ports+uid", instance_id, dev_id.value, uid);
+	auto make_id(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid) -> std::string {
+		return std::format("{}+sbox+{}+dev+{}+ports+uid", instance_id, sbox_id.value, dev_id.value, uid);
 	}
 private:
 	auto create(size_t input_port_count, size_t output_port_count) -> void {
@@ -264,8 +264,8 @@ struct device_param_info : segment {
 		open();
 	}
 	[[nodiscard]] static
-	auto make_id(std::string_view instance_id, id::device dev_id, uint64_t uid) -> std::string {
-		return std::format("{}+dev+{}+params+{}", instance_id, dev_id.value, uid);
+	auto make_id(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid) -> std::string {
+		return std::format("{}+sbox+{}+dev+{}+params+{}", instance_id, sbox_id.value, dev_id.value, uid);
 	}
 private:
 	auto create(size_t param_count) -> void {

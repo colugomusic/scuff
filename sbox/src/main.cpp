@@ -35,8 +35,9 @@ auto create() -> sbox::app* {
 		return app;
 	}
 	const auto shmid = shm::sandbox::make_id(app->options.instance_id, app->options.sbox_id);
-	app->shm = shm::sandbox{bip::open_only, shmid.c_str()};
-	app->audio_thread = std::jthread{audio_thread_proc, app};
+	app->shm            = shm::sandbox{bip::open_only, shmid.c_str()};
+	app->audio_thread   = std::jthread{audio_thread_proc, app};
+	app->main_thread_id = std::this_thread::get_id();
 	scuff::os::set_realtime_priority(&app->audio_thread);
 	return app;
 }

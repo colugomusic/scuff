@@ -26,17 +26,22 @@ using event = std::variant<
 namespace clap {
 
 [[nodiscard]] static
-auto convert(const scuff_event_clap& e) -> scuff::event {
-	if (e.event->type == CLAP_EVENT_MIDI_SYSEX) { return *reinterpret_cast<const clap_event_midi_sysex_t*>(e.event); }
-	if (e.event->type == CLAP_EVENT_MIDI) { return *reinterpret_cast<const clap_event_midi_t*>(e.event); }
-	if (e.event->type == CLAP_EVENT_MIDI2) { return *reinterpret_cast<const clap_event_midi2_t*>(e.event); }
-	if (e.event->type == CLAP_EVENT_NOTE_EXPRESSION) { return *reinterpret_cast<const clap_event_note_expression_t*>(e.event); }
-	if (e.event->type == CLAP_EVENT_PARAM_GESTURE_BEGIN) { return *reinterpret_cast<const clap_event_param_gesture_t*>(e.event); }
-	if (e.event->type == CLAP_EVENT_PARAM_GESTURE_END) { return *reinterpret_cast<const clap_event_param_gesture_t*>(e.event); }
-	if (e.event->type == CLAP_EVENT_PARAM_MOD) { return *reinterpret_cast<const clap_event_param_mod_t*>(e.event); }
-	if (e.event->type == CLAP_EVENT_PARAM_VALUE) { return *reinterpret_cast<const clap_event_param_value_t*>(e.event); }
-	if (e.event->type == CLAP_EVENT_TRANSPORT) { return *reinterpret_cast<const clap_event_transport_t*>(e.event); }
-	throw std::runtime_error("scuff::clap::convert(clap_event_header): Invalid event header");
+auto convert(const clap_event_header& e) -> std::optional<scuff::event> {
+	if (e.type == CLAP_EVENT_MIDI_SYSEX) { return *reinterpret_cast<const clap_event_midi_sysex_t*>(&e); }
+	if (e.type == CLAP_EVENT_MIDI) { return *reinterpret_cast<const clap_event_midi_t*>(&e); }
+	if (e.type == CLAP_EVENT_MIDI2) { return *reinterpret_cast<const clap_event_midi2_t*>(&e); }
+	if (e.type == CLAP_EVENT_NOTE_EXPRESSION) { return *reinterpret_cast<const clap_event_note_expression_t*>(&e); }
+	if (e.type == CLAP_EVENT_PARAM_GESTURE_BEGIN) { return *reinterpret_cast<const clap_event_param_gesture_t*>(&e); }
+	if (e.type == CLAP_EVENT_PARAM_GESTURE_END) { return *reinterpret_cast<const clap_event_param_gesture_t*>(&e); }
+	if (e.type == CLAP_EVENT_PARAM_MOD) { return *reinterpret_cast<const clap_event_param_mod_t*>(&e); }
+	if (e.type == CLAP_EVENT_PARAM_VALUE) { return *reinterpret_cast<const clap_event_param_value_t*>(&e); }
+	if (e.type == CLAP_EVENT_TRANSPORT) { return *reinterpret_cast<const clap_event_transport_t*>(&e); }
+	return std::nullopt;
+}
+
+[[nodiscard]] static
+auto convert(const scuff_event_clap& e) -> std::optional<scuff::event> {
+	return convert(*e.event);
 }
 
 [[nodiscard]] static
@@ -57,9 +62,9 @@ auto convert(const event& e) -> const clap_event_header& {
 namespace vst {
 
 [[nodiscard]] static
-auto convert(const scuff_event_vst& e) -> scuff::event {
+auto convert(const scuff_event_vst& e) -> std::optional<scuff::event> {
 	// Not implemented yet
-	return vst_dummy_event{};
+	return std::nullopt;
 }
 
 } // vst
@@ -75,13 +80,12 @@ auto is_vst_event(const scuff::event& e) -> bool {
 }
 
 [[nodiscard]] static
-auto convert(const scuff_event_header& header) -> scuff::event {
+auto convert(const scuff_event_header& header) -> std::optional<scuff::event> {
 	switch (header.type) {
 		case scuff_event_type_clap: { return clap::convert(*reinterpret_cast<const scuff_event_clap*>(&header)); }
 		case scuff_event_type_vst:  { return vst::convert(*reinterpret_cast<const scuff_event_vst*>(&header)); }
 	}
-	assert (false && "Invalid event header");
-	return {};
+	return std::nullopt;
 }
 
 } // scuff

@@ -57,7 +57,9 @@ auto write_events(const scuff::device& dev, const scuff_event_writer& writer, si
 	const auto event_count = std::min(writer.count(&writer), size_t(SCUFF_EVENT_PORT_SIZE));
 	for (size_t j = 0; j < event_count; j++) {
 		const auto header = writer.get(&writer, j);
-		buffer.push_back(convert(*header)); // TODO: remember to clear this in the sandbox process
+		if (const auto converted = convert(*header)) {
+			buffer.push_back(*converted); // TODO: remember to clear this in the sandbox process
+		}
 	}
 }
 
@@ -194,6 +196,16 @@ auto process_message_(id::sandbox sbox_id, const msg::out::device_param_info_cha
 static
 auto process_message_(id::sandbox sbox_id, const msg::out::report_error& msg) -> void {
 	DATA_->callbacks.on_sbox_error.fn(&DATA_->callbacks.on_sbox_error, sbox_id.value, msg.text.c_str());
+}
+
+static
+auto process_message_(id::sandbox sbox_id, const msg::out::report_info& msg) -> void {
+	DATA_->callbacks.on_sbox_info.fn(&DATA_->callbacks.on_sbox_info, sbox_id.value, msg.text.c_str());
+}
+
+static
+auto process_message_(id::sandbox sbox_id, const msg::out::report_warning& msg) -> void {
+	DATA_->callbacks.on_sbox_warning.fn(&DATA_->callbacks.on_sbox_warning, sbox_id.value, msg.text.c_str());
 }
 
 static
@@ -574,7 +586,9 @@ auto push_event(scuff_device dev, const scuff_event_header* event) -> void {
 	const auto m = scuff::DATA_->working_model.lock();
 	const auto& device = m->devices.at({dev});
 	const auto& sbox   = m->sandboxes.at(device.sbox);
-	sbox.external->enqueue(scuff::msg::in::event{dev, convert(*event)});
+	if (const auto converted = convert(*event)) {
+		sbox.external->enqueue(scuff::msg::in::event{dev, *converted});
+	}
 }
 
 static

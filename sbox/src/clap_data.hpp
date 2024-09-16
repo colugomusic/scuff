@@ -1,9 +1,16 @@
 #pragma once
 
+#include "common/events.hpp"
+#include <boost/container/static_vector.hpp>
 #include <clap/clap.h>
 #pragma warning(push, 0)
+#include <immer/box.hpp>
 #include <immer/vector.hpp>
 #pragma warning(pop)
+
+namespace bc = boost::container;
+
+namespace scuff::sbox { struct app; };
 
 namespace scuff::sbox::clap {
 
@@ -42,11 +49,95 @@ struct param {
 	clap_id id = 0;
 };
 
+struct device_host_data {
+	sbox::app* app;
+	id::device id;
+};
+
+struct device_atomic_flags {
+	enum e {
+		active               = 1 << 0,
+		processing           = 1 << 1,
+		schedule_active      = 1 << 2,
+		schedule_callback    = 1 << 3,
+		schedule_erase       = 1 << 4,
+		schedule_restart     = 1 << 5,
+		schedule_param_flush = 1 << 6,
+		schedule_process     = 1 << 7,
+	};
+	std::atomic<int> value = 0;
+};
+
+struct audio_port_info {
+	std::vector<clap_audio_port_info_t> inputs;
+	std::vector<clap_audio_port_info_t> outputs;
+};
+
+struct audio_buffers_detail {
+	std::vector<std::array<float, SCUFF_VECTOR_SIZE>> vectors;
+	std::vector<std::vector<float*>> arrays;
+	std::vector<clap_audio_buffer_t> buffers;
+};
+
+struct audio_buffers {
+	audio_buffers_detail inputs;
+	audio_buffers_detail outputs;
+};
+
+using event_buffer = bc::static_vector<scuff::event, 500>;
+
+struct device_ext_audio {
+	clap::audio_buffers buffers;
+	clap::audio_port_info port_info;
+	clap_input_events_t input_events;
+	clap_output_events_t output_events;
+	clap_process_t process;
+	event_buffer input_event_buffer;
+	event_buffer output_event_buffer;
+};
+
+struct device_ext_data {
+	device_atomic_flags atomic_flags;
+	device_host_data host_data;
+};
+
+struct device_ext {
+	std::shared_ptr<device_ext_data> data;
+	std::shared_ptr<const clap::device_ext_audio> audio;
+};
+
+namespace device_msg { ///////////////////////////////////////////
+
+// TODO: handle all these
+struct gui_closed { bool destroyed; };
+struct gui_request_hide {};
+struct gui_request_resize { uint32_t width; uint32_t height; };
+struct gui_request_show {};
+struct gui_resize_hints_changed {};
+struct log_begin{clap_log_severity severity;};
+struct log_end{};
+struct log_text{ static constexpr size_t MAX = 64; boost::static_string<MAX> text;};
+
+using msg = std::variant<
+	gui_closed,
+	gui_request_hide,
+	gui_request_resize,
+	gui_request_show,
+	gui_resize_hints_changed,
+	log_begin,
+	log_end,
+	log_text
+>;
+
+} // device_msg /////////////////////////////////////////////////
+
 struct device {
 	id::device id;
 	clap::iface_host iface_host;
 	clap::iface_plugin iface_plugin;
+	immer::box<std::string> name;
 	immer::vector<param> params;
+	device_ext ext;
 };
 
 } // scuff::sbox::clap
