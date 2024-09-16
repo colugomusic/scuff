@@ -65,11 +65,10 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 	try {
 		if (msg.type == scuff_plugin_type::clap) {
 			auto dev      = scuff::sbox::device{};
-			auto clap_dev = clap::device{};
-			clap::main::create_device(app, dev.id, msg.plugfile_path, msg.plugin_id, &clap_dev);
-			dev.id   = {msg.dev_id};
-			dev.type = msg.type;
-			dev.ext  = make_device_ext(app, dev.id);
+			auto clap_dev = clap::main::create_device(app, dev.id, msg.plugfile_path, msg.plugin_id);
+			dev.id        = {msg.dev_id};
+			dev.type      = msg.type;
+			dev.ext       = make_device_ext(app, dev.id);
 			const auto m    = app->working_model.lock();
 			m->devices      = m->devices.insert(dev);
 			m->clap_devices = m->clap_devices.insert(clap_dev);

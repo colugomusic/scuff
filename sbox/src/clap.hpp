@@ -137,7 +137,7 @@ auto initialize_process_struct_for_event_device(clap::device_ext_audio* audio) -
 }
 
 [[nodiscard]] static
-auto init_audio(device dev) -> std::shared_ptr<const device_ext_audio> {
+auto init_audio(const device& dev) -> std::shared_ptr<const device_ext_audio> {
 	auto out = device_ext_audio{};
 	if (dev.iface->plugin.audio_ports) {
 		// AUDIO PLUGIN
@@ -152,11 +152,17 @@ auto init_audio(device dev) -> std::shared_ptr<const device_ext_audio> {
 	return std::make_shared<const device_ext_audio>(std::move(out));
 }
 
+[[nodiscard]] static
+auto init_audio(device&& dev) -> device {
+	dev.ext.audio = init_audio(dev);
+	return dev;
+}
+
 static
 auto init_audio(sbox::app* app, id::device dev_id) -> void {
 	const auto m    = app->working_model.lock();
 	auto dev        = m->clap_devices.at(dev_id);
-	dev.ext.audio   = init_audio(dev);
+	dev             = init_audio(std::move(dev));
 	m->clap_devices = m->clap_devices.insert(dev);
 	app->published_model.set(*m);
 }
@@ -492,6 +498,54 @@ static auto clap_host_request_callback(const clap_host* host) -> void {/* TODO: 
 static auto clap_host_request_process(const clap_host* host) -> void {/* TODO: */ }
 static auto clap_host_request_restart(const clap_host* host) -> void {/* TODO: */ }
 
+template <typename T> [[nodiscard]] static
+auto get_plugin_ext(const clap::iface_plugin& iface, const char* id, const char* fallback_id = nullptr) -> const T* {
+	auto ptr = static_cast<const T*>(iface.plugin->get_extension(iface.plugin, id));
+	if (!ptr && fallback_id) {
+		ptr = static_cast<const T*>(iface.plugin->get_extension(iface.plugin, fallback_id));
+	}
+	return ptr;
+}
+
+static
+auto get_extensions(clap::iface_plugin* iface) -> void {
+	iface->audio_ports  = get_plugin_ext<clap_plugin_audio_ports_t>(*iface, CLAP_EXT_AUDIO_PORTS);
+	iface->context_menu = get_plugin_ext<clap_plugin_context_menu_t>(*iface, CLAP_EXT_CONTEXT_MENU, CLAP_EXT_CONTEXT_MENU_COMPAT);
+	iface->gui          = get_plugin_ext<clap_plugin_gui_t>(*iface, CLAP_EXT_GUI);
+	iface->params       = get_plugin_ext<clap_plugin_params_t>(*iface, CLAP_EXT_PARAMS);
+	iface->render       = get_plugin_ext<clap_plugin_render_t>(*iface, CLAP_EXT_RENDER);
+	iface->state        = get_plugin_ext<clap_plugin_state_t>(*iface, CLAP_EXT_STATE);
+	iface->tail         = get_plugin_ext<clap_plugin_tail_t>(*iface, CLAP_EXT_TAIL);
+}
+
+[[nodiscard]] static
+auto get_window_api() -> const char* {
+#if _WIN32
+	return CLAP_WINDOW_API_WIN32;
+#elif __APPLE__
+	return CLAP_WINDOW_API_COCOA;
+#else
+	return CLAP_WINDOW_API_X11;
+#endif
+}
+
+[[nodiscard]] static
+auto init_gui(clap::device&& dev) -> clap::device {
+	if (dev.iface->plugin.gui) {
+		if (dev.iface->plugin.gui->is_api_supported(dev.iface->plugin.plugin, get_window_api(), false)) {
+			dev.flags.value |= device_flags::has_gui;
+			return dev;
+		}
+	}
+	return dev;
+}
+
+[[nodiscard]] static
+auto init_params(clap::device&& dev) -> clap::device {
+	// TODO: init_params
+	return dev;
+}
+
 } // scuff::sbox::clap
 
 namespace scuff::sbox::clap::main {
@@ -506,12 +560,12 @@ auto make_ext_data(sbox::app* app, id::device id) -> std::shared_ptr<clap::devic
 
 [[nodiscard]] static
 auto get_param_info() -> immer::vector<param> {
-	// TODO:
+	// TODO: get_param_info
 	return {};
 }
 
-static
-auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id, clap::device* clap_dev) -> void {
+[[nodiscard]] static
+auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id) -> clap::device {
 	const auto entry = scuff::os::find_clap_entry(plugfile_path);
 	if (!entry) {
 		throw std::runtime_error("Couldn't resolve clap_entry");
@@ -524,28 +578,25 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 		entry->deinit();
 		throw std::runtime_error("clap_plugin_entry.get_factory failed");
 	}
-	const auto plugin_count = factory->get_plugin_count(factory);
-	clap_host host = {0};
-	host.clap_version     = CLAP_VERSION_INIT;
-	host.get_extension    = clap_host_get_extension;
-	host.name             = "scuff-sbox";
-	host.request_callback = clap_host_request_callback;
-	host.request_process  = clap_host_request_process;
-	host.request_restart  = clap_host_request_restart;
-	host.url              = "https://github.com/colugomusic/scuff";
-	host.vendor           = "Moron Enterprises";
-	host.version          = "0.0.0";
 	clap::iface iface;
-	iface.plugin.plugin = factory->create_plugin(factory, &host, plugin_id.data());
+	const auto ext_data = make_ext_data(app, dev_id);
+	iface.host          = make_host_for_instance(&ext_data->host_data);
+	iface.plugin.plugin = factory->create_plugin(factory, &iface.host.host, plugin_id.data());
 	if (!iface.plugin.plugin) {
 		entry->deinit();
 		throw std::runtime_error("clap_plugin_factory.create_plugin failed");
 	}
-	clap_dev->id        = dev_id;
-	clap_dev->iface     = std::move(iface);
-	clap_dev->params    = get_param_info();
-	clap_dev->ext.audio = init_audio(*clap_dev);
-	clap_dev->ext.data  = make_ext_data(app, dev_id);
+	get_extensions(&iface.plugin);
+	auto dev = clap::device{};
+	dev.id        = dev_id;
+	dev.iface     = std::move(iface);
+	dev.name      = dev.iface->plugin.plugin->desc->name;
+	dev.params    = get_param_info();
+	dev.ext.data  = std::move(ext_data);
+	dev = init_gui(std::move(dev));
+	dev = init_audio(std::move(dev));
+	dev = init_params(std::move(dev));
+	return dev;
 }
 
 [[nodiscard]] static
