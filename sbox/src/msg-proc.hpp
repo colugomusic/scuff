@@ -4,7 +4,7 @@
 #include <format>
 #include <immer/vector_transient.hpp>
 
-namespace scuff::sbox {
+namespace scuff::sbox::main {
 
 [[nodiscard]] static
 auto get_device_type(const sbox::app& app, id::device dev_id) -> scuff_plugin_type {
@@ -14,7 +14,7 @@ auto get_device_type(const sbox::app& app, id::device dev_id) -> scuff_plugin_ty
 static
 auto set_sample_rate(sbox::app* app, const sbox::device& dev, double sr) -> void {
 	if (dev.type == scuff_plugin_type::clap) {
-		if (!clap::set_sample_rate(*app, dev.id, sr)) {
+		if (!clap::main::set_sample_rate(*app, dev.id, sr)) {
 			app->msg_sender.enqueue(scuff::msg::out::report_error{std::format("Failed to set sample rate for device {}", dev.id.value)});
 		}
 		return;
@@ -23,7 +23,7 @@ auto set_sample_rate(sbox::app* app, const sbox::device& dev, double sr) -> void
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::clean_shutdown& msg) -> void {
-	// TODO:
+	// TODO: msg::in::clean_shutdown
 }
 
 static
@@ -36,17 +36,55 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors&
 	}
 }
 
+[[nodiscard]] static
+auto make_shm_device(std::string_view instance_id, id::device dev_id) -> std::shared_ptr<shm::device> {
+	return std::make_shared<shm::device>(bip::open_only, shm::segment::remove_when_done, shm::device::make_id(instance_id, dev_id));
+}
+
+[[nodiscard]] static
+auto make_shm_audio_ports(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid) -> std::shared_ptr<shm::device_audio_ports> {
+	return std::make_shared<shm::device_audio_ports>(bip::open_only, shm::segment::remove_when_done, shm::device_audio_ports::make_id(instance_id, sbox_id, dev_id, uid));
+}
+
+[[nodiscard]] static
+auto make_shm_param_info(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid) -> std::shared_ptr<shm::device_param_info> {
+	return std::make_shared<shm::device_param_info>(bip::open_only, shm::segment::remove_when_done, shm::device_param_info::make_id(instance_id, sbox_id, dev_id, uid));
+}
+
+[[nodiscard]] static
+auto make_device_ext(sbox::app* app, id::device dev_id) -> device_external {
+	device_external ext;
+	ext.shm_device      = make_shm_device(app->instance_id, dev_id);
+	ext.shm_audio_ports = make_shm_audio_ports(app->instance_id, app->options.sbox_id, dev_id, app->uid++);
+	ext.shm_param_info  = make_shm_param_info(app->instance_id, app->options.sbox_id, dev_id, app->uid++);
+	return ext;
+}
+
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
-	const auto m = app->working_model.lock();
-	if (msg.type == scuff_plugin_type::clap) {
-		*m = clap::create_device(std::move(*m), app, {msg.dev_id}, msg.plugfile_path, msg.plugin_id, msg.callback);
+	try {
+		if (msg.type == scuff_plugin_type::clap) {
+			auto dev      = scuff::sbox::device{};
+			auto clap_dev = clap::device{};
+			clap::main::create_device(app, dev.id, msg.plugfile_path, msg.plugin_id, &clap_dev);
+			dev.id   = {msg.dev_id};
+			dev.type = msg.type;
+			dev.ext  = make_device_ext(app, dev.id);
+			const auto m    = app->working_model.lock();
+			m->devices      = m->devices.insert(dev);
+			m->clap_devices = m->clap_devices.insert(clap_dev);
+			app->published_model.set(*m);
+			app->msg_sender.enqueue(scuff::msg::out::return_created_device{dev.id.value, dev.ext->shm_audio_ports->id().data(), dev.ext->shm_param_info->id().data(), msg.callback});
+			return;
+		}
+		else {
+			// Not implemented yet
+			throw std::runtime_error("Unsupported device type");
+		}
 	}
-	else {
-		// Not implemented yet
-		throw std::runtime_error("Unsupported device type");
+	catch (const std::exception& err) {
+		throw std::runtime_error(std::format("Failed to create device: {}", err.what()));
 	}
-	app->published_model.set(*m);
 }
 
 static
@@ -144,7 +182,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_load& msg) 
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == scuff_plugin_type::clap) {
-		if (!clap::load(app, dev_id, msg.state)) {
+		if (!clap::main::load(app, dev_id, msg.state)) {
 			app->msg_sender.enqueue(scuff::msg::out::report_error{"Failed to load device state"});
 		}
 		return;
@@ -156,7 +194,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_save& msg) 
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == scuff_plugin_type::clap) {
-		const auto state = clap::save(app, dev_id);
+		const auto state = clap::main::save(app, dev_id);
 		if (state.empty()) {
 			app->msg_sender.enqueue(scuff::msg::out::report_error{"Failed to save device state"});
 			return;
@@ -168,7 +206,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_save& msg) 
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_set_render_mode& msg) -> void {
-	// TODO:
+	// TODO: msg::in::device_set_render_mode
 }
 
 static
@@ -181,7 +219,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value& m
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == scuff_plugin_type::clap) {
-		if (const auto value = clap::get_param_value(*app, dev_id, msg.param_idx)) {
+		if (const auto value = clap::main::get_param_value(*app, dev_id, msg.param_idx)) {
 			app->msg_sender.enqueue(scuff::msg::out::return_param_value{*value, msg.callback});
 		}
 		return;
@@ -193,7 +231,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value_te
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == scuff_plugin_type::clap) {
-		const auto text = clap::get_param_value_text(*app, dev_id, msg.param_idx, msg.value);
+		const auto text = clap::main::get_param_value_text(*app, dev_id, msg.param_idx, msg.value);
 		app->msg_sender.enqueue(scuff::msg::out::return_param_value_text{text, msg.callback});
 		return;
 	}
@@ -232,4 +270,4 @@ auto process_messages(sbox::app* app) -> void {
 	}
 }
 
-} // scuff::sbox
+} // scuff::sbox::main

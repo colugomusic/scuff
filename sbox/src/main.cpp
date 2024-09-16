@@ -12,7 +12,7 @@ namespace scuff::sbox {
 
 static
 auto audio_thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
-	// TODO:
+	// TODO: sbox audio thread
 }
 
 [[nodiscard]] static
@@ -53,7 +53,8 @@ auto destroy(sbox::app** app) -> void {
 
 static
 auto update(sbox::app* app, const real64_t prtime, const real64_t ctime) -> void {
-	process_messages(app);
+	main::process_messages(app);
+	clap::main::update(app);
 }
 
 } // scuff::sbox

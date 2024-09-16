@@ -3,6 +3,7 @@
 #include "common/events.hpp"
 #include <boost/container/static_vector.hpp>
 #include <clap/clap.h>
+#include <readerwriterqueue.h>
 #pragma warning(push, 0)
 #include <immer/box.hpp>
 #include <immer/vector.hpp>
@@ -86,29 +87,8 @@ struct audio_buffers {
 
 using event_buffer = bc::static_vector<scuff::event, 500>;
 
-struct device_ext_audio {
-	clap::audio_buffers buffers;
-	clap::audio_port_info port_info;
-	clap_input_events_t input_events;
-	clap_output_events_t output_events;
-	clap_process_t process;
-	event_buffer input_event_buffer;
-	event_buffer output_event_buffer;
-};
-
-struct device_ext_data {
-	device_atomic_flags atomic_flags;
-	device_host_data host_data;
-};
-
-struct device_ext {
-	std::shared_ptr<device_ext_data> data;
-	std::shared_ptr<const clap::device_ext_audio> audio;
-};
-
 namespace device_msg { ///////////////////////////////////////////
 
-// TODO: handle all these
 struct gui_closed { bool destroyed; };
 struct gui_request_hide {};
 struct gui_request_resize { uint32_t width; uint32_t height; };
@@ -129,12 +109,45 @@ using msg = std::variant<
 	log_text
 >;
 
+using q = moodycamel::ReaderWriterQueue<msg>;
+
 } // device_msg /////////////////////////////////////////////////
+
+struct device_ext_audio {
+	clap::audio_buffers buffers;
+	clap::audio_port_info port_info;
+	clap_input_events_t input_events;
+	clap_output_events_t output_events;
+	clap_process_t process;
+	event_buffer input_event_buffer;
+	event_buffer output_event_buffer;
+};
+
+struct device_log_collector {
+	std::optional<clap_log_severity> severity;
+	std::vector<boost::static_string<device_msg::log_text::MAX>> chunks;
+};
+
+struct device_ext_data {
+	device_atomic_flags atomic_flags;
+	device_host_data host_data;
+	device_msg::q msg_q;
+	device_log_collector log_collector;
+};
+
+struct device_ext {
+	std::shared_ptr<device_ext_data> data;
+	std::shared_ptr<const clap::device_ext_audio> audio;
+};
+
+struct iface {
+	clap::iface_host host;
+	clap::iface_plugin plugin;
+};
 
 struct device {
 	id::device id;
-	clap::iface_host iface_host;
-	clap::iface_plugin iface_plugin;
+	immer::box<clap::iface> iface;
 	immer::box<std::string> name;
 	immer::vector<param> params;
 	device_ext ext;
