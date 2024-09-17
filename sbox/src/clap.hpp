@@ -4,6 +4,7 @@
 #include "common/shm.hpp"
 #include "common/visit.hpp"
 #include <optional>
+#include <ranges>
 
 namespace scuff::sbox::clap {
 
@@ -160,11 +161,11 @@ auto init_audio(device&& dev) -> device {
 
 static
 auto init_audio(sbox::app* app, id::device dev_id) -> void {
-	const auto m    = app->working_model.lock();
+	const auto m    = app->model.lock_write();
 	auto dev        = m->clap_devices.at(dev_id);
 	dev             = init_audio(std::move(dev));
 	m->clap_devices = m->clap_devices.insert(dev);
-	app->published_model.set(*m);
+	app->model.lock_publish();
 }
 
 static
@@ -175,7 +176,7 @@ auto rescan_audio_ports(sbox::app* app, id::device dev_id, uint32_t flags) -> vo
 		is_flag_set(flags, CLAP_AUDIO_PORTS_RESCAN_PORT_TYPE) ||
 		is_flag_set(flags, CLAP_AUDIO_PORTS_RESCAN_IN_PLACE_PAIR) ||
 		is_flag_set(flags, CLAP_AUDIO_PORTS_RESCAN_LIST);
-	const auto m   = *app->working_model.lock();
+	const auto m   = app->model.lock_read();
 	const auto dev = m.clap_devices.at(dev_id);
 	if (requires_not_active) {
 		if (is_active(dev)) {
@@ -258,7 +259,7 @@ auto process_msg(sbox::app* app, const device& dev, const clap::device_msg::msg&
 
 static
 auto update(sbox::app* app) -> void {
-	const auto m = *app->working_model.lock();
+	const auto m = app->model.lock_read();
 	for (const auto& dev : m.clap_devices) {
 		clap::device_msg::msg msg;
 		while (dev.ext.data->msg_q.try_dequeue(msg)) {
@@ -271,7 +272,7 @@ auto update(sbox::app* app) -> void {
 
 static
 auto send_msg(sbox::app* app, id::device dev_id, const clap::device_msg::msg& msg) -> void {
-	const auto m = app->published_model.read();
+	const auto m = app->model.lockfree_read();
 	if (const auto dev = m->clap_devices.find(dev_id)) {
 		dev->ext.data->msg_q.emplace(std::move(msg));
 	}
@@ -292,7 +293,7 @@ auto log(sbox::app* app, id::device dev_id, clap_log_severity severity, const ch
 
 [[nodiscard]] static
 auto get_extension(sbox::app* app, id::device dev_id, const char* extension_id) -> const void* {
-	const auto m   = *app->working_model.lock();
+	const auto m   = app->model.lock_read();
 	const auto dev = m.clap_devices.at(dev_id);
 	if (extension_id == std::string_view{CLAP_EXT_AUDIO_PORTS})         { return &dev.iface->host.audio_ports; }
 	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU})        { return nullptr; } // Not implemented yet &iface.context_menu; }
@@ -323,25 +324,25 @@ auto get_host_data(const clap_host_t* host) -> device_host_data& {
 
 static
 auto cb_request_param_flush(sbox::app* app, id::device dev_id) -> void {
-	const auto ext = app->working_model.lock()->clap_devices.at(dev_id).ext;
+	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
 	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_param_flush, std::memory_order_relaxed);
 }
 
 static
 auto cb_request_process(sbox::app* app, id::device dev_id) -> void {
-	const auto ext = app->working_model.lock()->clap_devices.at(dev_id).ext;
+	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
 	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_active | device_atomic_flags::schedule_process);
 }
 
 static
 auto cb_request_restart(sbox::app* app, id::device dev_id) -> void {
-	const auto ext = app->working_model.lock()->clap_devices.at(dev_id).ext;
+	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
 	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_restart);
 }
 
 static
 auto cb_request_callback(sbox::app* app, id::device dev_id) -> void {
-	const auto ext = app->working_model.lock()->clap_devices.at(dev_id).ext;
+	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
 	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_callback);
 }
 
@@ -493,11 +494,6 @@ auto make_host_for_instance(device_host_data* host_data) -> iface_host {
 	return iface;
 }
 
-static auto clap_host_get_extension(const clap_host* host, const char* id) -> const void* { /* TODO: */ return nullptr; }
-static auto clap_host_request_callback(const clap_host* host) -> void {/* TODO: */ }
-static auto clap_host_request_process(const clap_host* host) -> void {/* TODO: */ }
-static auto clap_host_request_restart(const clap_host* host) -> void {/* TODO: */ }
-
 template <typename T> [[nodiscard]] static
 auto get_plugin_ext(const clap::iface_plugin& iface, const char* id, const char* fallback_id = nullptr) -> const T* {
 	auto ptr = static_cast<const T*>(iface.plugin->get_extension(iface.plugin, id));
@@ -531,8 +527,9 @@ auto get_window_api() -> const char* {
 
 [[nodiscard]] static
 auto init_gui(clap::device&& dev) -> clap::device {
-	if (dev.iface->plugin.gui) {
-		if (dev.iface->plugin.gui->is_api_supported(dev.iface->plugin.plugin, get_window_api(), false)) {
+	const auto& iface = dev.iface->plugin;
+	if (iface.gui) {
+		if (iface.gui->is_api_supported(iface.plugin, get_window_api(), false)) {
 			dev.flags.value |= device_flags::has_gui;
 			return dev;
 		}
@@ -542,7 +539,19 @@ auto init_gui(clap::device&& dev) -> clap::device {
 
 [[nodiscard]] static
 auto init_params(clap::device&& dev) -> clap::device {
-	// TODO: init_params
+	const auto& iface = dev.iface->plugin;
+	if (iface.params) {
+		const auto count = iface.params->count(iface.plugin);
+		for (const auto i : std::ranges::views::iota(0u, count)) {
+			clap_param_info_t info;
+			if (iface.params->get_info(iface.plugin, i, &info)) {
+				clap::param p;
+				p.info = info;
+				dev.params = dev.params.push_back(p);
+			}
+		}
+		dev.flags.value |= device_flags::has_params;
+	}
 	return dev;
 }
 
@@ -556,12 +565,6 @@ auto make_ext_data(sbox::app* app, id::device id) -> std::shared_ptr<clap::devic
 	data->host_data.app = app;
 	data->host_data.id  = id;
 	return data;
-}
-
-[[nodiscard]] static
-auto get_param_info() -> immer::vector<param> {
-	// TODO: get_param_info
-	return {};
 }
 
 [[nodiscard]] static
@@ -588,11 +591,10 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	}
 	get_extensions(&iface.plugin);
 	auto dev = clap::device{};
-	dev.id        = dev_id;
-	dev.iface     = std::move(iface);
-	dev.name      = dev.iface->plugin.plugin->desc->name;
-	dev.params    = get_param_info();
-	dev.ext.data  = std::move(ext_data);
+	dev.id       = dev_id;
+	dev.iface    = std::move(iface);
+	dev.name     = dev.iface->plugin.plugin->desc->name;
+	dev.ext.data = std::move(ext_data);
 	dev = init_gui(std::move(dev));
 	dev = init_audio(std::move(dev));
 	dev = init_params(std::move(dev));
@@ -601,11 +603,11 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 
 [[nodiscard]] static
 auto get_param_value(const sbox::app& app, id::device dev_id, scuff_param param_idx) -> std::optional<double> {
-	const auto dev = app.working_model.lock()->clap_devices.at(dev_id);
+	const auto dev = app.model.lock_read().clap_devices.at(dev_id);
 	if (dev.iface->plugin.params) {
 		const auto param = dev.params[param_idx];
 		double value;
-		if (dev.iface->plugin.params->get_value(dev.iface->plugin.plugin, param.id, &value)) {
+		if (dev.iface->plugin.params->get_value(dev.iface->plugin.plugin, param.info.id, &value)) {
 			return value;
 		}
 	}
@@ -615,11 +617,11 @@ auto get_param_value(const sbox::app& app, id::device dev_id, scuff_param param_
 [[nodiscard]] static
 auto get_param_value_text(const sbox::app& app, id::device dev_id, scuff_param param_idx, double value) -> std::string {
 	static constexpr auto BUFFER_SIZE = 50;
-	const auto dev = app.working_model.lock()->clap_devices.at(dev_id);
+	const auto dev = app.model.lock_read().clap_devices.at(dev_id);
 	if (dev.iface->plugin.params) {
 		const auto param = dev.params[param_idx];
 		char buffer[BUFFER_SIZE];
-		if (!dev.iface->plugin.params->value_to_text(dev.iface->plugin.plugin, param.id, value, buffer, BUFFER_SIZE)) {
+		if (!dev.iface->plugin.params->value_to_text(dev.iface->plugin.plugin, param.info.id, value, buffer, BUFFER_SIZE)) {
 			return std::to_string(value);
 		}
 		return buffer;
@@ -629,7 +631,7 @@ auto get_param_value_text(const sbox::app& app, id::device dev_id, scuff_param p
 
 [[nodiscard]] static
 auto load(sbox::app* app, id::device dev_id, const std::vector<std::byte>& state) -> bool {
-	const auto dev = app->working_model.lock()->clap_devices.at(dev_id);
+	const auto dev = app->model.lock_read().clap_devices.at(dev_id);
 	if (dev.iface->plugin.state) {
 		auto bytes = std::span{state};
 		clap_istream_t is;
@@ -648,8 +650,44 @@ auto load(sbox::app* app, id::device dev_id, const std::vector<std::byte>& state
 }
 
 [[nodiscard]] static
+auto make_shm_device(std::string_view instance_id, id::device dev_id) -> std::shared_ptr<shm::device> {
+	return std::make_shared<shm::device>(bip::create_only, shm::device::make_id(instance_id, dev_id));
+}
+
+[[nodiscard]] static
+auto make_shm_audio_ports(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid, size_t input_count, size_t output_count) -> std::shared_ptr<shm::device_audio_ports> {
+	return std::make_shared<shm::device_audio_ports>(bip::create_only, shm::device_audio_ports::make_id(instance_id, sbox_id, dev_id, uid), input_count, output_count);
+}
+
+[[nodiscard]] static
+auto make_shm_param_info(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid, size_t param_count) -> std::shared_ptr<shm::device_param_info> {
+	return std::make_shared<shm::device_param_info>(bip::create_only, shm::device_param_info::make_id(instance_id, sbox_id, dev_id, uid), param_count);
+}
+
+[[nodiscard]] static
+auto make_device_ext(sbox::app* app, const clap::device& dev) -> device_external {
+	device_external ext;
+	ext.shm_device      = make_shm_device(app->instance_id, dev.id);
+	ext.shm_audio_ports = make_shm_audio_ports(app->instance_id, app->options.sbox_id, dev.id, app->uid++, dev.ext.audio->port_info.inputs.size(), dev.ext.audio->port_info.outputs.size());
+	ext.shm_param_info  = make_shm_param_info(app->instance_id, app->options.sbox_id, dev.id, app->uid++, dev.params.size());
+	for (size_t i = 0; i < dev.params.size(); i++) {
+		const auto& param = dev.params[i];
+		shm::param_info info;
+		info.id            = std::format("clap/{}", param.info.id);
+		info.default_value = param.info.default_value;
+		info.max_value     = param.info.max_value;
+		info.min_value     = param.info.min_value;
+		info.name          = param.info.name;
+		info.clap.id       = param.info.id;
+		info.clap.cookie   = param.info.cookie;
+		ext.shm_param_info->arr[i] = std::move(info);
+	}
+	return ext;
+}
+
+[[nodiscard]] static
 auto save(sbox::app* app, id::device dev_id) -> std::vector<std::byte> {
-	const auto dev = app->working_model.lock()->clap_devices.at(dev_id);
+	const auto dev = app->model.lock_read().clap_devices.at(dev_id);
 	if (dev.iface->plugin.state) {
 		std::vector<std::byte> bytes;
 		clap_ostream_t os;
@@ -670,7 +708,7 @@ auto save(sbox::app* app, id::device dev_id) -> std::vector<std::byte> {
 
 [[nodiscard]] static
 auto set_sample_rate(const sbox::app& app, id::device dev_id, double sr) -> bool {
-	const auto m   = *app.working_model.lock();
+	const auto m   = app.model.lock_read();
 	const auto dev = m.clap_devices.at(dev_id);
 	dev.iface->plugin.plugin->deactivate(dev.iface->plugin.plugin);
 	return dev.iface->plugin.plugin->activate(dev.iface->plugin.plugin, sr, SCUFF_VECTOR_SIZE, SCUFF_VECTOR_SIZE);

@@ -66,14 +66,7 @@ struct app {
 	msg::receiver<msg::in::msg> msg_receiver;
 	std::atomic<uint64_t>       uid = 0;
 	std::thread::id             main_thread_id;
-
-	// Copy of the model shared by non-audio threads. If a thread modifies
-	// the model in a way that affects the audio thread then it should
-	// cublish the changes.
-	lg::plain_guarded<model>    working_model;
-
-	// Copy of the model seen by the audio thread.
-	audio_data<model>           published_model;
+	audio_sync<model>           model;
 };
 
 } // scuff::sbox

@@ -47,7 +47,17 @@ struct plugin {
 };
 
 struct param {
-	clap_id id = 0;
+	struct flags_t {
+		enum e {
+			input_gesture  = 1 << 0,
+			output_gesture = 1 << 1,
+		};
+		int value = 0;
+	};
+	double gesture_in_start_value  = 0.0;
+	double gesture_out_start_value = 0.0;
+	clap_param_info_t info;
+	flags_t flags;
 };
 
 struct device_host_data {

@@ -225,6 +225,11 @@ bool            scuff_is_scanning(void);
 // - This will return SCUFF_INVALID_INDEX if the device hasn't finished being created yet.
 scuff_param     scuff_param_find(scuff_device dev, scuff_param_id param_id);
 
+// Return the id string of the parameter.
+// - This can be used for saving/loading project state, for example.
+// - Returns an empty string on error.
+scuff_param_id  scuff_param_get_id(scuff_device dev, scuff_param param);
+
 // Get the current value of the parameter, asynchronously.
 // When the result is ready, call the given function with it.
 void            scuff_param_get_value(scuff_device dev, scuff_param param, scuff_return_double fn);

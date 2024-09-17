@@ -8,7 +8,7 @@ namespace scuff::sbox::main {
 
 [[nodiscard]] static
 auto get_device_type(const sbox::app& app, id::device dev_id) -> scuff_plugin_type {
-	return app.working_model.lock()->devices.at(dev_id).type;
+	return app.model.lock_read().devices.at(dev_id).type;
 }
 
 static
@@ -28,36 +28,12 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::clean_shutdown& ms
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors& msg) -> void {
-	const auto devices = app->working_model.lock()->devices;
+	const auto devices = app->model.lock_read().devices;
 	for (const auto& dev : devices) {
 		if (dev.ui.window) {
 			window_hide(dev.ui.window);
 		}
 	}
-}
-
-[[nodiscard]] static
-auto make_shm_device(std::string_view instance_id, id::device dev_id) -> std::shared_ptr<shm::device> {
-	return std::make_shared<shm::device>(bip::open_only, shm::segment::remove_when_done, shm::device::make_id(instance_id, dev_id));
-}
-
-[[nodiscard]] static
-auto make_shm_audio_ports(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid) -> std::shared_ptr<shm::device_audio_ports> {
-	return std::make_shared<shm::device_audio_ports>(bip::open_only, shm::segment::remove_when_done, shm::device_audio_ports::make_id(instance_id, sbox_id, dev_id, uid));
-}
-
-[[nodiscard]] static
-auto make_shm_param_info(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid) -> std::shared_ptr<shm::device_param_info> {
-	return std::make_shared<shm::device_param_info>(bip::open_only, shm::segment::remove_when_done, shm::device_param_info::make_id(instance_id, sbox_id, dev_id, uid));
-}
-
-[[nodiscard]] static
-auto make_device_ext(sbox::app* app, id::device dev_id) -> device_external {
-	device_external ext;
-	ext.shm_device      = make_shm_device(app->instance_id, dev_id);
-	ext.shm_audio_ports = make_shm_audio_ports(app->instance_id, app->options.sbox_id, dev_id, app->uid++);
-	ext.shm_param_info  = make_shm_param_info(app->instance_id, app->options.sbox_id, dev_id, app->uid++);
-	return ext;
 }
 
 static
@@ -68,11 +44,11 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 			auto clap_dev = clap::main::create_device(app, dev.id, msg.plugfile_path, msg.plugin_id);
 			dev.id        = {msg.dev_id};
 			dev.type      = msg.type;
-			dev.ext       = make_device_ext(app, dev.id);
-			const auto m    = app->working_model.lock();
+			dev.ext       = clap::main::make_device_ext(app, clap_dev);
+			const auto m    = app->model.lock_write();
 			m->devices      = m->devices.insert(dev);
 			m->clap_devices = m->clap_devices.insert(clap_dev);
-			app->published_model.set(*m);
+			app->model.lock_publish();
 			app->msg_sender.enqueue(scuff::msg::out::return_created_device{dev.id.value, dev.ext->shm_audio_ports->id().data(), dev.ext->shm_param_info->id().data(), msg.callback});
 			return;
 		}
@@ -88,7 +64,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& msg) -> void {
-	const auto m       = app->working_model.lock();
+	const auto m       = app->model.lock_write();
 	const auto in_dev  = m->devices.find({msg.in_dev_id});
 	const auto out_dev = m->devices.find({msg.out_dev_id});
 	if (in_dev) {
@@ -115,12 +91,12 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& ms
 		dev.output_conns = conns.persistent();
 		m->devices = m->devices.insert(dev);
 	}
-	app->published_model.set(*m);
+	app->model.lock_publish();
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect& msg) -> void {
-	const auto m       = app->working_model.lock();
+	const auto m       = app->model.lock_write();
 	const auto in_dev  = m->devices.find({msg.in_dev_id});
 	const auto out_dev = m->devices.find({msg.out_dev_id});
 	if (in_dev) {
@@ -133,12 +109,12 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect&
 		dev.output_conns = dev.output_conns.set(msg.out_port, {});
 		m->devices = m->devices.insert(dev);
 	}
-	app->published_model.set(*m);
+	app->model.lock_publish();
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg) -> void {
-	const auto m = app->working_model.lock();
+	const auto m = app->model.lock_write();
 	const auto dev_id = id::device{msg.dev_id};
 	const auto devices = m->devices;
 	// Remove any internal connections to this device
@@ -159,19 +135,19 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg)
 	}
 	m->devices      = m->devices.erase({msg.dev_id});
 	m->clap_devices = m->clap_devices.erase({msg.dev_id});
-	app->published_model.set(*m);
+	app->model.lock_publish();
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_hide& msg) -> void {
-	const auto devices = app->working_model.lock()->devices;
+	const auto devices = app->model.lock_read().devices;
 	const auto device  = devices.at({msg.dev_id});
 	window_hide(device.ui.window);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& msg) -> void {
-	const auto devices = app->working_model.lock()->devices;
+	const auto devices = app->model.lock_read().devices;
 	const auto device  = devices.at({msg.dev_id});
 	window_show(device.ui.window);
 }
@@ -238,7 +214,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value_te
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::set_sample_rate& msg) -> void {
-	const auto m = *app->working_model.lock();
+	const auto m = app->model.lock_read();
 	for (const auto& dev : m.devices) {
 		set_sample_rate(app, dev, msg.sr);
 	}
