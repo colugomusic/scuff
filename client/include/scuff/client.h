@@ -17,7 +17,7 @@ enum {
 typedef struct scuff_audio_writer_t {
 	void* ctx;
 	size_t port_index;
-	void (*fn)(const struct scuff_audio_writer_t*, float* floats);
+	void (*fn)(const struct scuff_audio_writer_t*, const float* floats);
 } scuff_audio_writer;
 
 typedef struct scuff_audio_reader_t {
