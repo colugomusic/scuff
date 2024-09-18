@@ -10,5 +10,5 @@
 #define SCUFF_PARAM_ID_MAX      64
 #define SCUFF_PARAM_NAME_MAX    64
 #define SCUFF_POLL_SLEEP_MS     10
-#define SCUFF_VECTOR_SIZE       64       // Hard-coded for now just to make things easier.
+#define SCUFF_VECTOR_SIZE       256      // Hard-coded for now just to make things easier.
 #define SCUFF_VST3_EXT          ".vst3"
