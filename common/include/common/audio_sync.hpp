@@ -9,8 +9,8 @@ namespace lg = libguarded;
 // Wrapper around lr_guarded for basic publishing of audio data.
 // Shared pointers to old versions of the data are kept in a list
 // to ensure that they are not deleted by the audio thread.
-// Every time the writer modifies the data, a garbage collection
-// is run to delete old versions.
+// garbage_collect() should be called periodically to delete old
+// versions.
 template <typename T>
 struct audio_data {
 	template <typename UpdateFn>
