@@ -13,6 +13,8 @@ namespace scuff::sbox::audio {
 static
 auto copy_data_to_connected_inputs(const sbox::model& m, const sbox::device& dev) -> void {
 	for (const auto& conn : dev.input_conns) {
+		if (conn.outside) {
+		}
 		// TODO:
 	}
 }

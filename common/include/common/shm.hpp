@@ -115,7 +115,9 @@ struct device_data {
 	event_buffer events_in;
 	event_buffer events_out;
 	bc::static_vector<param_info, SCUFF_MAX_PARAMS> param_info;
-	bip::interprocess_mutex mutex;
+	bc::static_vector<audio_buffer, SCUFF_MAX_AUDIO_PORTS> audio_in;
+	bc::static_vector<audio_buffer, SCUFF_MAX_AUDIO_PORTS> audio_out;
+	bip::interprocess_mutex param_info_mutex; // Lock this when rescanning parameters
 };
 
 struct sandbox_data {
@@ -200,7 +202,7 @@ struct device : segment {
 	static constexpr auto SEGMENT_SIZE = sizeof(device_data) + SEGMENT_OVERHEAD;
 	device_data* data = nullptr;
 	device(bip::create_only_t, std::string_view id) : segment{id, SEGMENT_SIZE} { create(); }
-	device(bip::open_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id} { open(); }
+	device(bip::open_only_t, std::string_view id) : segment{id} { open(); }
 	[[nodiscard]] static
 	auto make_id(std::string_view instance_id, id::device dev_id) -> std::string {
 		return std::format("{}+dev+{}", instance_id, dev_id.value);
@@ -214,6 +216,8 @@ private:
 	}
 };
 
+/* For a less memory usage, could do something like this.
+ * Not doing this at the moment because it complicates things a lot.
 struct device_audio_ports : segment {
 	size_t input_count  = 0;
 	size_t output_count = 0;
@@ -226,7 +230,7 @@ struct device_audio_ports : segment {
 		create(input_port_count, output_port_count);
 	}
 	device_audio_ports(bip::open_only_t, std::string_view id)
-		: segment{segment::remove_when_done, id}
+		: segment{id}
 	{
 		open();
 	}
@@ -245,37 +249,6 @@ private:
 	auto open() -> void {
 		input_count  = find_shm_obj<audio_buffer>(&seg(), OBJECT_AUDIO_IN, &input_buffers);
 		output_count = find_shm_obj<audio_buffer>(&seg(), OBJECT_AUDIO_OUT, &output_buffers);
-	}
-};
-
-/*
-struct device_param_info : segment {
-	size_t count    = 0;
-	param_info* arr = nullptr;
-	device_param_info() = default;
-	device_param_info(bip::create_only_t, std::string_view shmid, size_t param_count)
-		: segment{shmid, sizeof(shm::param_info) * param_count + SEGMENT_OVERHEAD}
-	{
-		create(param_count);
-	}
-	device_param_info(bip::open_only_t, segment::remove_when_done_t, std::string_view shmid)
-		: segment{shmid}
-	{
-		open();
-	}
-	[[nodiscard]] static
-	auto make_id(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid) -> std::string {
-		return std::format("{}+sbox+{}+dev+{}+params+{}", instance_id, sbox_id.value, dev_id.value, uid);
-	}
-private:
-	auto create(size_t param_count) -> void {
-		if (param_count > 0) {
-			count = param_count;
-			arr = seg().construct<param_info>(OBJECT_DATA)[param_count]();
-		}
-	}
-	auto open() -> void {
-		count = find_shm_obj<param_info>(&seg(), OBJECT_DATA, &arr);
 	}
 };
 */

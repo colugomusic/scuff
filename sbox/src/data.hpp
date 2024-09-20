@@ -35,11 +35,6 @@ struct port_conn {
 	bool outside = false;
 };
 
-struct device_external {
-	std::shared_ptr<shm::device_audio_ports> shm_audio_ports;
-	std::shared_ptr<shm::device> shm_device;
-};
-
 struct device {
 	id::device id;
 	device_flags flags;
@@ -48,12 +43,12 @@ struct device {
 	immer::box<std::string> name;
 	immer::vector<port_conn> input_conns;
 	immer::vector<port_conn> output_conns;
-	device_external ext;
+	std::shared_ptr<shm::device> shm;
 };
 
 struct outside_device {
 	id::device id;
-	std::shared_ptr<shm::device_audio_ports> shm_audio_ports;
+	std::shared_ptr<shm::device> shm;
 };
 
 struct model {

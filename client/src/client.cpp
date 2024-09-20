@@ -23,14 +23,14 @@ static
 auto write_audio(const scuff::device& dev, const scuff_audio_writers& writers) -> void {
 	for (size_t j = 0; j < writers.count; j++) {
 		const auto& writer = writers.writers[j];
-		auto& buffer       = dev.external->shm_audio_ports->input_buffers[writer.port_index];
+		auto& buffer       = dev.shm->data->audio_in[writer.port_index];
 		writer.fn(&writer, buffer.data());
 	}
 }
 
 static
 auto write_events(const scuff::device& dev, const scuff_event_writer& writer) -> void {
-	auto& buffer           = dev.external->shm_device->data->events_in;
+	auto& buffer           = dev.shm->data->events_in;
 	const auto event_count = std::min(writer.count(&writer), size_t(SCUFF_EVENT_PORT_SIZE));
 	for (size_t j = 0; j < event_count; j++) {
 		const auto header = writer.get(&writer, j);
@@ -55,7 +55,7 @@ static
 auto read_audio(const scuff::device& dev, const scuff_audio_readers& readers) -> void {
 	for (size_t j = 0; j < readers.count; j++) {
 		const auto& reader = readers.readers[j];
-		const auto& buffer = dev.external->shm_audio_ports->output_buffers[reader.port_index];
+		const auto& buffer = dev.shm->data->audio_out[reader.port_index];
 		reader.fn(&reader, buffer.data());
 	}
 }
@@ -71,7 +71,7 @@ auto read_zeros(const scuff::device& dev, const scuff_audio_readers& readers) ->
 
 static
 auto read_events(const scuff::device& dev, const scuff_event_reader& reader) -> void {
-	auto& buffer           = dev.external->shm_device->data->events_out;
+	auto& buffer           = dev.shm->data->events_out;
 	const auto event_count = buffer.size();
 	for (size_t j = 0; j < event_count; j++) {
 		const auto& event  = buffer[j];
@@ -162,14 +162,9 @@ auto process_message_(id::sandbox sbox_id, const msg::out::return_created_device
 		// The sandbox succeeded in creating the remote device.
 		auto device             = m->devices.at({msg.dev_id});
 		const auto device_shmid = shm::device::make_id(DATA_->instance_id, {msg.dev_id});
-		// These shared memory segments were created by the sandbox process
-		// but we're also going to remove them when we're done with them.
-		device_external ext;
-		ext.shm_device      = std::make_shared<shm::device>(bip::open_only, shm::segment::remove_when_done, device_shmid);
-		// This one may be opened by sandbox processes so we need to track
+		// This segment may be opened by sandbox processes so we need to track
 		// that and manually remove it when there are no references to it.
-		ext.shm_audio_ports = std::make_shared<shm::device_audio_ports>(bip::open_only, msg.ports_shmid);
-		device.external     = ext;
+		device.shm = std::make_shared<shm::device>(bip::open_only, device_shmid);
 		m->devices = m->devices.insert(device);
 		return_fn({msg.dev_id}, true);
 		DATA_->model.lock_publish(); // Device may not have been published yet.
@@ -447,12 +442,12 @@ static
 auto device_get_param_count(scuff_device dev) -> size_t {
 	const auto m       = DATA_->model.lock_read();
 	const auto& device = m.devices.at({dev});
-	const auto& shm    = device.external->shm_device;
-	if (!shm) {
+	if (!device.shm) {
 		// Device wasn't successfully created by the sandbox process (yet?)
 		return 0;
 	}
-	return device.external->shm_device->data->param_info.size();
+	const auto lock = std::unique_lock{device.shm->data->param_info_mutex};
+	return device.shm->data->param_info.size();
 }
 
 static
@@ -473,12 +468,11 @@ static
 auto device_has_gui(scuff_device dev) -> bool {
 	const auto m       = DATA_->model.lock_read();
 	const auto& device = m.devices.at({dev});
-	const auto& shm    = device.external->shm_device;
-	if (!shm) {
+	if (!device.shm) {
 		// Device wasn't successfully created by the sandbox process (yet?)
 		return false;
 	}
-	const auto flags   = shm->data->flags;
+	const auto flags   = device.shm->data->flags;
 	return flags.value & flags.has_gui;
 }
 
@@ -486,12 +480,11 @@ static
 auto device_has_params(scuff_device dev) -> bool {
 	const auto m       = DATA_->model.lock_read();
 	const auto& device = m.devices.at({dev});
-	const auto& shm    = device.external->shm_device;
-	if (!shm) {
+	if (!device.shm) {
 		// Device wasn't successfully created by the sandbox process (yet?)
 		return false;
 	}
-	const auto flags   = shm->data->flags;
+	const auto flags   = device.shm->data->flags;
 	return flags.value & flags.has_params;
 }
 
@@ -571,11 +564,11 @@ auto param_get_value(scuff_device dev, scuff_param param, scuff_return_double fn
 
 static
 auto param_find(id::device dev_id, scuff_param_id param_id) -> scuff_param {
-	const auto m   = DATA_->model.lock_read();
-	const auto dev = m.devices.at(dev_id);
-	const auto ext = *dev.external;
-	for (size_t i = 0; i < ext.shm_device->data->param_info.size(); i++) {
-		const auto& info = ext.shm_device->data->param_info[i];
+	const auto m    = DATA_->model.lock_read();
+	const auto dev  = m.devices.at(dev_id);
+	const auto lock = std::unique_lock{dev.shm->data->param_info_mutex};
+	for (size_t i = 0; i < dev.shm->data->param_info.size(); i++) {
+		const auto& info = dev.shm->data->param_info[i];
 		if (info.id == param_id) {
 			return i;
 		}
@@ -585,13 +578,13 @@ auto param_find(id::device dev_id, scuff_param_id param_id) -> scuff_param {
 
 static
 auto param_get_id(id::device dev_id, scuff_param param) -> scuff_param_id {
-	const auto m   = DATA_->model.lock_read();
-	const auto dev = m.devices.at(dev_id);
-	const auto ext = *dev.external;
-	if (param >= ext.shm_device->data->param_info.size()) {
+	const auto m    = DATA_->model.lock_read();
+	const auto dev  = m.devices.at(dev_id);
+	const auto lock = std::unique_lock{dev.shm->data->param_info_mutex};
+	if (param >= dev.shm->data->param_info.size()) {
 		throw std::runtime_error("Invalid parameter index.");
 	}
-	return ext.shm_device->data->param_info[param].id.c_str();
+	return dev.shm->data->param_info[param].id.c_str();
 }
 
 static

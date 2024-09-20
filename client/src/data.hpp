@@ -37,11 +37,6 @@ struct sbox_flags {
 	int value = 0;
 };
 
-struct device_external {
-	std::shared_ptr<const shm::device_audio_ports> shm_audio_ports;
-	std::shared_ptr<const shm::device> shm_device;
-};
-
 struct sandbox_external {
 	using shptr = std::shared_ptr<sandbox_external>;
 	bp::child proc;
@@ -90,7 +85,7 @@ struct device {
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
 	immer::box<std::string> name;
-	immer::box<device_external> external;
+	std::shared_ptr<const shm::device> shm;
 };
 
 struct sandbox {
