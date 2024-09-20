@@ -11,18 +11,40 @@
 namespace scuff::sbox::audio {
 
 static
+auto copy_data_to_input(const shm::device& source, size_t src_port_index, const shm::device& dest, size_t dest_port_index) -> void {
+	const auto& output_buffer = source.data->audio_out.at(src_port_index);
+	auto& input_buffer        = dest.data->audio_in.at(dest_port_index);
+	input_buffer = output_buffer;
+}
+
+static
+auto copy_data_from_output(const shm::device& dest, size_t dest_port_index, const shm::device& source, size_t src_port_index) -> void {
+	const auto& output_buffer = source.data->audio_out.at(src_port_index);
+	auto& input_buffer        = dest.data->audio_in.at(dest_port_index);
+	input_buffer = output_buffer;
+}
+
+[[nodiscard]] static
+auto get_other_device_shm(const sbox::model& m, id::device id, bool outside) -> const shm::device& {
+	if (outside) {
+		return *m.outside_devices.at(id).shm;
+	}
+	return *m.devices.at(id).shm;
+}
+
+static
 auto copy_data_to_connected_inputs(const sbox::model& m, const sbox::device& dev) -> void {
 	for (const auto& conn : dev.input_conns) {
-		if (conn.outside) {
-		}
-		// TODO:
+		const auto& other_dev_shm = get_other_device_shm(m, conn.other_device, conn.outside);
+		copy_data_to_input(other_dev_shm, conn.other_port_index, *dev.shm, conn.this_port_index);
 	}
 }
 
 static
 auto copy_data_to_connected_outputs(const sbox::model& m, const sbox::device& dev) -> void {
 	for (const auto& conn : dev.output_conns) {
-		// TODO:
+		const auto& other_dev_shm = get_other_device_shm(m, conn.other_device, conn.outside);
+		copy_data_from_output(other_dev_shm, conn.other_port_index, *dev.shm, conn.this_port_index);
 	}
 }
 

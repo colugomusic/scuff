@@ -31,6 +31,7 @@ struct device_ui {
 
 struct port_conn {
 	id::device other_device;
+	size_t this_port_index;
 	size_t other_port_index;
 	bool outside = false;
 };
