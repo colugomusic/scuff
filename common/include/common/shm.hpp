@@ -93,17 +93,28 @@ struct device_flags {
 	enum e {
 		has_gui          = 1 << 0,
 		has_params       = 1 << 1,
-		is_active        = 1 << 2,
-		supports_offline = 1 << 3, // TODO: initialize these flags when device is created
+		supports_offline = 1 << 2, // TODO: initialize these flags when device is created
 	};
 	int value = 0;
 };
 
+struct param_info {
+	boost::static_string<SCUFF_PARAM_ID_MAX> id;
+	boost::static_string<SCUFF_PARAM_NAME_MAX> name;
+	double min_value;
+	double max_value;
+	double default_value;
+	struct {
+		void* cookie;
+		clap_id id;
+	} clap;
+};
+
 struct device_data {
-	size_t param_count = 0;
 	device_flags flags;
 	event_buffer events_in;
 	event_buffer events_out;
+	bc::static_vector<param_info, SCUFF_MAX_PARAMS> param_info;
 	bip::interprocess_mutex mutex;
 };
 
@@ -121,18 +132,6 @@ struct group_data {
 	std::atomic<uint64_t> sandboxes_processing;
 	bip::interprocess_mutex mut;
 	bip::interprocess_condition cv;
-};
-
-struct param_info {
-	boost::static_string<SCUFF_PARAM_ID_MAX> id;
-	boost::static_string<SCUFF_PARAM_NAME_MAX> name;
-	double min_value;
-	double max_value;
-	double default_value;
-	struct {
-		void* cookie;
-		clap_id id;
-	} clap;
 };
 
 template <typename T> static
@@ -226,7 +225,7 @@ struct device_audio_ports : segment {
 	{
 		create(input_port_count, output_port_count);
 	}
-	device_audio_ports(bip::open_only_t, segment::remove_when_done_t, std::string_view id)
+	device_audio_ports(bip::open_only_t, std::string_view id)
 		: segment{segment::remove_when_done, id}
 	{
 		open();
@@ -249,6 +248,7 @@ private:
 	}
 };
 
+/*
 struct device_param_info : segment {
 	size_t count    = 0;
 	param_info* arr = nullptr;
@@ -278,5 +278,6 @@ private:
 		count = find_shm_obj<param_info>(&seg(), OBJECT_DATA, &arr);
 	}
 };
+*/
 
 } // scuff::shm

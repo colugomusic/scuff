@@ -11,13 +11,29 @@
 namespace scuff::sbox::audio {
 
 static
+auto copy_data_to_connected_inputs(const sbox::model& m, const sbox::device& dev) -> void {
+	for (const auto& conn : dev.input_conns) {
+		// TODO:
+	}
+}
+
+static
+auto copy_data_to_connected_outputs(const sbox::model& m, const sbox::device& dev) -> void {
+	for (const auto& conn : dev.output_conns) {
+		// TODO:
+	}
+}
+
+static
 auto do_processing(const sbox::model& m, const sbox::device& dev) -> void {
+	audio::copy_data_to_connected_inputs(m, dev);
 	if (dev.type == scuff_plugin_type::clap) {
 		scuff::sbox::clap::audio::process(m, dev);
 	}
 	else {
 		// Not implemented yet.
 	}
+	audio::copy_data_to_connected_outputs(m, dev);
 }
 
 static

@@ -39,7 +39,6 @@ struct sbox_flags {
 
 struct device_external {
 	std::shared_ptr<const shm::device_audio_ports> shm_audio_ports;
-	std::shared_ptr<const shm::device_param_info>  shm_param_info;
 	std::shared_ptr<const shm::device> shm_device;
 };
 

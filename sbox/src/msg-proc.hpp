@@ -66,7 +66,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& ms
 		port_conn conn;
 		conn.other_device     = {msg.out_dev_id};
 		conn.other_port_index = msg.out_port;
-		conn.external         = !out_dev;
+		conn.outside          = !out_dev;
 		conns.set(msg.in_port, conn);
 		dev.input_conns = conns.persistent();
 		m->devices = m->devices.insert(dev);
@@ -78,7 +78,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& ms
 		port_conn conn;
 		conn.other_device     = {msg.in_dev_id};
 		conn.other_port_index = msg.in_port;
-		conn.external         = !in_dev;
+		conn.outside          = !in_dev;
 		conns.set(msg.out_port, conn);
 		dev.output_conns = conns.persistent();
 		m->devices = m->devices.insert(dev);

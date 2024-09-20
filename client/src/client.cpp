@@ -166,8 +166,9 @@ auto process_message_(id::sandbox sbox_id, const msg::out::return_created_device
 		// but we're also going to remove them when we're done with them.
 		device_external ext;
 		ext.shm_device      = std::make_shared<shm::device>(bip::open_only, shm::segment::remove_when_done, device_shmid);
-		ext.shm_audio_ports = std::make_shared<shm::device_audio_ports>(bip::open_only, shm::segment::remove_when_done, msg.ports_shmid);
-		ext.shm_param_info  = std::make_shared<shm::device_param_info>(bip::open_only, shm::segment::remove_when_done, msg.param_info_shmid);
+		// This one may be opened by sandbox processes so we need to track
+		// that and manually remove it when there are no references to it.
+		ext.shm_audio_ports = std::make_shared<shm::device_audio_ports>(bip::open_only, msg.ports_shmid);
 		device.external     = ext;
 		m->devices = m->devices.insert(device);
 		return_fn({msg.dev_id}, true);
@@ -184,12 +185,6 @@ auto process_message_(id::sandbox sbox_id, const msg::out::return_created_device
 
 static
 auto process_message_(id::sandbox sbox_id, const msg::out::device_param_info_changed& msg) -> void {
-	const auto m       = DATA_->model.lock_write();
-	auto device        = m->devices.at({msg.dev_id});
-	auto ext           = *device.external;
-	ext.shm_param_info = std::make_shared<shm::device_param_info>(bip::open_only, shm::segment::remove_when_done, msg.new_shmid);
-	device.external    = std::move(ext);
-	m->devices         = m->devices.insert(device);
 	DATA_->callbacks.on_device_params_changed.fn(&DATA_->callbacks.on_device_params_changed, msg.dev_id);
 }
 
@@ -247,6 +242,11 @@ auto process_message(id::sandbox sbox_id, const msg::out::msg& msg) -> void {
 
 static
 auto process_sandbox_messages(const sandbox& sbox) -> void {
+	if (!sbox.external->proc.running()) {
+		// The sandbox process has stopped unexpectedly.
+		// TODO: Handle this situation
+		return;
+	}
 	sbox.external->send_msgs();
 	const auto msgs = sbox.external->receive_msgs();
 	for (const auto& msg : msgs) {
@@ -313,6 +313,7 @@ auto device_connect(scuff_device dev_out_id, size_t port_out, scuff_device dev_i
 	const auto& sbox_in  = m.sandboxes.at(dev_in.sbox);
 	sbox_out.external->enqueue(scuff::msg::in::device_connect{dev_out_id, port_out, dev_in_id, port_in});
 	sbox_in.external->enqueue(scuff::msg::in::device_connect{dev_out_id, port_out, dev_in_id, port_in});
+	// TODO: audio port shared mem segment tracking
 }
 
 static
@@ -383,6 +384,7 @@ auto device_disconnect(scuff_device dev_out_id, size_t port_out, scuff_device de
 	const auto& sbox_in  = m.sandboxes.at(dev_in.sbox);
 	sbox_out.external->enqueue(scuff::msg::in::device_disconnect{dev_out_id, port_out, dev_in_id, port_in});
 	sbox_in.external->enqueue(scuff::msg::in::device_disconnect{dev_out_id, port_out, dev_in_id, port_in});
+	// TODO: audio port shared mem segment tracking
 }
 
 static
@@ -425,6 +427,7 @@ auto device_erase(id::device dev_id) -> void {
 		const auto& sbox = m->sandboxes.at(sbox_id);
 		sbox.external->enqueue(msg::in::device_erase{dev_id.value});
 	}
+	// TODO: track how many references there are to the device shared memory segments and remove them manually.
 	*m = remove_device_from_sandbox(std::move(*m), dev.sbox, dev_id);
 	m->devices = m->devices.erase(dev_id);
 	DATA_->model.lock_publish();
@@ -449,8 +452,7 @@ auto device_get_param_count(scuff_device dev) -> size_t {
 		// Device wasn't successfully created by the sandbox process (yet?)
 		return 0;
 	}
-	const auto lock = std::unique_lock{shm->data->mutex};
-	return device.external->shm_device->data->param_count;
+	return device.external->shm_device->data->param_info.size();
 }
 
 static
@@ -476,7 +478,6 @@ auto device_has_gui(scuff_device dev) -> bool {
 		// Device wasn't successfully created by the sandbox process (yet?)
 		return false;
 	}
-	const auto lock    = std::unique_lock{shm->data->mutex};
 	const auto flags   = shm->data->flags;
 	return flags.value & flags.has_gui;
 }
@@ -490,7 +491,6 @@ auto device_has_params(scuff_device dev) -> bool {
 		// Device wasn't successfully created by the sandbox process (yet?)
 		return false;
 	}
-	const auto lock    = std::unique_lock{shm->data->mutex};
 	const auto flags   = shm->data->flags;
 	return flags.value & flags.has_params;
 }
@@ -574,8 +574,8 @@ auto param_find(id::device dev_id, scuff_param_id param_id) -> scuff_param {
 	const auto m   = DATA_->model.lock_read();
 	const auto dev = m.devices.at(dev_id);
 	const auto ext = *dev.external;
-	for (size_t i = 0; i < ext.shm_param_info->count; i++) {
-		const auto& info = ext.shm_param_info->arr[i];
+	for (size_t i = 0; i < ext.shm_device->data->param_info.size(); i++) {
+		const auto& info = ext.shm_device->data->param_info[i];
 		if (info.id == param_id) {
 			return i;
 		}
@@ -588,10 +588,10 @@ auto param_get_id(id::device dev_id, scuff_param param) -> scuff_param_id {
 	const auto m   = DATA_->model.lock_read();
 	const auto dev = m.devices.at(dev_id);
 	const auto ext = *dev.external;
-	if (param >= ext.shm_param_info->count) {
+	if (param >= ext.shm_device->data->param_info.size()) {
 		throw std::runtime_error("Invalid parameter index.");
 	}
-	return ext.shm_param_info->arr[param].id.c_str();
+	return ext.shm_device->data->param_info[param].id.c_str();
 }
 
 static

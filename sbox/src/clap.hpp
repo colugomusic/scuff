@@ -760,11 +760,6 @@ auto make_shm_audio_ports(std::string_view instance_id, id::sandbox sbox_id, id:
 	return std::make_shared<shm::device_audio_ports>(bip::create_only, shm::device_audio_ports::make_id(instance_id, sbox_id, dev_id, uid), input_count, output_count);
 }
 
-[[nodiscard]] static
-auto make_shm_param_info(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid, size_t param_count) -> std::shared_ptr<shm::device_param_info> {
-	return std::make_shared<shm::device_param_info>(bip::create_only, shm::device_param_info::make_id(instance_id, sbox_id, dev_id, uid), param_count);
-}
-
 static
 auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id, size_t callback) -> void {
 	const auto entry = scuff::os::find_clap_entry(plugfile_path);
@@ -780,7 +775,7 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 		throw std::runtime_error("clap_plugin_entry.get_factory failed");
 	}
 	clap::iface iface;
-	const auto ext_data = make_ext_data(app, dev_id);
+	auto ext_data       = make_ext_data(app, dev_id);
 	iface.host          = make_host_for_instance(&ext_data->host_data);
 	iface.plugin.plugin = factory->create_plugin(factory, &iface.host.host, plugin_id.data());
 	if (!iface.plugin.plugin) {
@@ -804,7 +799,6 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	clap_dev                     = init_gui(std::move(clap_dev));
 	clap_dev                     = init_audio(std::move(clap_dev), dev);
 	clap_dev                     = init_params(std::move(clap_dev));
-	dev.ext.shm_param_info       = make_shm_param_info(app->instance_id, app->options.sbox_id, dev_id, app->uid++, clap_dev.params.size());
 	for (size_t i = 0; i < clap_dev.params.size(); i++) {
 		const auto& param = clap_dev.params[i];
 		shm::param_info info;
@@ -815,12 +809,12 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 		info.name          = param.info.name;
 		info.clap.id       = param.info.id;
 		info.clap.cookie   = param.info.cookie;
-		dev.ext.shm_param_info->arr[i] = std::move(info);
+		dev.ext.shm_device->data->param_info[i] = std::move(info);
 	}
 	const auto m                 = app->model.lock_write();
 	m->devices                   = m->devices.insert(dev);
 	m->clap_devices              = m->clap_devices.insert(clap_dev);
-	app->msg_sender.enqueue(scuff::msg::out::return_created_device{dev.id.value, dev.ext.shm_audio_ports->id().data(), dev.ext.shm_param_info->id().data(), callback});
+	app->msg_sender.enqueue(scuff::msg::out::return_created_device{dev.id.value, dev.ext.shm_audio_ports->id().data(), callback});
 }
 
 [[nodiscard]] static

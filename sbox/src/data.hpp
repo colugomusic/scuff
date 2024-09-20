@@ -32,12 +32,11 @@ struct device_ui {
 struct port_conn {
 	id::device other_device;
 	size_t other_port_index;
-	bool external = false;
+	bool outside = false;
 };
 
 struct device_external {
 	std::shared_ptr<shm::device_audio_ports> shm_audio_ports;
-	std::shared_ptr<shm::device_param_info>  shm_param_info;
 	std::shared_ptr<shm::device> shm_device;
 };
 
@@ -52,9 +51,15 @@ struct device {
 	device_external ext;
 };
 
+struct outside_device {
+	id::device id;
+	std::shared_ptr<shm::device_audio_ports> shm_audio_ports;
+};
+
 struct model {
 	immer::table<device> devices;
 	immer::table<clap::device> clap_devices;
+	immer::table<outside_device> outside_devices;
 	immer::vector<id::device> device_processing_order;
 };
 

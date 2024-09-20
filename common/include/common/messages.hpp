@@ -65,7 +65,7 @@ struct report_error              { std::string text; };
 struct report_fatal_error        { std::string text; };
 struct report_info               { std::string text; };
 struct report_warning            { std::string text; };
-struct return_created_device     { scuff_device dev_id; std::string ports_shmid; std::string param_info_shmid; size_t callback; };
+struct return_created_device     { scuff_device dev_id; std::string ports_shmid; size_t callback; };
 struct return_param_value        { double value; size_t callback; };
 struct return_param_value_text   { std::string text; size_t callback; };
 struct return_state              { scuff_device dev_id; std::vector<std::byte> bytes; size_t callback; };
@@ -115,7 +115,6 @@ template <> inline
 auto deserialize<scuff::msg::out::return_created_device>(std::span<const std::byte>* bytes, scuff::msg::out::return_created_device* msg) -> void {
 	deserialize(bytes, &msg->dev_id);
 	deserialize(bytes, &msg->ports_shmid);
-	deserialize(bytes, &msg->param_info_shmid);
 	deserialize(bytes, &msg->callback);
 }
 
@@ -193,7 +192,6 @@ template <> inline
 auto serialize<scuff::msg::out::return_created_device>(const scuff::msg::out::return_created_device& msg, std::vector<std::byte>* bytes) -> void {
 	serialize(msg.dev_id, bytes);
 	serialize(std::string_view{msg.ports_shmid}, bytes);
-	serialize(std::string_view{msg.param_info_shmid}, bytes);
 	serialize(msg.callback, bytes);
 }
 
