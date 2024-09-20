@@ -8,38 +8,321 @@
 
 namespace scuff::sbox::clap {
 
-namespace main {
-
-[[nodiscard]] static
-auto is_active(const device& device) -> bool {
-	const auto& flags = device.ext.data->atomic_flags;
-	return flags.value.load(std::memory_order_relaxed) & device_atomic_flags::active;
-}
-
 [[nodiscard]] static
 auto is_flag_set(uint32_t flags, uint32_t flag) -> bool {
 	return (flags & flag) == flag;
 }
 
+[[nodiscard]] static
+auto unset_flag(uint32_t flags, uint32_t flag) -> uint32_t {
+	return flags & ~flag;
+}
+
+[[nodiscard]] static
+auto is_flag_set(const device_atomic_flags& flags, uint32_t flag) -> bool {
+	return is_flag_set(flags.value.load(std::memory_order_relaxed), flag);
+}
+
 static
-auto make_audio_buffers(const std::vector<clap_audio_port_info_t>& port_info, audio_buffers_detail* out) -> void {
+auto set_flags(device_atomic_flags* atomic_flags, uint32_t flags_to_set) -> void {
+	auto old_flags = atomic_flags->value.load(std::memory_order_relaxed);
+	auto new_flags = old_flags | flags_to_set;
+	while (!atomic_flags->value.compare_exchange_weak(old_flags, new_flags, std::memory_order_relaxed)) {
+		new_flags = old_flags | flags_to_set;
+	}
+}
+
+static
+auto unset_flags(device_atomic_flags* atomic_flags, uint32_t flags_to_unset) -> void {
+	auto old_flags = atomic_flags->value.load(std::memory_order_relaxed);
+	auto new_flags = old_flags & ~flags_to_unset;
+	while (!atomic_flags->value.compare_exchange_weak(old_flags, new_flags, std::memory_order_relaxed)) {
+		new_flags = old_flags & ~flags_to_unset;
+	}
+}
+
+[[nodiscard]] static
+auto is_active(const device& device) -> bool {
+	return is_flag_set(device.ext.data->atomic_flags, device_atomic_flags::active);
+}
+
+[[nodiscard]] static
+auto is_processing(const device& device) -> bool {
+	return is_flag_set(device.ext.data->atomic_flags, device_atomic_flags::processing);
+}
+
+[[nodiscard]] static
+auto is_scheduled_to_process(const device& device) -> bool {
+	return is_flag_set(device.ext.data->atomic_flags, device_atomic_flags::schedule_process);
+}
+
+static
+auto send_msg(const device& dev, const clap::device_msg::msg& msg) -> void {
+	dev.ext.data->msg_q.enqueue(msg);
+}
+
+static
+auto send_msg(sbox::app* app, id::device dev_id, const clap::device_msg::msg& msg) -> void {
+	const auto m = app->model.lockfree_read();
+	if (const auto dev = m->clap_devices.find(dev_id)) {
+		send_msg(*dev, msg);
+	}
+}
+
+static
+auto log(sbox::app* app, id::device dev_id, clap_log_severity severity, const char* msg) -> void {
+	send_msg(app, dev_id, device_msg::log_begin{severity});
+	// Send the message in chunks of 64 characters
+	const auto len        = std::strlen(msg);
+	const auto chunk_size = device_msg::log_text::MAX;
+	for (size_t i = 0; i < len; i += chunk_size) {
+		const auto chunk = std::string_view{msg + i, std::min(chunk_size, len - i)};
+		send_msg(app, dev_id, device_msg::log_text{chunk.data()});
+	}
+	send_msg(app, dev_id, device_msg::log_end{});
+}
+
+[[nodiscard]] static
+auto get_extension(sbox::app* app, id::device dev_id, const char* extension_id) -> const void* {
+	const auto m   = app->model.lock_read();
+	const auto dev = m.clap_devices.at(dev_id);
+	if (extension_id == std::string_view{CLAP_EXT_AUDIO_PORTS})         { return &dev.iface->host.audio_ports; }
+	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU})        { return nullptr; } // Not implemented yet &iface.context_menu; }
+	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU_COMPAT}) { return nullptr; } // Not implemented yet &iface.context_menu; }
+	if (extension_id == std::string_view{CLAP_EXT_GUI})                 { return &dev.iface->host.gui; }
+	if (extension_id == std::string_view{CLAP_EXT_LATENCY})             { return &dev.iface->host.latency; }
+	if (extension_id == std::string_view{CLAP_EXT_LOG})                 { return &dev.iface->host.log; }
+	if (extension_id == std::string_view{CLAP_EXT_PARAMS})              { return &dev.iface->host.params; }
+	if (extension_id == std::string_view{CLAP_EXT_PRESET_LOAD})         { return nullptr; } // Not implemented yet &iface.preset_load; }
+	if (extension_id == std::string_view{CLAP_EXT_PRESET_LOAD_COMPAT})  { return nullptr; } // Not implemented yet &iface.preset_load; }
+	if (extension_id == std::string_view{CLAP_EXT_STATE})               { return &dev.iface->host.state; }
+	if (extension_id == std::string_view{CLAP_EXT_THREAD_CHECK})        { return &dev.iface->host.thread_check; }
+	if (extension_id == std::string_view{CLAP_EXT_TRACK_INFO})          { return &dev.iface->host.track_info; }
+	if (extension_id == std::string_view{CLAP_EXT_TRACK_INFO_COMPAT})   { return &dev.iface->host.track_info; }
+	if (extension_id == std::string_view{CLAP_EXT_TAIL}) {
+		// Not supported at the moment because this extension is too under-specified
+		// https://github.com/free-audio/clap/blob/main/include/clap/ext/tail.h
+		return nullptr;
+	}
+	app->msg_sender.enqueue(scuff::msg::out::report_warning{std::format("Device '{}' requested an unsupported extension: {}", *dev.name, extension_id)});
+	return nullptr;
+}
+
+[[nodiscard]] static
+auto get_host_data(const clap_host_t* host) -> device_host_data& {
+	return *static_cast<device_host_data*>(host->host_data);
+}
+
+static
+auto cb_request_param_flush(sbox::app* app, id::device dev_id) -> void {
+	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
+	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_param_flush, std::memory_order_relaxed);
+}
+
+static
+auto cb_request_process(sbox::app* app, id::device dev_id) -> void {
+	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
+	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_active | device_atomic_flags::schedule_process);
+}
+
+static
+auto cb_request_restart(sbox::app* app, id::device dev_id) -> void {
+	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
+	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_restart);
+}
+
+static
+auto cb_request_callback(sbox::app* app, id::device dev_id) -> void {
+	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
+	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_callback);
+}
+
+static
+auto cb_gui_closed(sbox::app* app, id::device dev_id, bool was_destroyed) -> void {
+	send_msg(app, dev_id, device_msg::gui_closed{was_destroyed});
+}
+
+static
+auto cb_gui_request_hide(sbox::app* app, id::device dev_id) -> void {
+	send_msg(app, dev_id, device_msg::gui_request_hide{});
+}
+
+static
+auto cb_gui_request_show(sbox::app* app, id::device dev_id) -> void {
+	send_msg(app, dev_id, device_msg::gui_request_show{});
+}
+
+static
+auto cb_gui_request_resize(sbox::app* app, id::device dev_id, uint32_t width, uint32_t height) -> void {
+	send_msg(app, dev_id, device_msg::gui_request_resize{width, height});
+}
+
+static
+auto cb_gui_resize_hints_changed(sbox::app* app, id::device dev_id) -> void {
+	send_msg(app, dev_id, device_msg::gui_resize_hints_changed{});
+}
+
+static
+// Could be called from main thread or audio thread, but
+// never both simultaneously, for the same device.
+auto flush_device_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
+	const auto& input_events  = clap_dev.ext.audio->input_events;
+	const auto& output_events = clap_dev.ext.audio->output_events;
+	const auto& iface         = clap_dev.iface->plugin;
+	if (!iface.params) {
+		// May not actually be intialized
+		return;
+	}
+	iface.params->flush(iface.plugin, &input_events, &output_events);
+	dev.ext.shm_device->data->events_in.clear();
+}
+
+} // namespace scuff::sbox::clap
+
+namespace scuff::sbox::clap::audio {
+
+[[nodiscard]] static
+auto can_render_audio(const clap::audio_buffers& buffers) -> bool {
+	if (buffers.inputs.buffers.empty())                { return false; }
+	if (buffers.outputs.buffers.empty())               { return false; }
+	if (buffers.inputs.buffers[0].channel_count == 0)  { return false; }
+	if (buffers.outputs.buffers[0].channel_count == 0) { return false; }
+	return true;
+}
+
+[[nodiscard]] static
+auto try_to_wake_up(const clap::device& dev) -> bool {
+	unset_flags(&dev.ext.data->atomic_flags, device_atomic_flags::schedule_process);
+	if (!dev.iface->plugin.plugin->start_processing(dev.iface->plugin.plugin)) {
+		return false;
+	}
+	set_flags(&dev.ext.data->atomic_flags, device_atomic_flags::processing);
+	return true;
+}
+
+[[nodiscard]] static
+auto output_is_quiet(const shm::device_audio_ports& shm_audio_ports) -> bool {
+	static constexpr auto THRESHOLD = 0.0001f;
+	for (size_t i = 0; i < shm_audio_ports.output_count; i++) {
+		const auto& buffer = shm_audio_ports.output_buffers[i];
+		for (size_t j = 0; j < buffer.size(); j++) {
+			const auto frame = buffer[j];
+			if (std::abs(frame) > THRESHOLD) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+static
+auto go_to_sleep(const clap::device& dev) -> void {
+	dev.iface->plugin.plugin->stop_processing(dev.iface->plugin.plugin);
+	unset_flags(&dev.ext.data->atomic_flags, device_atomic_flags::processing);
+}
+
+[[nodiscard]] static
+auto handle_audio_process_result(const shm::device_audio_ports& shm_audio_ports, const clap::device& dev, clap_process_status status) -> void {
+	switch (status) {
+		case CLAP_PROCESS_CONTINUE: {
+			return;
+		}
+		case CLAP_PROCESS_CONTINUE_IF_NOT_QUIET: {
+			if (output_is_quiet(shm_audio_ports)) {
+				go_to_sleep(dev);
+			}
+			return;
+		}
+		default:
+		case CLAP_PROCESS_ERROR:
+		case CLAP_PROCESS_TAIL:
+		case CLAP_PROCESS_SLEEP: {
+			go_to_sleep(dev);
+			return;
+		}
+	}
+}
+
+static
+auto handle_event_process_result(const clap::device& dev, clap_process_status status) -> void {
+	switch (status) {
+		case CLAP_PROCESS_ERROR:
+		case CLAP_PROCESS_CONTINUE: {
+			return;
+		}
+		case CLAP_PROCESS_CONTINUE_IF_NOT_QUIET:
+		case CLAP_PROCESS_TAIL:
+		case CLAP_PROCESS_SLEEP: {
+			go_to_sleep(dev);
+			return;
+		}
+	}
+}
+
+static
+auto process_audio_device(const sbox::device& dev, const clap::device& clap_dev) -> void {
+	const auto& iface   = clap_dev.iface->plugin;
+	const auto& process = clap_dev.ext.audio->process;
+	auto& flags         = clap_dev.ext.data->atomic_flags;
+	auto& audio_buffers = clap_dev.ext.audio->buffers;
+	const auto status   = iface.plugin->process(iface.plugin, &process);
+	handle_audio_process_result(*dev.ext.shm_audio_ports, clap_dev, status);
+	dev.ext.shm_device->data->events_in.clear();
+}
+
+static
+auto process_event_device(const sbox::device& dev, const clap::device& clap_dev) -> void {
+	const auto& iface   = clap_dev.iface->plugin;
+	const auto& process = clap_dev.ext.audio->process;
+	auto& flags         = clap_dev.ext.data->atomic_flags;
+	const auto status   = iface.plugin->process(iface.plugin, &process);
+	handle_event_process_result(clap_dev, status);
+	dev.ext.shm_device->data->events_in.clear();
+}
+
+auto process(const sbox::model& m, const sbox::device& dev) -> void {
+	const auto& clap_dev = m.clap_devices.at(dev.id);
+	const auto& iface    = clap_dev.iface->plugin;
+	if (!is_active(clap_dev)) {
+		return;
+	}
+	if (!is_processing(clap_dev)) {
+		flush_device_events(dev, clap_dev);
+		if (!is_scheduled_to_process(clap_dev)) {
+			return;
+		}
+		if (!try_to_wake_up(clap_dev)) {
+			return;
+		}
+	}
+	if (iface.audio_ports) {
+		if (can_render_audio(clap_dev.ext.audio->buffers)) {
+			process_audio_device(dev, clap_dev);
+			return;
+		}
+	}
+	process_event_device(dev, clap_dev);
+}
+
+} // namespace scuff::sbox::clap::audio
+
+namespace scuff::sbox::clap::main {
+
+static
+auto make_audio_buffers(std::span<shm::audio_buffer> shm_buffers, const std::vector<clap_audio_port_info_t>& port_info, audio_buffers_detail* out) -> void {
 	out->arrays.resize(port_info.size());
 	out->buffers.resize(port_info.size());
-	size_t total_vectors = 0;
 	for (size_t port_index = 0; port_index < port_info.size(); port_index++) {
 		const auto& info = port_info[port_index];
 		auto& arr = out->arrays[port_index];
 		arr.resize(info.channel_count);
-		total_vectors += info.channel_count;
 	}
-	out->vectors.resize(total_vectors);
-	size_t vector_index = 0;
 	for (size_t port_index = 0; port_index < port_info.size(); port_index++) {
 		const auto& info = port_info[port_index];
 		auto& arr = out->arrays[port_index];
 		auto& buf = out->buffers[port_index];
 		for (uint32_t c = 0; c < info.channel_count; c++) {
-			auto& vec = out->vectors[vector_index++];
+			auto& vec = shm_buffers[(port_index * info.channel_count) + c];
 			arr[c] = vec.data();
 		}
 		buf.channel_count = info.channel_count;
@@ -51,51 +334,53 @@ auto make_audio_buffers(const std::vector<clap_audio_port_info_t>& port_info, au
 }
 
 static
-auto make_audio_buffers(const audio_port_info& port_info, clap::audio_buffers* out) -> void {
+auto make_audio_buffers(const shm::device_audio_ports& shm_ports, const audio_port_info& port_info, clap::audio_buffers* out) -> void {
 	*out = {};
-	make_audio_buffers(port_info.inputs, &out->inputs);
-	make_audio_buffers(port_info.outputs, &out->outputs);
+	make_audio_buffers(std::span{shm_ports.input_buffers, shm_ports.input_count}, port_info.inputs, &out->inputs);
+	make_audio_buffers(std::span{shm_ports.output_buffers, shm_ports.output_count}, port_info.outputs, &out->outputs);
 }
 
 [[nodiscard]] static
 auto retrieve_audio_port_info(const iface_plugin& iface) -> audio_port_info {
 	auto out = audio_port_info{};
-	const auto input_count  = iface.audio_ports->count(iface.plugin, true);
-	const auto output_count = iface.audio_ports->count(iface.plugin, false);
-	for (uint32_t i = 0; i < input_count; i++) {
-		clap_audio_port_info_t info;
-		iface.audio_ports->get(iface.plugin, i, true, &info);
-		out.inputs.push_back(info);
-	}
-	for (uint32_t i = 0; i < output_count; i++) {
-		clap_audio_port_info_t info;
-		iface.audio_ports->get(iface.plugin, i, false, &info);
-		out.outputs.push_back(info);
+	if (iface.audio_ports) {
+		const auto input_count  = iface.audio_ports->count(iface.plugin, true);
+		const auto output_count = iface.audio_ports->count(iface.plugin, false);
+		for (uint32_t i = 0; i < input_count; i++) {
+			clap_audio_port_info_t info;
+			iface.audio_ports->get(iface.plugin, i, true, &info);
+			out.inputs.push_back(info);
+		}
+		for (uint32_t i = 0; i < output_count; i++) {
+			clap_audio_port_info_t info;
+			iface.audio_ports->get(iface.plugin, i, false, &info);
+			out.outputs.push_back(info);
+		}
 	}
 	return out;
 }
 
 [[nodiscard]] static
-auto make_input_event_list(device_ext_audio* audio) -> clap_input_events_t {
+auto make_input_event_list(const shm::device& shm) -> clap_input_events_t {
 	clap_input_events_t list;
-	list.ctx = &audio->input_event_buffer;
+	list.ctx = &shm.data->events_in;
 	list.size = [](const clap_input_events_t* list) -> uint32_t {
-		const auto& event_buffer = *static_cast<const clap::event_buffer*>(list->ctx);
+		const auto& event_buffer = *static_cast<const shm::event_buffer*>(list->ctx);
 		return static_cast<uint32_t>(event_buffer.size());
 	};
 	list.get = [](const clap_input_events_t* list, uint32_t index) -> const clap_event_header_t* {
-		const auto& event_buffer = *static_cast<const clap::event_buffer*>(list->ctx);
+		const auto& event_buffer = *static_cast<const shm::event_buffer*>(list->ctx);
 		return &scuff::clap::convert(event_buffer[index]);
 	};
 	return list;
 }
 
 [[nodiscard]] static
-auto make_output_event_list(device_ext_audio* audio) -> clap_output_events_t {
+auto make_output_event_list(const shm::device& shm) -> clap_output_events_t {
 	clap_output_events_t list;
-	list.ctx = &audio->output_event_buffer;
+	list.ctx = &shm.data->events_in;
 	list.try_push = [](const clap_output_events_t* list, const clap_event_header_t* event) -> bool {
-		const auto event_buffer = static_cast<clap::event_buffer*>(list->ctx);
+		const auto event_buffer = static_cast<shm::event_buffer*>(list->ctx);
 		if (const auto converted_event = scuff::clap::convert(*event)) {
 			event_buffer->push_back(*converted_event);
 		}
@@ -106,9 +391,9 @@ auto make_output_event_list(device_ext_audio* audio) -> clap_output_events_t {
 
 static
 // AUDIO DEVICE
-auto initialize_process_struct_for_audio_device(clap::device_ext_audio* audio) -> void {
-	audio->input_events                = make_input_event_list(audio);
-	audio->output_events               = make_output_event_list(audio);
+auto initialize_process_struct_for_audio_device(const shm::device& shm, clap::device_ext_audio* audio) -> void {
+	audio->input_events                = make_input_event_list(shm);
+	audio->output_events               = make_output_event_list(shm);
 	audio->process.frames_count        = SCUFF_VECTOR_SIZE;
 	audio->process.audio_inputs_count  = static_cast<uint32_t>(audio->buffers.inputs.buffers.size());
 	audio->process.audio_inputs        = audio->buffers.inputs.buffers.data();
@@ -122,9 +407,9 @@ auto initialize_process_struct_for_audio_device(clap::device_ext_audio* audio) -
 
 static
 // EVENT-ONLY DEVICE
-auto initialize_process_struct_for_event_device(clap::device_ext_audio* audio) -> void {
-	audio->input_events                = make_input_event_list(audio);
-	audio->output_events               = make_output_event_list(audio);
+auto initialize_process_struct_for_event_device(const shm::device& shm, clap::device_ext_audio* audio) -> void {
+	audio->input_events                = make_input_event_list(shm);
+	audio->output_events               = make_output_event_list(shm);
 	static auto dummy_buffer           = clap_audio_buffer_t{0};
 	audio->process.frames_count        = SCUFF_VECTOR_SIZE;
 	audio->process.audio_inputs_count  = 0;
@@ -138,33 +423,34 @@ auto initialize_process_struct_for_event_device(clap::device_ext_audio* audio) -
 }
 
 [[nodiscard]] static
-auto init_audio(const device& dev) -> std::shared_ptr<const device_ext_audio> {
+auto init_audio(const sbox::device& dev, const clap::device& clap_dev) -> std::shared_ptr<const device_ext_audio> {
 	auto out = device_ext_audio{};
-	if (dev.iface->plugin.audio_ports) {
+	if (clap_dev.iface->plugin.audio_ports) {
 		// AUDIO PLUGIN
-		out.port_info = retrieve_audio_port_info(dev.iface->plugin);
-		make_audio_buffers(out.port_info, &out.buffers);
-		initialize_process_struct_for_audio_device(&out);
+		make_audio_buffers(*dev.ext.shm_audio_ports, clap_dev.ext.audio_port_info, &out.buffers);
+		initialize_process_struct_for_audio_device(*dev.ext.shm_device, &out);
 	}
 	else {
 		// EVENT-ONLY PLUGIN
-		initialize_process_struct_for_event_device(&out);
+		initialize_process_struct_for_event_device(*dev.ext.shm_device, &out);
 	}
 	return std::make_shared<const device_ext_audio>(std::move(out));
 }
 
 [[nodiscard]] static
-auto init_audio(device&& dev) -> device {
-	dev.ext.audio = init_audio(dev);
-	return dev;
+auto init_audio(clap::device&& clap_dev, const sbox::device& dev) -> device {
+	clap_dev.ext.audio = init_audio(dev, clap_dev);
+	return clap_dev;
 }
 
 static
 auto init_audio(sbox::app* app, id::device dev_id) -> void {
-	const auto m    = app->model.lock_write();
-	auto dev        = m->clap_devices.at(dev_id);
-	dev             = init_audio(std::move(dev));
-	m->clap_devices = m->clap_devices.insert(dev);
+	const auto m                 = app->model.lock_write();
+	auto dev                     = m->devices.at(dev_id);
+	auto clap_dev                = m->clap_devices.at(dev_id);
+	clap_dev.ext.audio_port_info = retrieve_audio_port_info(clap_dev.iface->plugin);
+	clap_dev                     = init_audio(std::move(clap_dev), dev);
+	m->clap_devices              = m->clap_devices.insert(clap_dev);
 	app->model.lock_publish();
 }
 
@@ -268,108 +554,9 @@ auto update(sbox::app* app) -> void {
 	}
 }
 
-} // main
+} // namespace scuff::sbox::clap::main
 
-static
-auto send_msg(sbox::app* app, id::device dev_id, const clap::device_msg::msg& msg) -> void {
-	const auto m = app->model.lockfree_read();
-	if (const auto dev = m->clap_devices.find(dev_id)) {
-		dev->ext.data->msg_q.emplace(std::move(msg));
-	}
-}
-
-static
-auto log(sbox::app* app, id::device dev_id, clap_log_severity severity, const char* msg) -> void {
-	send_msg(app, dev_id, device_msg::log_begin{severity});
-	// Send the message in chunks of 64 characters
-	const auto len        = std::strlen(msg);
-	const auto chunk_size = device_msg::log_text::MAX;
-	for (size_t i = 0; i < len; i += chunk_size) {
-		const auto chunk = std::string_view{msg + i, std::min(chunk_size, len - i)};
-		send_msg(app, dev_id, device_msg::log_text{chunk.data()});
-	}
-	send_msg(app, dev_id, device_msg::log_end{});
-}
-
-[[nodiscard]] static
-auto get_extension(sbox::app* app, id::device dev_id, const char* extension_id) -> const void* {
-	const auto m   = app->model.lock_read();
-	const auto dev = m.clap_devices.at(dev_id);
-	if (extension_id == std::string_view{CLAP_EXT_AUDIO_PORTS})         { return &dev.iface->host.audio_ports; }
-	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU})        { return nullptr; } // Not implemented yet &iface.context_menu; }
-	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU_COMPAT}) { return nullptr; } // Not implemented yet &iface.context_menu; }
-	if (extension_id == std::string_view{CLAP_EXT_GUI})                 { return &dev.iface->host.gui; }
-	if (extension_id == std::string_view{CLAP_EXT_LATENCY})             { return &dev.iface->host.latency; }
-	if (extension_id == std::string_view{CLAP_EXT_LOG})                 { return &dev.iface->host.log; }
-	if (extension_id == std::string_view{CLAP_EXT_PARAMS})              { return &dev.iface->host.params; }
-	if (extension_id == std::string_view{CLAP_EXT_PRESET_LOAD})         { return nullptr; } // Not implemented yet &iface.preset_load; }
-	if (extension_id == std::string_view{CLAP_EXT_PRESET_LOAD_COMPAT})  { return nullptr; } // Not implemented yet &iface.preset_load; }
-	if (extension_id == std::string_view{CLAP_EXT_STATE})               { return &dev.iface->host.state; }
-	if (extension_id == std::string_view{CLAP_EXT_THREAD_CHECK})        { return &dev.iface->host.thread_check; }
-	if (extension_id == std::string_view{CLAP_EXT_TRACK_INFO})          { return &dev.iface->host.track_info; }
-	if (extension_id == std::string_view{CLAP_EXT_TRACK_INFO_COMPAT})   { return &dev.iface->host.track_info; }
-	if (extension_id == std::string_view{CLAP_EXT_TAIL}) {
-		// Not supported at the moment because this extension is too under-specified
-		// https://github.com/free-audio/clap/blob/main/include/clap/ext/tail.h
-		return nullptr;
-	}
-	app->msg_sender.enqueue(scuff::msg::out::report_warning{std::format("Device '{}' requested an unsupported extension: {}", *dev.name, extension_id)});
-	return nullptr;
-}
-
-[[nodiscard]] static
-auto get_host_data(const clap_host_t* host) -> device_host_data& {
-	return *static_cast<device_host_data*>(host->host_data);
-}
-
-static
-auto cb_request_param_flush(sbox::app* app, id::device dev_id) -> void {
-	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
-	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_param_flush, std::memory_order_relaxed);
-}
-
-static
-auto cb_request_process(sbox::app* app, id::device dev_id) -> void {
-	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
-	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_active | device_atomic_flags::schedule_process);
-}
-
-static
-auto cb_request_restart(sbox::app* app, id::device dev_id) -> void {
-	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
-	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_restart);
-}
-
-static
-auto cb_request_callback(sbox::app* app, id::device dev_id) -> void {
-	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
-	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_callback);
-}
-
-static
-auto cb_gui_closed(sbox::app* app, id::device dev_id, bool was_destroyed) -> void {
-	send_msg(app, dev_id, device_msg::gui_closed{was_destroyed});
-}
-
-static
-auto cb_gui_request_hide(sbox::app* app, id::device dev_id) -> void {
-	send_msg(app, dev_id, device_msg::gui_request_hide{});
-}
-
-static
-auto cb_gui_request_show(sbox::app* app, id::device dev_id) -> void {
-	send_msg(app, dev_id, device_msg::gui_request_show{});
-}
-
-static
-auto cb_gui_request_resize(sbox::app* app, id::device dev_id, uint32_t width, uint32_t height) -> void {
-	send_msg(app, dev_id, device_msg::gui_request_resize{width, height});
-}
-
-static
-auto cb_gui_resize_hints_changed(sbox::app* app, id::device dev_id) -> void {
-	send_msg(app, dev_id, device_msg::gui_resize_hints_changed{});
-}
+namespace scuff::sbox::clap::main {
 
 [[nodiscard]] static
 auto make_host_for_instance(device_host_data* host_data) -> iface_host {
@@ -555,10 +742,6 @@ auto init_params(clap::device&& dev) -> clap::device {
 	return dev;
 }
 
-} // scuff::sbox::clap
-
-namespace scuff::sbox::clap::main {
-
 [[nodiscard]] static
 auto make_ext_data(sbox::app* app, id::device id) -> std::shared_ptr<clap::device_ext_data> {
 	auto data = std::make_shared<clap::device_ext_data>();
@@ -568,7 +751,22 @@ auto make_ext_data(sbox::app* app, id::device id) -> std::shared_ptr<clap::devic
 }
 
 [[nodiscard]] static
-auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id) -> clap::device {
+auto make_shm_device(std::string_view instance_id, id::device dev_id) -> std::shared_ptr<shm::device> {
+	return std::make_shared<shm::device>(bip::create_only, shm::device::make_id(instance_id, dev_id));
+}
+
+[[nodiscard]] static
+auto make_shm_audio_ports(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid, size_t input_count, size_t output_count) -> std::shared_ptr<shm::device_audio_ports> {
+	return std::make_shared<shm::device_audio_ports>(bip::create_only, shm::device_audio_ports::make_id(instance_id, sbox_id, dev_id, uid), input_count, output_count);
+}
+
+[[nodiscard]] static
+auto make_shm_param_info(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid, size_t param_count) -> std::shared_ptr<shm::device_param_info> {
+	return std::make_shared<shm::device_param_info>(bip::create_only, shm::device_param_info::make_id(instance_id, sbox_id, dev_id, uid), param_count);
+}
+
+static
+auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id, size_t callback) -> void {
 	const auto entry = scuff::os::find_clap_entry(plugfile_path);
 	if (!entry) {
 		throw std::runtime_error("Couldn't resolve clap_entry");
@@ -590,15 +788,39 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 		throw std::runtime_error("clap_plugin_factory.create_plugin failed");
 	}
 	get_extensions(&iface.plugin);
-	auto dev = clap::device{};
-	dev.id       = dev_id;
-	dev.iface    = std::move(iface);
-	dev.name     = dev.iface->plugin.plugin->desc->name;
-	dev.ext.data = std::move(ext_data);
-	dev = init_gui(std::move(dev));
-	dev = init_audio(std::move(dev));
-	dev = init_params(std::move(dev));
-	return dev;
+	auto dev                     = sbox::device{};
+	auto clap_dev                = clap::device{};
+	dev.id                       = dev_id;
+	dev.type                     = scuff_plugin_type::clap;
+	dev.ext.shm_device           = make_shm_device(app->instance_id, dev_id);
+	clap_dev.ext.audio_port_info = retrieve_audio_port_info(iface.plugin);
+	const auto audio_in_count    = clap_dev.ext.audio_port_info->inputs.size();
+	const auto audio_out_count   = clap_dev.ext.audio_port_info->outputs.size();
+	dev.ext.shm_audio_ports      = make_shm_audio_ports(app->instance_id, app->options.sbox_id, dev_id, app->uid++, audio_in_count, audio_out_count);
+	clap_dev.id                  = dev_id;
+	clap_dev.iface               = std::move(iface);
+	clap_dev.name                = clap_dev.iface->plugin.plugin->desc->name;
+	clap_dev.ext.data            = std::move(ext_data);
+	clap_dev                     = init_gui(std::move(clap_dev));
+	clap_dev                     = init_audio(std::move(clap_dev), dev);
+	clap_dev                     = init_params(std::move(clap_dev));
+	dev.ext.shm_param_info       = make_shm_param_info(app->instance_id, app->options.sbox_id, dev_id, app->uid++, clap_dev.params.size());
+	for (size_t i = 0; i < clap_dev.params.size(); i++) {
+		const auto& param = clap_dev.params[i];
+		shm::param_info info;
+		info.id            = std::format("clap/{}", param.info.id);
+		info.default_value = param.info.default_value;
+		info.max_value     = param.info.max_value;
+		info.min_value     = param.info.min_value;
+		info.name          = param.info.name;
+		info.clap.id       = param.info.id;
+		info.clap.cookie   = param.info.cookie;
+		dev.ext.shm_param_info->arr[i] = std::move(info);
+	}
+	const auto m                 = app->model.lock_write();
+	m->devices                   = m->devices.insert(dev);
+	m->clap_devices              = m->clap_devices.insert(clap_dev);
+	app->msg_sender.enqueue(scuff::msg::out::return_created_device{dev.id.value, dev.ext.shm_audio_ports->id().data(), dev.ext.shm_param_info->id().data(), callback});
 }
 
 [[nodiscard]] static
@@ -647,42 +869,6 @@ auto load(sbox::app* app, id::device dev_id, const std::vector<std::byte>& state
 		return dev.iface->plugin.state->load(dev.iface->plugin.plugin, &is);
 	}
 	return false;
-}
-
-[[nodiscard]] static
-auto make_shm_device(std::string_view instance_id, id::device dev_id) -> std::shared_ptr<shm::device> {
-	return std::make_shared<shm::device>(bip::create_only, shm::device::make_id(instance_id, dev_id));
-}
-
-[[nodiscard]] static
-auto make_shm_audio_ports(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid, size_t input_count, size_t output_count) -> std::shared_ptr<shm::device_audio_ports> {
-	return std::make_shared<shm::device_audio_ports>(bip::create_only, shm::device_audio_ports::make_id(instance_id, sbox_id, dev_id, uid), input_count, output_count);
-}
-
-[[nodiscard]] static
-auto make_shm_param_info(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid, size_t param_count) -> std::shared_ptr<shm::device_param_info> {
-	return std::make_shared<shm::device_param_info>(bip::create_only, shm::device_param_info::make_id(instance_id, sbox_id, dev_id, uid), param_count);
-}
-
-[[nodiscard]] static
-auto make_device_ext(sbox::app* app, const clap::device& dev) -> device_external {
-	device_external ext;
-	ext.shm_device      = make_shm_device(app->instance_id, dev.id);
-	ext.shm_audio_ports = make_shm_audio_ports(app->instance_id, app->options.sbox_id, dev.id, app->uid++, dev.ext.audio->port_info.inputs.size(), dev.ext.audio->port_info.outputs.size());
-	ext.shm_param_info  = make_shm_param_info(app->instance_id, app->options.sbox_id, dev.id, app->uid++, dev.params.size());
-	for (size_t i = 0; i < dev.params.size(); i++) {
-		const auto& param = dev.params[i];
-		shm::param_info info;
-		info.id            = std::format("clap/{}", param.info.id);
-		info.default_value = param.info.default_value;
-		info.max_value     = param.info.max_value;
-		info.min_value     = param.info.min_value;
-		info.name          = param.info.name;
-		info.clap.id       = param.info.id;
-		info.clap.cookie   = param.info.cookie;
-		ext.shm_param_info->arr[i] = std::move(info);
-	}
-	return ext;
 }
 
 [[nodiscard]] static

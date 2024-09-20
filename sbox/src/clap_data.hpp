@@ -13,6 +13,8 @@ namespace bc = boost::container;
 
 namespace scuff::sbox { struct app; };
 
+template <typename T> using rwq = moodycamel::ReaderWriterQueue<T>;
+
 namespace scuff::sbox::clap {
 
 struct iface_plugin {
@@ -93,7 +95,6 @@ struct audio_port_info {
 };
 
 struct audio_buffers_detail {
-	std::vector<std::array<float, SCUFF_VECTOR_SIZE>> vectors;
 	std::vector<std::vector<float*>> arrays;
 	std::vector<clap_audio_buffer_t> buffers;
 };
@@ -103,7 +104,7 @@ struct audio_buffers {
 	audio_buffers_detail outputs;
 };
 
-using event_buffer = bc::static_vector<scuff::event, 500>;
+//using event_buffer = bc::static_vector<scuff::event, 500>;
 
 namespace device_msg { ///////////////////////////////////////////
 
@@ -127,18 +128,15 @@ using msg = std::variant<
 	log_text
 >;
 
-using q = moodycamel::ReaderWriterQueue<msg>;
+using q = rwq<msg>;
 
 } // device_msg /////////////////////////////////////////////////
 
 struct device_ext_audio {
 	clap::audio_buffers buffers;
-	clap::audio_port_info port_info;
 	clap_input_events_t input_events;
 	clap_output_events_t output_events;
 	clap_process_t process;
-	event_buffer input_event_buffer;
-	event_buffer output_event_buffer;
 };
 
 struct device_log_collector {
@@ -156,6 +154,7 @@ struct device_ext_data {
 struct device_ext {
 	std::shared_ptr<device_ext_data> data;
 	std::shared_ptr<const clap::device_ext_audio> audio;
+	immer::box<clap::audio_port_info> audio_port_info;
 };
 
 struct iface {

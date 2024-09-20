@@ -324,8 +324,9 @@ auto on_scuff_plugin_scanned(const scuff_on_plugin_scanned* ctx, scuff_plugin p)
 }
 
 static
-auto on_scuff_sbox_crashed(const scuff_on_sbox_crashed* ctx, scuff_sbox sbox) -> void {
+auto on_scuff_sbox_crashed(const scuff_on_sbox_crashed* ctx, scuff_sbox sbox, const char* error) -> void {
 	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+	// TODO: on_scuff_sbox_crashed
 }
 
 static

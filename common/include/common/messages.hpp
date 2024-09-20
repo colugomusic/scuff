@@ -62,6 +62,7 @@ namespace scuff::msg::out {
 
 struct device_param_info_changed { scuff_device dev_id; std::string new_shmid; };
 struct report_error              { std::string text; };
+struct report_fatal_error        { std::string text; };
 struct report_info               { std::string text; };
 struct report_warning            { std::string text; };
 struct return_created_device     { scuff_device dev_id; std::string ports_shmid; std::string param_info_shmid; size_t callback; };
@@ -72,6 +73,7 @@ struct return_state              { scuff_device dev_id; std::vector<std::byte> b
 using msg = std::variant<
 	device_param_info_changed,
 	report_error,
+	report_fatal_error,
 	report_info,
 	report_warning,
 	return_created_device,
@@ -119,6 +121,11 @@ auto deserialize<scuff::msg::out::return_created_device>(std::span<const std::by
 
 template <> inline
 auto deserialize<scuff::msg::out::report_error>(std::span<const std::byte>* bytes, scuff::msg::out::report_error* msg) -> void {
+	deserialize(bytes, &msg->text);
+}
+
+template <> inline
+auto deserialize<scuff::msg::out::report_fatal_error>(std::span<const std::byte>* bytes, scuff::msg::out::report_fatal_error* msg) -> void {
 	deserialize(bytes, &msg->text);
 }
 
@@ -192,6 +199,11 @@ auto serialize<scuff::msg::out::return_created_device>(const scuff::msg::out::re
 
 template <> inline
 auto serialize<scuff::msg::out::report_error>(const scuff::msg::out::report_error& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(std::string_view{msg.text}, bytes);
+}
+
+template <> inline
+auto serialize<scuff::msg::out::report_fatal_error>(const scuff::msg::out::report_fatal_error& msg, std::vector<std::byte>* bytes) -> void {
 	serialize(std::string_view{msg.text}, bytes);
 }
 

@@ -40,16 +40,8 @@ static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
 	try {
 		if (msg.type == scuff_plugin_type::clap) {
-			auto dev      = scuff::sbox::device{};
-			auto clap_dev = clap::main::create_device(app, dev.id, msg.plugfile_path, msg.plugin_id);
-			dev.id        = {msg.dev_id};
-			dev.type      = msg.type;
-			dev.ext       = clap::main::make_device_ext(app, clap_dev);
-			const auto m    = app->model.lock_write();
-			m->devices      = m->devices.insert(dev);
-			m->clap_devices = m->clap_devices.insert(clap_dev);
+			clap::main::create_device(app, {msg.dev_id}, msg.plugfile_path, msg.plugin_id, msg.callback);
 			app->model.lock_publish();
-			app->msg_sender.enqueue(scuff::msg::out::return_created_device{dev.id.value, dev.ext->shm_audio_ports->id().data(), dev.ext->shm_param_info->id().data(), msg.callback});
 			return;
 		}
 		else {
@@ -229,10 +221,10 @@ static
 auto process_messages(sbox::app* app) -> void {
 	try {
 		const auto receive = [app](std::byte* bytes, size_t count) -> size_t {
-			return app->shm.receive_bytes(bytes, count);
+			return app->shm_sbox.receive_bytes(bytes, count);
 		};
 		const auto send = [app](const std::byte* bytes, size_t count) -> size_t {
-			return app->shm.send_bytes(bytes, count);
+			return app->shm_sbox.send_bytes(bytes, count);
 		};
 		const auto input_msgs = app->msg_receiver.receive(receive);
 		for (const auto& msg : input_msgs) {

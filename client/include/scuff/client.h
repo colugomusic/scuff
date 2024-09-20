@@ -61,7 +61,7 @@ typedef struct scuff_on_plugfile_broken_t       { void* ctx; void (*fn)(const st
 typedef struct scuff_on_plugfile_scanned_t      { void* ctx; void (*fn)(const struct scuff_on_plugfile_scanned_t*, scuff_plugfile plugfile); } scuff_on_plugfile_scanned;
 typedef struct scuff_on_plugin_broken_t         { void* ctx; void (*fn)(const struct scuff_on_plugin_broken_t*, scuff_plugin plugin); } scuff_on_plugin_broken;
 typedef struct scuff_on_plugin_scanned_t        { void* ctx; void (*fn)(const struct scuff_on_plugin_scanned_t*, scuff_plugin plugin); } scuff_on_plugin_scanned;
-typedef struct scuff_on_sbox_crashed_t          { void* ctx; void (*fn)(const struct scuff_on_sbox_crashed_t*, scuff_sbox sbox); } scuff_on_sbox_crashed;
+typedef struct scuff_on_sbox_crashed_t          { void* ctx; void (*fn)(const struct scuff_on_sbox_crashed_t*, scuff_sbox sbox, const char* error); } scuff_on_sbox_crashed;
 typedef struct scuff_on_sbox_error_t            { void* ctx; void (*fn)(const struct scuff_on_sbox_error_t*, scuff_sbox sbox, const char* error); } scuff_on_sbox_error;
 typedef struct scuff_on_sbox_info_t             { void* ctx; void (*fn)(const struct scuff_on_sbox_info_t*, scuff_sbox sbox, const char* info); } scuff_on_sbox_info;
 typedef struct scuff_on_sbox_started_t          { void* ctx; void (*fn)(const struct scuff_on_sbox_started_t*, scuff_sbox sbox); } scuff_on_sbox_started;

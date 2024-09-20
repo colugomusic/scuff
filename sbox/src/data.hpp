@@ -49,22 +49,25 @@ struct device {
 	immer::box<std::string> name;
 	immer::vector<port_conn> input_conns;
 	immer::vector<port_conn> output_conns;
-	immer::box<device_external> ext;
+	device_external ext;
 };
 
 struct model {
 	immer::table<device> devices;
 	immer::table<clap::device> clap_devices;
+	immer::vector<id::device> device_processing_order;
 };
 
 struct app {
 	std::string                 instance_id;
 	sbox::options               options;
-	shm::sandbox                shm;
+	shm::group                  shm_group;
+	shm::sandbox                shm_sbox;
 	std::jthread                audio_thread;
 	msg::sender<msg::out::msg>  msg_sender;
 	msg::receiver<msg::in::msg> msg_receiver;
 	std::atomic<uint64_t>       uid = 0;
+	std::atomic_bool            schedule_terminate = false;
 	std::thread::id             main_thread_id;
 	audio_sync<model>           model;
 };

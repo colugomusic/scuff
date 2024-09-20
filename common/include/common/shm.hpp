@@ -7,6 +7,7 @@
 #include <boost/interprocess/containers/vector.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/interprocess/segment_manager.hpp>
+#include <boost/interprocess/sync/interprocess_condition.hpp>
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
 #include <boost/interprocess/ipc/message_queue.hpp>
@@ -88,9 +89,6 @@ private:
 using audio_buffer = std::array<float, SCUFF_VECTOR_SIZE * SCUFF_CHANNEL_COUNT>;
 using event_buffer = bc::static_vector<scuff::event, SCUFF_EVENT_PORT_SIZE>;
 
-template <typename T>
-using ab = std::array<T, 2>;
-
 struct device_flags {
 	enum e {
 		has_gui          = 1 << 0,
@@ -104,8 +102,8 @@ struct device_flags {
 struct device_data {
 	size_t param_count = 0;
 	device_flags flags;
-	ab<event_buffer> events_in;
-	ab<event_buffer> events_out;
+	event_buffer events_in;
+	event_buffer events_out;
 	bip::interprocess_mutex mutex;
 };
 
@@ -115,12 +113,14 @@ struct sandbox_data {
 };
 
 struct group_data {
-	// This is incremented to signal all
+	// This is incremented before signaling the
 	// sandboxes in the group to process.
 	std::atomic<uint64_t> epoch = 0;
 	// Each sandbox process decrements this
 	// counter when it is finished processing.
-	ab<std::atomic<uint64_t>> sandboxes_processing;
+	std::atomic<uint64_t> sandboxes_processing;
+	bip::interprocess_mutex mut;
+	bip::interprocess_condition cv;
 };
 
 struct param_info {
@@ -218,11 +218,11 @@ private:
 struct device_audio_ports : segment {
 	size_t input_count  = 0;
 	size_t output_count = 0;
-	ab<audio_buffer>* input_buffers  = nullptr;
-	ab<audio_buffer>* output_buffers = nullptr;
+	audio_buffer* input_buffers  = nullptr;
+	audio_buffer* output_buffers = nullptr;
 	device_audio_ports() = default;
 	device_audio_ports(bip::create_only_t, std::string_view id, size_t input_port_count, size_t output_port_count)
-		: segment{id, sizeof(ab<audio_buffer>) * (input_port_count + output_port_count) + SEGMENT_OVERHEAD}
+		: segment{id, sizeof(audio_buffer) * (input_port_count + output_port_count) + SEGMENT_OVERHEAD}
 	{
 		create(input_port_count, output_port_count);
 	}
@@ -233,19 +233,19 @@ struct device_audio_ports : segment {
 	}
 	[[nodiscard]] static
 	auto make_id(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid) -> std::string {
-		return std::format("{}+sbox+{}+dev+{}+ports+uid", instance_id, sbox_id.value, dev_id.value, uid);
+		return std::format("{}+sbox+{}+dev+{}+ports+{}", instance_id, sbox_id.value, dev_id.value, uid);
 	}
 private:
 	auto create(size_t input_port_count, size_t output_port_count) -> void {
 		assert (input_port_count > 0 || output_port_count > 0);
 		input_count    = input_port_count;
 		output_count   = output_port_count;
-		if (input_port_count > 0)  { input_buffers  = seg().construct<ab<audio_buffer>>(OBJECT_AUDIO_IN)[input_port_count](); }
-		if (output_port_count > 0) { output_buffers = seg().construct<ab<audio_buffer>>(OBJECT_AUDIO_OUT)[output_port_count](); }
+		if (input_port_count > 0)  { input_buffers  = seg().construct<audio_buffer>(OBJECT_AUDIO_IN)[input_port_count](); }
+		if (output_port_count > 0) { output_buffers = seg().construct<audio_buffer>(OBJECT_AUDIO_OUT)[output_port_count](); }
 	}
 	auto open() -> void {
-		input_count  = find_shm_obj<ab<audio_buffer>>(&seg(), OBJECT_AUDIO_IN, &input_buffers);
-		output_count = find_shm_obj<ab<audio_buffer>>(&seg(), OBJECT_AUDIO_OUT, &output_buffers);
+		input_count  = find_shm_obj<audio_buffer>(&seg(), OBJECT_AUDIO_IN, &input_buffers);
+		output_count = find_shm_obj<audio_buffer>(&seg(), OBJECT_AUDIO_OUT, &output_buffers);
 	}
 };
 

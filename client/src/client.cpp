@@ -19,36 +19,18 @@ auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id) 
 	return args;
 }
 
-[[nodiscard]] static
-auto wait_for_output_ready(const scuff::group& group, size_t frontside) -> bool {
-	auto ready = [data = group.external->shm.data, frontside]() -> bool {
-		return data->sandboxes_processing[frontside].load(std::memory_order_acquire) < 1;
-	};
-	if (ready()) {
-		return true;
-	}
-	// Spin-wait until the sandboxes have finished processing.
-	// If a sandbox is misbehaving then this might time out
-	// and the buffer would be missed.
-	auto success = speen::wait_for_a_bit(ready);
-	assert (success && "Sandbox timed out");
-	return false;
-}
-
 static
-auto write_audio(const scuff::device& dev, const scuff_audio_writers& writers, size_t backside) -> void {
+auto write_audio(const scuff::device& dev, const scuff_audio_writers& writers) -> void {
 	for (size_t j = 0; j < writers.count; j++) {
 		const auto& writer = writers.writers[j];
-		auto& ab           = dev.external->shm_audio_ports->input_buffers[writer.port_index];
-		auto& buffer       = ab[backside];
+		auto& buffer       = dev.external->shm_audio_ports->input_buffers[writer.port_index];
 		writer.fn(&writer, buffer.data());
 	}
 }
 
 static
-auto write_events(const scuff::device& dev, const scuff_event_writer& writer, size_t backside) -> void {
-	auto& ab               = dev.external->shm_device->data->events_in;
-	auto& buffer           = ab[backside];
+auto write_events(const scuff::device& dev, const scuff_event_writer& writer) -> void {
+	auto& buffer           = dev.external->shm_device->data->events_in;
 	const auto event_count = std::min(writer.count(&writer), size_t(SCUFF_EVENT_PORT_SIZE));
 	for (size_t j = 0; j < event_count; j++) {
 		const auto header = writer.get(&writer, j);
@@ -59,22 +41,21 @@ auto write_events(const scuff::device& dev, const scuff_event_writer& writer, si
 }
 
 static
-auto write_entry_ports(const scuff::model& m, const scuff_input_devices& devices, size_t backside) -> void {
+auto write_entry_ports(const scuff::model& m, const scuff_input_devices& devices) -> void {
 	for (size_t i = 0; i < devices.count; i++) {
 		const auto& item  = devices.devices[i];
 		const auto dev_id = id::device{item.dev};
 		const auto& dev   = m.devices.at(dev_id);
-		write_audio(dev, item.audio_writers, backside);
-		write_events(dev, item.event_writer, backside);
+		write_audio(dev, item.audio_writers);
+		write_events(dev, item.event_writer);
 	}
 }
 
 static
-auto read_audio(const scuff::device& dev, const scuff_audio_readers& readers, size_t frontside) -> void {
+auto read_audio(const scuff::device& dev, const scuff_audio_readers& readers) -> void {
 	for (size_t j = 0; j < readers.count; j++) {
 		const auto& reader = readers.readers[j];
-		const auto& ab     = dev.external->shm_audio_ports->output_buffers[reader.port_index];
-		const auto& buffer = ab[frontside];
+		const auto& buffer = dev.external->shm_audio_ports->output_buffers[reader.port_index];
 		reader.fn(&reader, buffer.data());
 	}
 }
@@ -89,9 +70,8 @@ auto read_zeros(const scuff::device& dev, const scuff_audio_readers& readers) ->
 }
 
 static
-auto read_events(const scuff::device& dev, const scuff_event_reader& reader, size_t frontside) -> void {
-	auto& ab               = dev.external->shm_device->data->events_out;
-	auto& buffer           = ab[frontside];
+auto read_events(const scuff::device& dev, const scuff_event_reader& reader) -> void {
+	auto& buffer           = dev.external->shm_device->data->events_out;
 	const auto event_count = buffer.size();
 	for (size_t j = 0; j < event_count; j++) {
 		const auto& event  = buffer[j];
@@ -114,33 +94,58 @@ auto read_events(const scuff::device& dev, const scuff_event_reader& reader, siz
 }
 
 static
-auto read_exit_ports(const scuff::model& m, const scuff::group& group, const scuff_output_devices& devices, size_t frontside) -> void {
-	if (scuff::wait_for_output_ready(group, frontside)) {
-		for (size_t i = 0; i < devices.count; i++) {
-			const auto& item  = devices.devices[i];
-			const auto dev_id = id::device{item.dev};
-			const auto& dev   = m.devices.at(dev_id);
-			read_audio(dev, item.audio_readers, frontside);
-			read_events(dev, item.event_reader, frontside);
-		}
-	}
-	else {
-		for (size_t i = 0; i < devices.count; i++) {
-			const auto& item  = devices.devices[i];
-			const auto dev_id = id::device{item.dev};
-			const auto& dev   = m.devices.at(dev_id);
-			read_zeros(dev, item.audio_readers);
-		}
+auto read_exit_ports(const scuff::model& m, const scuff_output_devices& devices) -> void {
+	for (size_t i = 0; i < devices.count; i++) {
+		const auto& item  = devices.devices[i];
+		const auto dev_id = id::device{item.dev};
+		const auto& dev   = m.devices.at(dev_id);
+		read_audio(dev, item.audio_readers);
+		read_events(dev, item.event_reader);
 	}
 }
 
 static
-auto signal_sandbox_processing(const scuff::group& group, uint64_t epoch, size_t backside) -> void {
+auto read_zeros(const scuff::model& m, const scuff_output_devices& devices) -> void {
+	for (size_t i = 0; i < devices.count; i++) {
+		const auto& item  = devices.devices[i];
+		const auto dev_id = id::device{item.dev};
+		const auto& dev   = m.devices.at(dev_id);
+		read_zeros(dev, item.audio_readers);
+	}
+}
+
+static
+auto signal_sandbox_processing(const scuff::group& group, uint64_t epoch) -> void {
 	auto& data = *group.external->shm.data;
 	// Set the sandbox counter
-	data.sandboxes_processing[backside].store(group.sandboxes.size());
-	// Set the epoch. This will trigger the sandboxes to begin processing.
+	data.sandboxes_processing.store(group.sandboxes.size());
+	auto lock = std::unique_lock{data.mut};
+	// Set the epoch.
 	data.epoch.store(epoch, std::memory_order_release);
+	// Signal sandboxes to start processing.
+	data.cv.notify_all();
+}
+
+[[nodiscard]] static
+auto wait_for_all_sandboxes_done(const scuff::group& group) -> bool {
+	 // the sandboxes not completing their work within 1 second is a
+	 // catastrophic failure.
+	static constexpr auto MAX_WAIT_TIME = std::chrono::seconds{1};
+	auto& data = *group.external->shm.data;
+	auto done = [&data]() -> bool {
+		return data.sandboxes_processing.load(std::memory_order_acquire) < 1;
+	};
+	if (done()) {
+		return true;
+	}
+	auto lock = std::unique_lock{data.mut};
+	return group.external->shm.data->cv.wait_for(lock, MAX_WAIT_TIME, done);
+}
+
+[[nodiscard]] static
+auto do_sandbox_processing(const scuff::group& group, uint64_t epoch) -> bool {
+	signal_sandbox_processing(group, epoch);
+	return wait_for_all_sandboxes_done(group);
 }
 
 static
@@ -191,6 +196,12 @@ auto process_message_(id::sandbox sbox_id, const msg::out::device_param_info_cha
 static
 auto process_message_(id::sandbox sbox_id, const msg::out::report_error& msg) -> void {
 	DATA_->callbacks.on_sbox_error.fn(&DATA_->callbacks.on_sbox_error, sbox_id.value, msg.text.c_str());
+}
+
+static
+auto process_message_(id::sandbox sbox_id, const msg::out::report_fatal_error& msg) -> void {
+	DATA_->callbacks.on_sbox_crashed.fn(&DATA_->callbacks.on_sbox_crashed, sbox_id.value, msg.text.c_str());
+	// TODO: terminate the sandbox process if it is still running and figure out what else needs to be done here.
 }
 
 static
@@ -703,11 +714,13 @@ auto scuff_audio_process(scuff_group_process process) -> void {
 	const auto audio     = scuff::DATA_->model.lockfree_read();
 	const auto& group    = audio->groups.at({process.group});
 	const auto epoch     = ++group.external->epoch;
-	const auto backside  = (epoch + 0) % 2;
-	const auto frontside = (epoch + 1) % 2;
-	scuff::write_entry_ports(*audio, process.input_devices, backside);
-	scuff::signal_sandbox_processing(group, epoch, backside);
-	scuff::read_exit_ports(*audio, group, process.output_devices, frontside);
+	scuff::write_entry_ports(*audio, process.input_devices);
+	if (scuff::do_sandbox_processing(group, epoch)) {
+		scuff::read_exit_ports(*audio, process.output_devices);
+	}
+	else {
+		scuff::read_zeros(*audio, process.output_devices);
+	}
 }
 
 auto scuff_init(const scuff_config* config) -> bool {
