@@ -48,6 +48,7 @@ struct segment {
 	}
 	[[nodiscard]] auto seg() -> bip::managed_shared_memory& { return seg_; }
 	[[nodiscard]] auto id() const -> std::string_view { return id_; }
+	[[nodiscard]] auto is_valid() const -> bool { return !id_.empty(); }
 private:
 	segment(std::string_view id, size_t segment_size, bool remove_when_done)
 		: id_{id}
@@ -201,6 +202,7 @@ private:
 struct device : segment {
 	static constexpr auto SEGMENT_SIZE = sizeof(device_data) + SEGMENT_OVERHEAD;
 	device_data* data = nullptr;
+	device() = default;
 	device(bip::create_only_t, std::string_view id) : segment{id, SEGMENT_SIZE} { create(); }
 	device(bip::open_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id} { open(); }
 	[[nodiscard]] static
@@ -216,7 +218,7 @@ private:
 	}
 };
 
-/* For a less memory usage, could do something like this.
+/* For less memory usage, could do something like this.
  * Not doing this at the moment because it complicates things a lot.
 struct device_audio_ports : segment {
 	size_t input_count  = 0;

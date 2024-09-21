@@ -451,7 +451,7 @@ auto init_audio(sbox::app* app, id::device dev_id) -> void {
 	clap_dev.ext.audio_port_info = retrieve_audio_port_info(clap_dev.iface->plugin);
 	clap_dev                     = init_audio(std::move(clap_dev), dev);
 	m->clap_devices              = m->clap_devices.insert(clap_dev);
-	app->model.lock_publish();
+	app->model.lock_publish(*m);
 }
 
 static

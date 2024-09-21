@@ -116,7 +116,7 @@ auto read_zeros(const scuff::model& m, const scuff_output_devices& devices) -> v
 
 static
 auto signal_sandbox_processing(const scuff::group& group, uint64_t epoch) -> void {
-	auto& data = *group.external->shm.data;
+	auto& data = *group.service->shm.data;
 	// Set the sandbox counter
 	data.sandboxes_processing.store(group.sandboxes.size());
 	auto lock = std::unique_lock{data.mut};
@@ -131,7 +131,7 @@ auto wait_for_all_sandboxes_done(const scuff::group& group) -> bool {
 	 // the sandboxes not completing their work within 1 second is a
 	 // catastrophic failure.
 	static constexpr auto MAX_WAIT_TIME = std::chrono::seconds{1};
-	auto& data = *group.external->shm.data;
+	auto& data = *group.service->shm.data;
 	auto done = [&data]() -> bool {
 		return data.sandboxes_processing.load(std::memory_order_acquire) < 1;
 	};
@@ -139,7 +139,7 @@ auto wait_for_all_sandboxes_done(const scuff::group& group) -> bool {
 		return true;
 	}
 	auto lock = std::unique_lock{data.mut};
-	return group.external->shm.data->cv.wait_for(lock, MAX_WAIT_TIME, done);
+	return group.service->shm.data->cv.wait_for(lock, MAX_WAIT_TIME, done);
 }
 
 [[nodiscard]] static
@@ -157,15 +157,15 @@ static
 auto process_message_(id::sandbox sbox_id, const msg::out::return_created_device& msg) -> void {
 	const auto m         = DATA_->model.lock_write();
 	const auto sbox      = m->sandboxes.at(sbox_id);
-	const auto return_fn = sbox.external->return_buffers.devices.take(msg.callback);
+	const auto return_fn = sbox.service->return_buffers.devices.take(msg.callback);
 	if (!msg.ports_shmid.empty()) {
 		// The sandbox succeeded in creating the remote device.
 		auto device             = m->devices.at({msg.dev_id});
 		const auto device_shmid = shm::device::make_id(DATA_->instance_id, {msg.dev_id});
-		device.shm = std::make_shared<shm::device>(bip::open_only, shm::segment::remove_when_done, device_shmid);
+		device.shm = shm::device{bip::open_only, shm::segment::remove_when_done, device_shmid};
 		m->devices = m->devices.insert(device);
 		return_fn({msg.dev_id}, true);
-		DATA_->model.lock_publish(); // Device may not have been published yet.
+		DATA_->model.lock_publish(*m); // Device may not have been published yet.
 	}
 	else {
 		// The sandbox failed to create the remote device.
@@ -208,7 +208,7 @@ static
 auto process_message_(id::sandbox sbox_id, const msg::out::return_param_value& msg) -> void {
 	const auto m         = DATA_->model.lock_read();
 	const auto sbox      = m.sandboxes.at(sbox_id);
-	const auto return_fn = sbox.external->return_buffers.doubles.take(msg.callback);
+	const auto return_fn = sbox.service->return_buffers.doubles.take(msg.callback);
 	return_fn.fn(&return_fn, msg.value);
 }
 
@@ -216,7 +216,7 @@ static
 auto process_message_(id::sandbox sbox_id, const msg::out::return_param_value_text& msg) -> void {
 	const auto m         = DATA_->model.lock_read();
 	const auto sbox      = m.sandboxes.at(sbox_id);
-	const auto return_fn = sbox.external->return_buffers.strings.take(msg.callback);
+	const auto return_fn = sbox.service->return_buffers.strings.take(msg.callback);
 	return_fn.fn(&return_fn, msg.text.c_str());
 }
 
@@ -224,7 +224,7 @@ static
 auto process_message_(id::sandbox sbox_id, const msg::out::return_state& msg) -> void {
 	const auto m    = DATA_->model.lock_read();
 	const auto sbox = m.sandboxes.at(sbox_id);
-	const auto return_fn = sbox.external->return_buffers.states.take(msg.callback);
+	const auto return_fn = sbox.service->return_buffers.states.take(msg.callback);
 	return_fn(msg.bytes);
 }
 
@@ -237,13 +237,13 @@ auto process_message(id::sandbox sbox_id, const msg::out::msg& msg) -> void {
 
 static
 auto process_sandbox_messages(const sandbox& sbox) -> void {
-	if (!sbox.external->proc.running()) {
+	if (!sbox.service->proc.running()) {
 		// The sandbox process has stopped unexpectedly.
 		// TODO: Handle this situation
 		return;
 	}
-	sbox.external->send_msgs();
-	const auto msgs = sbox.external->receive_msgs();
+	sbox.service->send_msgs();
+	const auto msgs = sbox.service->receive_msgs();
 	for (const auto& msg : msgs) {
 		process_message(sbox.id, msg);
 	}
@@ -274,7 +274,7 @@ auto poll_thread(std::stop_token stop_token) -> void {
 
 static
 auto is_running(const sandbox& sbox) -> bool {
-	return sbox.external->proc.running();
+	return sbox.service->proc.running();
 }
 
 static
@@ -287,28 +287,34 @@ auto close_all_editors() -> void {
 	const auto sandboxes = scuff::DATA_->model.lock_read().sandboxes;
 	for (const auto& sandbox : sandboxes) {
 		if (is_running(sandbox)) {
-			sandbox.external->enqueue(scuff::msg::in::close_all_editors{});
+			sandbox.service->enqueue(scuff::msg::in::close_all_editors{});
 		}
 	}
 }
 
 static
 auto device_connect(scuff_device dev_out_id, size_t port_out, scuff_device dev_in_id, size_t port_in) -> void {
-	const auto m        = DATA_->model.lock_read();
-	const auto& dev_out = m.devices.at({dev_out_id});
-	const auto& dev_in  = m.devices.at({dev_in_id});
+	const auto m        = DATA_->model.lock_write();
+	const auto& dev_out = m->devices.at({dev_out_id});
+	const auto& dev_in  = m->devices.at({dev_in_id});
 	if (dev_out.sbox == dev_in.sbox) {
 		// Devices are in the same sandbox
-		const auto& sbox = m.sandboxes.at(dev_out.sbox);
-		sbox.external->enqueue(scuff::msg::in::device_connect{dev_out_id, port_out, dev_in_id, port_in});
+		const auto& sbox = m->sandboxes.at(dev_out.sbox);
+		sbox.service->enqueue(scuff::msg::in::device_connect{dev_out_id, port_out, dev_in_id, port_in});
 		return;
 	}
 	// Devices are in different sandboxes
-	const auto& sbox_out = m.sandboxes.at(dev_out.sbox);
-	const auto& sbox_in  = m.sandboxes.at(dev_in.sbox);
-	sbox_out.external->enqueue(scuff::msg::in::device_connect{dev_out_id, port_out, dev_in_id, port_in});
-	sbox_in.external->enqueue(scuff::msg::in::device_connect{dev_out_id, port_out, dev_in_id, port_in});
-	// TODO: audio port shared mem segment tracking
+	const auto& sbox_out    = m->sandboxes.at(dev_out.sbox);
+	const auto& sbox_in     = m->sandboxes.at(dev_in.sbox);
+	const auto group_out_id = sbox_out.group;
+	const auto group_in_id  = sbox_in.group;
+	if (group_out_id != group_in_id) {
+		throw std::runtime_error("Cannot connect devices that exist in different sandbox groups.");
+	}
+	auto group = m->groups.at(group_out_id);
+	group.cross_sbox_conns = group.cross_sbox_conns.set(id::device{dev_out_id}, id::device{dev_in_id});
+	m->groups = m->groups.insert(group);
+	DATA_->model.lock_publish(*m);
 }
 
 static
@@ -347,10 +353,10 @@ auto device_create(model&& m, const sandbox& sbox, scuff_plugin_type type, ext::
 		return m;
 	}
 	// Plugin is available so we need to send a message to the sandbox to create the remote device.
-	const auto callback = sbox.external->return_buffers.devices.put(return_fn);
+	const auto callback = sbox.service->return_buffers.devices.put(return_fn);
 	const auto plugin   = m.plugins.at(dev.plugin);
 	const auto plugfile = m.plugfiles.at(plugin.plugfile);
-	sbox.external->enqueue(msg::in::device_create{dev.id.value, type, plugfile.path, plugin_ext_id.value, callback});
+	sbox.service->enqueue(msg::in::device_create{dev.id.value, type, plugfile.path, plugin_ext_id.value, callback});
 	return m;
 }
 
@@ -365,21 +371,27 @@ auto device_create(scuff_sbox sbox_id, scuff_plugin_type type, scuff_plugin_id p
 
 static
 auto device_disconnect(scuff_device dev_out_id, size_t port_out, scuff_device dev_in_id, size_t port_in) -> void {
-	const auto m        = DATA_->model.lock_read();
-	const auto& dev_out = m.devices.at({dev_out_id});
-	const auto& dev_in  = m.devices.at({dev_in_id});
+	const auto m        = DATA_->model.lock_write();
+	const auto& dev_out = m->devices.at({dev_out_id});
+	const auto& dev_in  = m->devices.at({dev_in_id});
 	if (dev_out.sbox == dev_in.sbox) {
 		// Devices are in the same sandbox.
-		const auto& sbox = m.sandboxes.at(dev_out.sbox);
-		sbox.external->enqueue(scuff::msg::in::device_disconnect{dev_out_id, port_out, dev_in_id, port_in});
+		const auto& sbox = m->sandboxes.at(dev_out.sbox);
+		sbox.service->enqueue(scuff::msg::in::device_disconnect{dev_out_id, port_out, dev_in_id, port_in});
 		return;
 	}
 	// Devices are in different sandboxes.
-	const auto& sbox_out = m.sandboxes.at(dev_out.sbox);
-	const auto& sbox_in  = m.sandboxes.at(dev_in.sbox);
-	sbox_out.external->enqueue(scuff::msg::in::device_disconnect{dev_out_id, port_out, dev_in_id, port_in});
-	sbox_in.external->enqueue(scuff::msg::in::device_disconnect{dev_out_id, port_out, dev_in_id, port_in});
-	// TODO: audio port shared mem segment tracking
+	const auto& sbox_out    = m->sandboxes.at(dev_out.sbox);
+	const auto& sbox_in     = m->sandboxes.at(dev_in.sbox);
+	const auto group_out_id = sbox_out.group;
+	const auto group_in_id  = sbox_in.group;
+	if (group_out_id != group_in_id) {
+		throw std::runtime_error("Connected devices somehow exist in different sandbox groups?!");
+	}
+	auto group             = m->groups.at(group_out_id);
+	group.cross_sbox_conns = group.cross_sbox_conns.erase(id::device{dev_out_id});
+	m->groups              = m->groups.insert(group);
+	DATA_->model.lock_publish(*m);
 }
 
 static
@@ -393,7 +405,7 @@ auto device_duplicate(scuff_device src_dev_id, scuff_sbox dst_sbox_id, scuff_ret
 	const auto type          = src_dev.type;
 	// We're going to send a message to the source sandbox to save the source device.
 	// When the saved state is returned, call this function with it:
-	const auto save_cb       = src_sbox.external->return_buffers.states.put([plugin_ext_id, plugin, type, dst_sbox, fn](const std::vector<std::byte>& src_state) {
+	const auto save_cb       = src_sbox.service->return_buffers.states.put([plugin_ext_id, plugin, type, dst_sbox, fn](const std::vector<std::byte>& src_state) {
 		// Now we're going to send a message to the destination sandbox to actually create the new device,
 		// if the plugin is available.
 		// When the new device is created, call this function with it:
@@ -401,7 +413,7 @@ auto device_duplicate(scuff_device src_dev_id, scuff_sbox dst_sbox_id, scuff_ret
 			if (success) {
 				// Remote device was created successfully.
 				// Now send a message to the destination sandbox to load the saved state into the new device.
-				dst_sbox.external->enqueue(scuff::msg::in::device_load{dev_id.value, src_state});
+				dst_sbox.service->enqueue(scuff::msg::in::device_load{dev_id.value, src_state});
 			}
 			// Call user's callback
 			fn.fn(&fn, dev_id.value, success);
@@ -409,7 +421,7 @@ auto device_duplicate(scuff_device src_dev_id, scuff_sbox dst_sbox_id, scuff_ret
 		const auto m = scuff::DATA_->model.lock_write();
 		*m = device_create(std::move(*m), dst_sbox, type, plugin_ext_id, plugin, return_fn);
 	});
-	src_sbox.external->enqueue(msg::in::device_save{src_dev_id, save_cb});
+	src_sbox.service->enqueue(msg::in::device_save{src_dev_id, save_cb});
 }
 
 static
@@ -420,11 +432,11 @@ auto device_erase(id::device dev_id) -> void {
 	const auto& group = m->groups.at(sbox.group);
 	for (const auto sbox_id : group.sandboxes) {
 		const auto& sbox = m->sandboxes.at(sbox_id);
-		sbox.external->enqueue(msg::in::device_erase{dev_id.value});
+		sbox.service->enqueue(msg::in::device_erase{dev_id.value});
 	}
 	*m = remove_device_from_sandbox(std::move(*m), dev.sbox, dev_id);
 	m->devices = m->devices.erase(dev_id);
-	DATA_->model.lock_publish();
+	DATA_->model.lock_publish(*m);
 }
 
 static
@@ -441,7 +453,7 @@ static
 auto device_get_param_count(scuff_device dev) -> size_t {
 	const auto m       = DATA_->model.lock_read();
 	const auto& device = m.devices.at({dev});
-	if (!device.shm) {
+	if (!device.shm->is_valid()) {
 		// Device wasn't successfully created by the sandbox process (yet?)
 		return 0;
 	}
@@ -454,8 +466,8 @@ auto device_get_param_value_text(scuff_device dev, scuff_param param, double val
 	const auto m        = DATA_->model.lock_read();
 	const auto& device  = m.devices.at({dev});
 	const auto& sbox    = m.sandboxes.at(device.sbox);
-	const auto callback = sbox.external->return_buffers.strings.put(fn);
-	sbox.external->enqueue(msg::in::get_param_value_text{dev, param, value, callback});
+	const auto callback = sbox.service->return_buffers.strings.put(fn);
+	sbox.service->enqueue(msg::in::get_param_value_text{dev, param, value, callback});
 }
 
 static
@@ -467,7 +479,7 @@ static
 auto device_has_gui(scuff_device dev) -> bool {
 	const auto m       = DATA_->model.lock_read();
 	const auto& device = m.devices.at({dev});
-	if (!device.shm) {
+	if (!device.shm->is_valid()) {
 		// Device wasn't successfully created by the sandbox process (yet?)
 		return false;
 	}
@@ -479,7 +491,7 @@ static
 auto device_has_params(scuff_device dev) -> bool {
 	const auto m       = DATA_->model.lock_read();
 	const auto& device = m.devices.at({dev});
-	if (!device.shm) {
+	if (!device.shm->is_valid()) {
 		// Device wasn't successfully created by the sandbox process (yet?)
 		return false;
 	}
@@ -492,7 +504,7 @@ auto device_set_render_mode(scuff_device dev, scuff_render_mode mode) -> void {
 	const auto m       = DATA_->model.lock_read();
 	const auto& device = m.devices.at({dev});
 	const auto& sbox   = m.sandboxes.at(device.sbox);
-	sbox.external->enqueue(scuff::msg::in::device_set_render_mode{dev, mode});
+	sbox.service->enqueue(scuff::msg::in::device_set_render_mode{dev, mode});
 }
 
 static
@@ -500,7 +512,7 @@ auto device_gui_hide(scuff_device dev) -> void {
 	const auto m       = DATA_->model.lock_read();
 	const auto& device = m.devices.at({dev});
 	const auto& sbox   = m.sandboxes.at(device.sbox);
-	sbox.external->enqueue(scuff::msg::in::device_gui_hide{dev});
+	sbox.service->enqueue(scuff::msg::in::device_gui_hide{dev});
 }
 
 static
@@ -508,7 +520,7 @@ auto device_gui_show(scuff_device dev) -> void {
 	const auto m       = DATA_->model.lock_read();
 	const auto& device = m.devices.at({dev});
 	const auto& sbox   = m.sandboxes.at(device.sbox);
-	sbox.external->enqueue(scuff::msg::in::device_gui_show{dev});
+	sbox.service->enqueue(scuff::msg::in::device_gui_show{dev});
 }
 
 static
@@ -523,8 +535,8 @@ auto group_create() -> scuff_group {
 	group.id     = id::group{id_gen_++};
 	try {
 		const auto shmid = shm::group::make_id(DATA_->instance_id, group.id);
-		group.external = std::make_shared<group_external>();
-		group.external->shm = shm::group{bip::create_only, shm::segment::remove_when_done, shmid};
+		group.service = std::make_shared<group_service>();
+		group.service->shm = shm::group{bip::create_only, shm::segment::remove_when_done, shmid};
 	} catch (const std::exception& err) {
 		DATA_->callbacks.on_error.fn(&DATA_->callbacks.on_error, err.what());
 		return -1;
@@ -539,12 +551,12 @@ auto group_erase(id::group group_id) -> void {
 	const auto& group = m->groups.at(group_id);
 	for (const auto sbox_id : group.sandboxes) {
 		const auto& sbox = m->sandboxes.at(sbox_id);
-		if (sbox.external->proc.running()) {
-			sbox.external->proc.terminate();
+		if (sbox.service->proc.running()) {
+			sbox.service->proc.terminate();
 		}
 	}
 	m->groups = m->groups.erase(group_id);
-	DATA_->model.lock_publish();
+	DATA_->model.lock_publish(*m);
 }
 
 static
@@ -557,8 +569,8 @@ auto param_get_value(scuff_device dev, scuff_param param, scuff_return_double fn
 	const auto& m       = DATA_->model.lock_read();
 	const auto& device  = m.devices.at({dev});
 	const auto& sbox    = m.sandboxes.at(device.sbox);
-	const auto callback = sbox.external->return_buffers.doubles.put(fn);
-	sbox.external->enqueue(scuff::msg::in::get_param_value{dev, param, callback});
+	const auto callback = sbox.service->return_buffers.doubles.put(fn);
+	sbox.service->enqueue(scuff::msg::in::get_param_value{dev, param, callback});
 }
 
 static
@@ -592,7 +604,7 @@ auto push_event(scuff_device dev, const scuff_event_header* event) -> void {
 	const auto& device = m.devices.at({dev});
 	const auto& sbox   = m.sandboxes.at(device.sbox);
 	if (const auto converted = convert(*event)) {
-		sbox.external->enqueue(scuff::msg::in::event{dev, *converted});
+		sbox.service->enqueue(scuff::msg::in::event{dev, *converted});
 	}
 }
 
@@ -636,13 +648,13 @@ auto restart(scuff_sbox sbox, const char* sbox_exe_path) -> void {
 	const auto m       = DATA_->model.lock_read();
 	const auto sandbox = m.sandboxes.at({sbox});
 	const auto& group  = m.groups.at(sandbox.group);
-	if (sandbox.external->proc.running()) {
-		sandbox.external->proc.terminate();
+	if (sandbox.service->proc.running()) {
+		sandbox.service->proc.terminate();
 	}
-	const auto group_shmid   = group.external->shm.id();
-	const auto sandbox_shmid = sandbox.external->get_shmid();
+	const auto group_shmid   = group.service->shm.id();
+	const auto sandbox_shmid = sandbox.service->get_shmid();
 	const auto exe_args      = scuff::make_sbox_exe_args(group_shmid, sandbox_shmid);
-	sandbox.external->proc   = bp::child{sbox_exe_path, exe_args};
+	sandbox.service->proc   = bp::child{sbox_exe_path, exe_args};
 	// TODO: the rest of this
 }
 
@@ -658,12 +670,12 @@ auto sandbox_create(scuff_group group_id, const char* sbox_exe_path) -> scuff_sb
 	sbox.id = id::sandbox{id_gen_++};
 	try {
 		const auto& group        = m->groups.at({group_id});
-		const auto group_shmid   = group.external->shm.id();
+		const auto group_shmid   = group.service->shm.id();
 		const auto sandbox_shmid = shm::sandbox::make_id(DATA_->instance_id, sbox.id);
 		const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid);
 		auto proc                = bp::child{sbox_exe_path, exe_args};
 		sbox.group               = {group_id};
-		sbox.external            = std::make_shared<sandbox_external>(std::move(proc), sandbox_shmid);
+		sbox.service            = std::make_shared<sandbox_service>(std::move(proc), sandbox_shmid);
 		// Add sandbox to group
 		*m = add_sandbox_to_group(std::move(*m), {group_id}, sbox.id);
 	}
@@ -672,7 +684,7 @@ auto sandbox_create(scuff_group group_id, const char* sbox_exe_path) -> scuff_sb
 		DATA_->callbacks.on_sbox_error.fn(&DATA_->callbacks.on_sbox_error, sbox.id.value, err.what());
 	}
 	m->sandboxes = m->sandboxes.insert(sbox);
-	DATA_->model.lock_publish();
+	DATA_->model.lock_publish(*m);
 	return sbox.id.value;
 }
 
@@ -682,7 +694,7 @@ auto sandbox_erase(scuff_sbox sbox) -> void {
 	const auto& sandbox = m->sandboxes.at({sbox});
 	*m = remove_sandbox_from_group(std::move(*m), sandbox.group, {sbox});
 	m->sandboxes = m->sandboxes.erase({sbox});
-	DATA_->model.lock_publish();
+	DATA_->model.lock_publish(*m);
 }
 
 static
@@ -694,8 +706,8 @@ static
 auto set_sample_rate(scuff_sample_rate sr) -> void {
 	const auto m = DATA_->model.lock_read();
 	for (const auto& sbox : m.sandboxes) {
-		if (sbox.external->proc.running()) {
-			sbox.external->enqueue(msg::in::set_sample_rate{sr});
+		if (sbox.service->proc.running()) {
+			sbox.service->enqueue(msg::in::set_sample_rate{sr});
 		}
 	}
 }
@@ -705,7 +717,7 @@ auto set_sample_rate(scuff_sample_rate sr) -> void {
 auto scuff_audio_process(scuff_group_process process) -> void {
 	const auto audio     = scuff::DATA_->model.lockfree_read();
 	const auto& group    = audio->groups.at({process.group});
-	const auto epoch     = ++group.external->epoch;
+	const auto epoch     = ++group.service->epoch;
 	scuff::write_entry_ports(*audio, process.input_devices);
 	if (scuff::do_sandbox_processing(group, epoch)) {
 		scuff::read_exit_ports(*audio, process.output_devices);

@@ -81,7 +81,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 			clap::main::create_device(app, {msg.dev_id}, msg.plugfile_path, msg.plugin_id, msg.callback);
 			const auto m = app->model.lock_write();
 			m->device_processing_order = make_device_processing_order(m->devices);
-			app->model.lock_publish();
+			app->model.lock_publish(*m);
 			return;
 		}
 		else {
@@ -109,7 +109,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& ms
 	out_dev.output_conns = out_dev.output_conns.push_back(conn);
 	m->devices                 = m->devices.insert(out_dev);
 	m->device_processing_order = make_device_processing_order(m->devices);
-	app->model.lock_publish();
+	app->model.lock_publish(*m);
 }
 
 static
@@ -131,7 +131,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect&
 	out_dev.output_conns       = out_dev.output_conns.erase(pos.index());
 	m->devices                 = m->devices.insert(out_dev);
 	m->device_processing_order = make_device_processing_order(m->devices);
-	app->model.lock_publish();
+	app->model.lock_publish(*m);
 }
 
 static
@@ -151,7 +151,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg)
 	m->devices                 = m->devices.erase({msg.dev_id});
 	m->clap_devices            = m->clap_devices.erase({msg.dev_id});
 	m->device_processing_order = make_device_processing_order(m->devices);
-	app->model.lock_publish();
+	app->model.lock_publish(*m);
 }
 
 static

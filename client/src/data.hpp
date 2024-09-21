@@ -8,6 +8,7 @@
 #include <cs_plain_guarded.h>
 #include <deque>
 #include <immer/box.hpp>
+#include <immer/map.hpp>
 #include <immer/set.hpp>
 #include <immer/table.hpp>
 
@@ -37,11 +38,11 @@ struct sbox_flags {
 	int value = 0;
 };
 
-struct sandbox_external {
-	using shptr = std::shared_ptr<sandbox_external>;
+struct sandbox_service {
+	using shptr = std::shared_ptr<sandbox_service>;
 	bp::child proc;
 	return_buffers return_buffers;
-	sandbox_external(bp::child&& proc, std::string_view shmid)
+	sandbox_service(bp::child&& proc, std::string_view shmid)
 		: proc{std::move(proc)}
 		, shm_{bip::create_only, shm::segment::remove_when_done, shmid}
 	{}
@@ -71,8 +72,8 @@ private:
 	msg::receiver<msg::out::msg> msg_receiver_;
 };
 
-struct group_external {
-	using shptr = std::shared_ptr<group_external>;
+struct group_service {
+	using shptr = std::shared_ptr<group_service>;
 	shm::group shm;
 	uint64_t epoch = 0;
 };
@@ -85,7 +86,7 @@ struct device {
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
 	immer::box<std::string> name;
-	std::shared_ptr<const shm::device> shm;
+	immer::box<shm::device> shm;
 };
 
 struct sandbox {
@@ -94,13 +95,14 @@ struct sandbox {
 	immer::box<std::string> error;
 	immer::set<id::device> devices;
 	sbox_flags flags;
-	sandbox_external::shptr external;
+	sandbox_service::shptr service;
 };
 
 struct group {
 	id::group id;
 	immer::set<id::sandbox> sandboxes;
-	group_external::shptr external;
+	immer::map<id::device, id::device> cross_sbox_conns;
+	group_service::shptr service;
 };
 
 struct plugin {

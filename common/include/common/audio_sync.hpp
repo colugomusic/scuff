@@ -44,7 +44,7 @@ template <typename T>
 struct audio_sync {
 	auto lockfree_read() const -> std::shared_ptr<const T> { return published_model_.read(); }
 	auto lock_gc() -> void                                 { published_model_.garbage_collect(); }
-	auto lock_publish() -> void                            { published_model_.set(lock_read()); }
+	auto lock_publish(T model) -> void                     { published_model_.set(std::move(model)); }
 	auto lock_read() const -> T                            { return *working_model_.lock(); }
 	auto lock_write()                                      { return working_model_.lock(); }
 private:
