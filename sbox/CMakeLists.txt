@@ -18,12 +18,12 @@ set(BOOST_LIBS_OPTIONAL
 	CACHE STRING "Boost libraries to be compiled"
 	FORCE
 )
-CPMAddPackage(NAME boost-cmake   GITHUB_REPOSITORY colugomusic/boost-cmake      GIT_TAG master                                               )
-CPMAddPackage(NAME clap          GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES                           )
-CPMAddPackage(NAME ent           GITHUB_REPOSITORY colugomusic/ent              GIT_TAG main                                                 )
-CPMAddPackage(NAME immer         GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                                               )
-CPMAddPackage(NAME nappgui       GITHUB_REPOSITORY frang75/nappgui_src          GIT_TAG v1.4.2   OPTIONS "NAPPGUI_DEMO OFF" "NAPPGUI_WEB OFF")
-CPMAddPackage(Name rwq           GITHUB_REPOSITORY cameron314/readerwriterqueue GIT_TAG v1.0.6                                               )
+CPMAddPackage(NAME boost-cmake GITHUB_REPOSITORY colugomusic/boost-cmake      GIT_TAG master                                               )
+CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES                           )
+CPMAddPackage(NAME ent         GITHUB_REPOSITORY colugomusic/ent              GIT_TAG main                                                 )
+CPMAddPackage(NAME immer       GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                                               )
+CPMAddPackage(NAME nappgui     GITHUB_REPOSITORY frang75/nappgui_src          GIT_TAG b65fc31  OPTIONS "NAPPGUI_DEMO OFF" "NAPPGUI_WEB OFF" "CMAKE_DISABLE_CRTDBG ON")
+CPMAddPackage(Name rwq         GITHUB_REPOSITORY cameron314/readerwriterqueue GIT_TAG v1.0.6                                               )
 set(NAPPGUI_ROOT_PATH ${nappgui_SOURCE_DIR})
 nap_generate_tools()
 nap_desktop_app(scuff-sbox osapp NRC_EMBEDDED)
