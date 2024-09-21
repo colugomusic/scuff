@@ -7,9 +7,12 @@
 #include "options.hpp"
 #include <boost/static_string.hpp>
 #include <cs_plain_guarded.h>
-#include <immer/box.hpp>
-#include <immer/table.hpp>
 #include <memory>
+#pragma warning(push, 0)
+#include <immer/box.hpp>
+#include <immer/flex_vector.hpp>
+#include <immer/table.hpp>
+#pragma warning(pop)
 
 namespace scuff::sbox {
 
@@ -33,7 +36,7 @@ struct port_conn {
 	id::device other_device;
 	size_t this_port_index;
 	size_t other_port_index;
-	bool outside = false;
+	auto operator<=>(const port_conn&) const = default;
 };
 
 struct device {
@@ -42,20 +45,13 @@ struct device {
 	device_ui ui;
 	scuff_plugin_type type;
 	immer::box<std::string> name;
-	immer::vector<port_conn> input_conns;
-	immer::vector<port_conn> output_conns;
-	std::shared_ptr<shm::device> shm;
-};
-
-struct outside_device {
-	id::device id;
+	immer::flex_vector<port_conn> output_conns;
 	std::shared_ptr<shm::device> shm;
 };
 
 struct model {
 	immer::table<device> devices;
 	immer::table<clap::device> clap_devices;
-	immer::table<outside_device> outside_devices;
 	immer::vector<id::device> device_processing_order;
 };
 

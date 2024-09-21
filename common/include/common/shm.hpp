@@ -202,7 +202,7 @@ struct device : segment {
 	static constexpr auto SEGMENT_SIZE = sizeof(device_data) + SEGMENT_OVERHEAD;
 	device_data* data = nullptr;
 	device(bip::create_only_t, std::string_view id) : segment{id, SEGMENT_SIZE} { create(); }
-	device(bip::open_only_t, std::string_view id) : segment{id} { open(); }
+	device(bip::open_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id} { open(); }
 	[[nodiscard]] static
 	auto make_id(std::string_view instance_id, id::device dev_id) -> std::string {
 		return std::format("{}+dev+{}", instance_id, dev_id.value);

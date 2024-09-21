@@ -162,9 +162,7 @@ auto process_message_(id::sandbox sbox_id, const msg::out::return_created_device
 		// The sandbox succeeded in creating the remote device.
 		auto device             = m->devices.at({msg.dev_id});
 		const auto device_shmid = shm::device::make_id(DATA_->instance_id, {msg.dev_id});
-		// This segment may be opened by sandbox processes so we need to track
-		// that and manually remove it when there are no references to it.
-		device.shm = std::make_shared<shm::device>(bip::open_only, device_shmid);
+		device.shm = std::make_shared<shm::device>(bip::open_only, shm::segment::remove_when_done, device_shmid);
 		m->devices = m->devices.insert(device);
 		return_fn({msg.dev_id}, true);
 		DATA_->model.lock_publish(); // Device may not have been published yet.
@@ -190,6 +188,8 @@ auto process_message_(id::sandbox sbox_id, const msg::out::report_error& msg) ->
 
 static
 auto process_message_(id::sandbox sbox_id, const msg::out::report_fatal_error& msg) -> void {
+	// This message could be received if the sandbox process
+	// manages to prematurely terminate itself in a "clean" way.
 	DATA_->callbacks.on_sbox_crashed.fn(&DATA_->callbacks.on_sbox_crashed, sbox_id.value, msg.text.c_str());
 	// TODO: terminate the sandbox process if it is still running and figure out what else needs to be done here.
 }
@@ -422,7 +422,6 @@ auto device_erase(id::device dev_id) -> void {
 		const auto& sbox = m->sandboxes.at(sbox_id);
 		sbox.external->enqueue(msg::in::device_erase{dev_id.value});
 	}
-	// TODO: track how many references there are to the device shared memory segments and remove them manually.
 	*m = remove_device_from_sandbox(std::move(*m), dev.sbox, dev_id);
 	m->devices = m->devices.erase(dev_id);
 	DATA_->model.lock_publish();

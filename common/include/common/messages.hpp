@@ -24,8 +24,7 @@ struct close_all_editors      {};
 struct device_create          { scuff_device dev_id; scuff_plugin_type type; std::string plugfile_path; std::string plugin_id; size_t callback; };
 struct device_connect         { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
 struct device_disconnect      { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
-struct device_erase           { scuff_device dev_id; }; // This is sent to every sandbox in the device's sandbox group, so that they can clear any
-                                                        // connections to the device.
+struct device_erase           { scuff_device dev_id; };
 struct device_gui_hide        { scuff_device dev_id; };
 struct device_gui_show        { scuff_device dev_id; };
 struct device_load            { scuff_device dev_id; std::vector<std::byte> state; };
