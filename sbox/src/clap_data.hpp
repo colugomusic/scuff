@@ -104,8 +104,6 @@ struct audio_buffers {
 	audio_buffers_detail outputs;
 };
 
-//using event_buffer = bc::static_vector<scuff::event, 500>;
-
 namespace device_msg { ///////////////////////////////////////////
 
 struct gui_closed { bool destroyed; };
@@ -149,6 +147,8 @@ struct device_ext_data {
 	device_host_data host_data;
 	device_msg::q msg_q;
 	device_log_collector log_collector;
+	scuff::events::clap::event_buffer input_event_buffer;
+	scuff::events::clap::event_buffer output_event_buffer;
 };
 
 struct device_ext {

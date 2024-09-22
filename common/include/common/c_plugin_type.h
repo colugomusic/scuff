@@ -1,3 +1,7 @@
 #pragma once
 
-typedef enum scuff_plugin_type_t { clap, vst2, vst3 } scuff_plugin_type;
+enum {
+	scuff_plugin_type_clap,
+	scuff_plugin_type_vst2,
+	scuff_plugin_type_vst3
+};

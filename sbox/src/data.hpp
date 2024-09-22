@@ -2,7 +2,7 @@
 
 #include "clap_data.hpp"
 #include "common/audio_sync.hpp"
-#include "common/shm.hpp"
+#include "common/events.hpp"
 #include "common/slot_buffer.hpp"
 #include "options.hpp"
 #include <boost/static_string.hpp>
@@ -47,6 +47,7 @@ struct device {
 	immer::box<std::string> name;
 	immer::flex_vector<port_conn> output_conns;
 	std::shared_ptr<shm::device> shm;
+	std::shared_ptr<scuff::events::event_buffer> output_events;
 };
 
 struct model {
@@ -56,17 +57,18 @@ struct model {
 };
 
 struct app {
-	std::string                 instance_id;
-	sbox::options               options;
-	shm::group                  shm_group;
-	shm::sandbox                shm_sbox;
-	std::jthread                audio_thread;
-	msg::sender<msg::out::msg>  msg_sender;
-	msg::receiver<msg::in::msg> msg_receiver;
-	std::atomic<uint64_t>       uid = 0;
-	std::atomic_bool            schedule_terminate = false;
-	std::thread::id             main_thread_id;
-	audio_sync<model>           model;
+	std::string                        instance_id;
+	sbox::options                      options;
+	shm::group                         shm_group;
+	shm::sandbox                       shm_sbox;
+	std::jthread                       audio_thread;
+	msg::sender<msg::out::msg>         msg_sender;
+	msg::receiver<msg::in::msg>        msg_receiver;
+	std::thread::id                    main_thread_id;
+	audio_sync<sbox::model>            model;
+	std::shared_ptr<const sbox::model> audio_model;
+	std::atomic<uint64_t>              uid = 0;
+	std::atomic_bool                   schedule_terminate = false;
 };
 
 } // scuff::sbox

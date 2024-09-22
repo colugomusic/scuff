@@ -18,29 +18,29 @@ auto copy_data_from_output(const shm::device& dest, size_t dest_port_index, cons
 }
 
 static
-auto copy_data_from_connected_outputs(const sbox::model& m, const sbox::device& dev) -> void {
+auto copy_data_from_connected_outputs(const sbox::app& app, const sbox::device& dev) -> void {
 	for (const auto& conn : dev.output_conns) {
-		copy_data_from_output(*m.devices.at(conn.other_device).shm, conn.other_port_index, *dev.shm, conn.this_port_index);
+		copy_data_from_output(*app.audio_model->devices.at(conn.other_device).shm, conn.other_port_index, *dev.shm, conn.this_port_index);
 	}
 }
 
 static
-auto do_processing(const sbox::model& m, const sbox::device& dev) -> void {
+auto do_processing(const sbox::app& app, const sbox::device& dev) -> void {
 	if (dev.type == scuff_plugin_type::clap) {
-		scuff::sbox::clap::audio::process(m, dev);
+		scuff::sbox::clap::audio::process(app, dev);
 	}
 	else {
 		// Not implemented yet.
 	}
-	audio::copy_data_from_connected_outputs(m, dev);
+	audio::copy_data_from_connected_outputs(app, dev);
 }
 
 static
 auto do_processing(sbox::app* app) -> void {
-	const auto m = app->model.lockfree_read();
-	for (const auto dev_id : m->device_processing_order) {
-		const auto dev = m->devices.at(dev_id);
-		do_processing(*m, dev);
+	app->audio_model = app->model.lockfree_read();
+	for (const auto dev_id : app->audio_model->device_processing_order) {
+		const auto dev = app->audio_model->devices.at(dev_id);
+		do_processing(dev);
 	}
 	const auto shm_group  = app->shm_group.data;
 	const auto prev_value = shm_group->sandboxes_processing.fetch_sub(1, std::memory_order_release);
@@ -48,6 +48,7 @@ auto do_processing(sbox::app* app) -> void {
 		// Notify the client that all sandboxes have finished their work.
 		shm_group->cv.notify_one();
 	}
+	app->audio_model.reset();
 }
 
 static

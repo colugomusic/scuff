@@ -280,8 +280,8 @@ auto process_event_device(const sbox::device& dev, const clap::device& clap_dev)
 	dev.shm->data->events_in.clear();
 }
 
-auto process(const sbox::model& m, const sbox::device& dev) -> void {
-	const auto& clap_dev = m.clap_devices.at(dev.id);
+auto process(const sbox::app& app, const sbox::device& dev) -> void {
+	const auto& clap_dev = app.audio_model->clap_devices.at(dev.id);
 	const auto& iface    = clap_dev.iface->plugin;
 	if (!is_active(clap_dev)) {
 		return;
@@ -361,29 +361,31 @@ auto retrieve_audio_port_info(const iface_plugin& iface) -> audio_port_info {
 }
 
 [[nodiscard]] static
-auto make_input_event_list(const shm::device& shm) -> clap_input_events_t {
+auto make_input_event_list(const clap::device& dev) -> clap_input_events_t {
 	clap_input_events_t list;
-	list.ctx = &shm.data->events_in;
+	list.ctx = &dev.ext.data->input_event_buffer;
 	list.size = [](const clap_input_events_t* list) -> uint32_t {
-		const auto& event_buffer = *static_cast<const shm::event_buffer*>(list->ctx);
+		const auto& event_buffer = *static_cast<const events::clap::event_buffer*>(list->ctx);
 		return static_cast<uint32_t>(event_buffer.size());
 	};
 	list.get = [](const clap_input_events_t* list, uint32_t index) -> const clap_event_header_t* {
-		const auto& event_buffer = *static_cast<const shm::event_buffer*>(list->ctx);
-		return &scuff::clap::convert(event_buffer[index]);
+		const auto& event_buffer = *static_cast<const events::clap::event_buffer*>(list->ctx);
+		return &scuff::events::clap::to_header(event_buffer[index]);
 	};
 	return list;
 }
 
 [[nodiscard]] static
-auto make_output_event_list(const shm::device& shm) -> clap_output_events_t {
+auto find_param(void* cookie, clap_id param_id) -> scuff_param {
+}
+
+[[nodiscard]] static
+auto make_output_event_list(const clap::device& dev) -> clap_output_events_t {
 	clap_output_events_t list;
-	list.ctx = &shm.data->events_in;
-	list.try_push = [](const clap_output_events_t* list, const clap_event_header_t* event) -> bool {
-		const auto event_buffer = static_cast<shm::event_buffer*>(list->ctx);
-		if (const auto converted_event = scuff::clap::convert(*event)) {
-			event_buffer->push_back(*converted_event);
-		}
+	list.ctx = &dev.ext.data->output_event_buffer;
+	list.try_push = [](const clap_output_events_t* list, const clap_event_header_t* hdr) -> bool {
+		const auto event_buffer = static_cast<events::clap::event_buffer*>(list->ctx);
+		event_buffer->push_back(scuff::events::clap::to_event(*hdr));
 		return true;
 	};
 	return list;

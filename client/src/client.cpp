@@ -75,20 +75,7 @@ auto read_events(const scuff::device& dev, const scuff_event_reader& reader) -> 
 	const auto event_count = buffer.size();
 	for (size_t j = 0; j < event_count; j++) {
 		const auto& event  = buffer[j];
-		if (scuff::is_clap_event(event)) {
-			scuff_event_clap e;
-			e.header.type = scuff_event_type_clap;
-			e.event       = &scuff::clap::convert(event);
-			reader.push(&reader, &e.header);
-			continue;
-		}
-		if (scuff::is_vst_event(event)) {
-			scuff_event_vst e;
-			e.header.type = scuff_event_type_vst;
-			// ... Not implemented yet ...
-			reader.push(&reader, &e.header);
-			continue;
-		}
+		reader.push(&reader, &scuff::convert(event));
 	}
 	buffer.clear();
 }

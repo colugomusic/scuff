@@ -1,6 +1,6 @@
 #pragma once
 
-#include "c_constants.h"
+#include "common/events.hpp"
 #include "messages.hpp"
 #include <array>
 #include <boost/interprocess/containers/string.hpp>
@@ -11,7 +11,6 @@
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
 #include <boost/interprocess/ipc/message_queue.hpp>
-#include <boost/container/static_vector.hpp>
 #include <boost/static_string.hpp>
 #include <clap/id.h>
 #include <deque>
@@ -19,7 +18,6 @@
 #include <numeric>
 #include <string>
 
-namespace bc  = boost::container;
 namespace bip = boost::interprocess;
 
 namespace scuff::shm {
@@ -88,7 +86,6 @@ private:
 };
 
 using audio_buffer = std::array<float, SCUFF_VECTOR_SIZE * SCUFF_CHANNEL_COUNT>;
-using event_buffer = bc::static_vector<scuff::event, SCUFF_EVENT_PORT_SIZE>;
 
 struct device_flags {
 	enum e {
