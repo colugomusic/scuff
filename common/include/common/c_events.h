@@ -20,7 +20,6 @@ typedef struct scuff_event_header_t {
 	uint32_t time;
 	uint16_t CLAP_space_id;
 	uint16_t event_type;
-	uint16_t plugin_type;
 	uint32_t flags;
 } scuff_event_header;
 
@@ -77,9 +76,8 @@ typedef struct scuff_event_note_expression_t {
 } scuff_event_note_expression;
 
 typedef struct scuff_event_param_value_t {
-	scuff_event_header_t header;
-	void* cookie;      // For CLAP events
-	uint32_t param_id; // Could be a clap_id, or a scuff_param, depending on the plugin type
+	scuff_event_header header;
+	scuff_param param;
 	int32_t note_id;
 	int16_t port_index;
 	int16_t channel;
@@ -89,8 +87,7 @@ typedef struct scuff_event_param_value_t {
 
 typedef struct scuff_event_param_mod_t {
 	scuff_event_header_t header;
-	void* cookie;      // For CLAP events
-	uint32_t param_id; // Could be a clap_id, or a scuff_param, depending on the plugin type
+	scuff_param param;
 	int32_t note_id;
 	int16_t port_index;
 	int16_t channel;
@@ -100,8 +97,7 @@ typedef struct scuff_event_param_mod_t {
 
 typedef struct scuff_event_param_gesture_t {
 	scuff_event_header_t header;
-	void* cookie;      // For CLAP events
-	uint32_t param_id; // Could be a clap_id, or a scuff_param, depending on the plugin type
+	scuff_param param;
 } scuff_event_param_gesture;
 
 enum {

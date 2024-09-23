@@ -26,15 +26,15 @@ using event = std::variant<
 
 [[nodiscard]] static
 auto to_event(const scuff_event_header& e) -> event {
-	if (e.type == scuff_event_type_midi_sysex)          { return *reinterpret_cast<const scuff_event_midi_sysex*>(&e); }
-	if (e.type == scuff_event_type_midi)                { return *reinterpret_cast<const scuff_event_midi*>(&e); }
-	if (e.type == scuff_event_type_midi2)               { return *reinterpret_cast<const scuff_event_midi2*>(&e); }
-	if (e.type == scuff_event_type_note_expression)     { return *reinterpret_cast<const scuff_event_note_expression*>(&e); }
-	if (e.type == scuff_event_type_param_gesture_begin) { return *reinterpret_cast<const scuff_event_param_gesture*>(&e); }
-	if (e.type == scuff_event_type_param_gesture_end)   { return *reinterpret_cast<const scuff_event_param_gesture*>(&e); }
-	if (e.type == scuff_event_type_param_mod)           { return *reinterpret_cast<const scuff_event_param_mod*>(&e); }
-	if (e.type == scuff_event_type_param_value)         { return *reinterpret_cast<const scuff_event_param_value*>(&e); }
-	if (e.type == scuff_event_type_transport)           { return *reinterpret_cast<const scuff_event_transport*>(&e); }
+	if (e.event_type == scuff_event_type_midi_sysex)          { return *reinterpret_cast<const scuff_event_midi_sysex*>(&e); }
+	if (e.event_type == scuff_event_type_midi)                { return *reinterpret_cast<const scuff_event_midi*>(&e); }
+	if (e.event_type == scuff_event_type_midi2)               { return *reinterpret_cast<const scuff_event_midi2*>(&e); }
+	if (e.event_type == scuff_event_type_note_expression)     { return *reinterpret_cast<const scuff_event_note_expression*>(&e); }
+	if (e.event_type == scuff_event_type_param_gesture_begin) { return *reinterpret_cast<const scuff_event_param_gesture*>(&e); }
+	if (e.event_type == scuff_event_type_param_gesture_end)   { return *reinterpret_cast<const scuff_event_param_gesture*>(&e); }
+	if (e.event_type == scuff_event_type_param_mod)           { return *reinterpret_cast<const scuff_event_param_mod*>(&e); }
+	if (e.event_type == scuff_event_type_param_value)         { return *reinterpret_cast<const scuff_event_param_value*>(&e); }
+	if (e.event_type == scuff_event_type_transport)           { return *reinterpret_cast<const scuff_event_transport*>(&e); }
 	throw std::runtime_error("scuff::events::convert(event): Invalid event type");
 }
 
@@ -68,14 +68,16 @@ using event = std::variant<
 	clap_event_transport_t
 >;
 
-template <typename Fn> concept find_param_fn           = requires(Fn fn, void* cookie, clap_id param_id) { { fn(cookie, param_id) } -> std::same_as<scuff_param>; };
-template <typename Fn> concept get_param_cookie_fn     = requires(Fn fn, scuff_param param) { { fn(param) } -> std::same_as<void*>; };
-template <typename Fn> concept get_param_id_fn         = requires(Fn fn, scuff_param param) { { fn(param) } -> std::same_as<clap_id>; };
-template <typename T>  concept has_find_param_fn       = requires { { T::find_param } -> find_param_fn; };
-template <typename T>  concept has_get_param_cookie_fn = requires { { T::get_param_cookie } -> get_param_cookie_fn; };
-template <typename T>  concept has_get_param_id_fn     = requires { { T::get_param_id } -> get_param_id_fn; };
+template <typename Fn> concept find_param_fn             = requires(Fn fn, void* cookie, clap_id param_id) { { fn(cookie, param_id) } -> std::same_as<scuff_param>; };
+template <typename Fn> concept find_param_from_id_fn     = requires(Fn fn, clap_id param_id) { { fn(param_id) } -> std::same_as<scuff_param>; };
+template <typename Fn> concept get_param_cookie_fn       = requires(Fn fn, scuff_param param) { { fn(param) } -> std::same_as<void*>; };
+template <typename Fn> concept get_param_id_fn           = requires(Fn fn, scuff_param param) { { fn(param) } -> std::same_as<clap_id>; };
+template <typename T>  concept has_find_param_fn         = requires { { T::find_param } -> find_param_fn; };
+template <typename T>  concept has_find_param_from_id_fn = requires { { T::find_param_from_id } -> find_param_from_id_fn; };
+template <typename T>  concept has_get_param_cookie_fn   = requires { { T::get_param_cookie } -> get_param_cookie_fn; };
+template <typename T>  concept has_get_param_id_fn       = requires { { T::get_param_id } -> get_param_id_fn; };
 
-template <typename T> concept clap_to_scuff_conversion = has_find_param_fn<T>;
+template <typename T> concept clap_to_scuff_conversion = has_find_param_fn<T> && has_find_param_from_id_fn<T>;
 template <typename T> concept scuff_to_clap_conversion = has_get_param_cookie_fn<T> && has_get_param_id_fn<T>;
 
 template <scuff::events::clap::find_param_fn FindParamFn>
@@ -162,7 +164,7 @@ auto from_scuff(const scuff_event_header& hdr) -> clap_event_header_t {
 	out.flags    = flags_from_scuff(hdr.flags);
 	out.size     = hdr.size;
 	out.time     = hdr.time;
-	out.type     = type_from_scuff(hdr.type);
+	out.type     = type_from_scuff(hdr.event_type);
 	return out;
 }
 
@@ -307,7 +309,7 @@ auto to_scuff(const clap_event_header_t& hdr) -> scuff_event_header {
 	out.flags         = flags_to_scuff(hdr.flags);
 	out.size          = hdr.size;
 	out.time          = hdr.time;
-	out.type          = type_to_scuff(hdr.type);
+	out.event_type    = type_to_scuff(hdr.type);
 	return out;
 }
 
@@ -355,7 +357,7 @@ template <clap_to_scuff_conversion Conv> [[nodiscard]] static
 auto to_scuff_(const clap_event_param_gesture_t& e, const Conv& fns) -> scuff::events::event {
 	scuff_event_param_gesture out;
 	out.header = to_scuff(e.header);
-	out.param  = fns.find_param(e.cookie, e.param_id);
+	out.param  = fns.find_param_from_id(e.param_id);
 	return out;
 }
 

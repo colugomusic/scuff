@@ -20,13 +20,13 @@ auto copy_data_from_output(const shm::device& dest, size_t dest_port_index, cons
 static
 auto copy_data_from_connected_outputs(const sbox::app& app, const sbox::device& dev) -> void {
 	for (const auto& conn : dev.output_conns) {
-		copy_data_from_output(*app.audio_model->devices.at(conn.other_device).shm, conn.other_port_index, *dev.shm, conn.this_port_index);
+		copy_data_from_output(*app.audio_model->devices.at(conn.other_device).service.shm, conn.other_port_index, *dev.service.shm, conn.this_port_index);
 	}
 }
 
 static
 auto do_processing(const sbox::app& app, const sbox::device& dev) -> void {
-	if (dev.type == scuff_plugin_type::clap) {
+	if (dev.type == scuff_plugin_type_clap) {
 		scuff::sbox::clap::audio::process(app, dev);
 	}
 	else {
@@ -40,7 +40,7 @@ auto do_processing(sbox::app* app) -> void {
 	app->audio_model = app->model.lockfree_read();
 	for (const auto dev_id : app->audio_model->device_processing_order) {
 		const auto dev = app->audio_model->devices.at(dev_id);
-		do_processing(dev);
+		do_processing(*app, dev);
 	}
 	const auto shm_group  = app->shm_group.data;
 	const auto prev_value = shm_group->sandboxes_processing.fetch_sub(1, std::memory_order_release);

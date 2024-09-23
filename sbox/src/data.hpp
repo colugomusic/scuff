@@ -2,6 +2,7 @@
 
 #include "clap_data.hpp"
 #include "common/audio_sync.hpp"
+#include "common/c_plugin_type.h"
 #include "common/events.hpp"
 #include "common/slot_buffer.hpp"
 #include "options.hpp"
@@ -39,6 +40,11 @@ struct port_conn {
 	auto operator<=>(const port_conn&) const = default;
 };
 
+struct device_service {
+	immer::box<shm::device> shm;
+	std::shared_ptr<scuff::events::event_buffer> output_events;
+};
+
 struct device {
 	id::device id;
 	device_flags flags;
@@ -46,8 +52,7 @@ struct device {
 	scuff_plugin_type type;
 	immer::box<std::string> name;
 	immer::flex_vector<port_conn> output_conns;
-	std::shared_ptr<shm::device> shm;
-	std::shared_ptr<scuff::events::event_buffer> output_events;
+	device_service service;
 };
 
 struct model {

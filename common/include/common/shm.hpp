@@ -32,13 +32,27 @@ struct segment {
 	static constexpr auto remove_when_done = remove_when_done_t{};
 	segment() = default;
 	segment(const segment&) = delete;
-	segment(segment&&) noexcept = default;
 	segment& operator=(const segment&) = delete;
-	segment& operator=(segment&&) noexcept = default;
 	segment(std::string_view id) : segment{id, false} {}
 	segment(remove_when_done_t, std::string_view id) : segment{id, true} {}
 	segment(std::string_view id, size_t segment_size) : segment{id, segment_size, false} {}
 	segment(remove_when_done_t, std::string_view id, size_t segment_size) : segment{id, segment_size, true} {}
+	segment(segment&& rhs) noexcept
+		: seg_{std::move(rhs.seg_)}
+		, id_{std::move(rhs.id_)}
+		, remove_when_done_{rhs.remove_when_done_}
+	{
+		rhs.remove_when_done_ = false;
+	}
+	segment& operator=(segment&& rhs) noexcept {
+		if (this != &rhs) {
+			seg_              = std::move(rhs.seg_);
+			id_               = std::move(rhs.id_);
+			remove_when_done_ = rhs.remove_when_done_;
+			rhs.remove_when_done_ = false;
+		}
+		return *this;
+	}
 	~segment() {
 		if (remove_when_done_) {
 			bip::shared_memory_object::remove(id_.c_str());
@@ -110,8 +124,8 @@ struct param_info {
 
 struct device_data {
 	device_flags flags;
-	event_buffer events_in;
-	event_buffer events_out;
+	scuff::events::event_buffer events_in;
+	scuff::events::event_buffer events_out;
 	bc::static_vector<param_info, SCUFF_MAX_PARAMS> param_info;
 	bc::static_vector<audio_buffer, SCUFF_MAX_AUDIO_PORTS> audio_in;
 	bc::static_vector<audio_buffer, SCUFF_MAX_AUDIO_PORTS> audio_out;

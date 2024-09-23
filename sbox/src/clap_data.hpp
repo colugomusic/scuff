@@ -130,7 +130,13 @@ using q = rwq<msg>;
 
 } // device_msg /////////////////////////////////////////////////
 
-struct device_ext_audio {
+struct device_service_data;
+
+struct event_queue_context {
+	device_service_data* service_data;
+};
+
+struct device_service_audio {
 	clap::audio_buffers buffers;
 	clap_input_events_t input_events;
 	clap_output_events_t output_events;
@@ -142,18 +148,20 @@ struct device_log_collector {
 	std::vector<boost::static_string<device_msg::log_text::MAX>> chunks;
 };
 
-struct device_ext_data {
+struct device_service_data {
 	device_atomic_flags atomic_flags;
 	device_host_data host_data;
 	device_msg::q msg_q;
 	device_log_collector log_collector;
 	scuff::events::clap::event_buffer input_event_buffer;
 	scuff::events::clap::event_buffer output_event_buffer;
+	event_queue_context input_events_context;
+	event_queue_context output_events_context;
 };
 
-struct device_ext {
-	std::shared_ptr<device_ext_data> data;
-	std::shared_ptr<const clap::device_ext_audio> audio;
+struct device_service {
+	std::shared_ptr<device_service_data> data;
+	std::shared_ptr<const clap::device_service_audio> audio;
 	immer::box<clap::audio_port_info> audio_port_info;
 };
 
@@ -168,7 +176,7 @@ struct device {
 	immer::box<std::string> name;
 	immer::vector<param> params;
 	device_flags flags;
-	device_ext ext;
+	device_service service;
 };
 
 } // scuff::sbox::clap

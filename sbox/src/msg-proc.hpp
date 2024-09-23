@@ -51,7 +51,7 @@ auto make_device_processing_order(immer::table<device> devices) -> immer::vector
 
 static
 auto set_sample_rate(sbox::app* app, const sbox::device& dev, double sr) -> void {
-	if (dev.type == scuff_plugin_type::clap) {
+	if (dev.type == scuff_plugin_type_clap) {
 		if (!clap::main::set_sample_rate(*app, dev.id, sr)) {
 			app->msg_sender.enqueue(scuff::msg::out::report_error{std::format("Failed to set sample rate for device {}", dev.id.value)});
 		}
@@ -77,11 +77,12 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors&
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
 	try {
-		if (msg.type == scuff_plugin_type::clap) {
+		if (msg.type == scuff_plugin_type_clap) {
 			clap::main::create_device(app, {msg.dev_id}, msg.plugfile_path, msg.plugin_id, msg.callback);
-			const auto m = app->model.lock_write();
-			m->device_processing_order = make_device_processing_order(m->devices);
-			app->model.lock_publish(*m);
+			auto m = app->model.lock_read();
+			m.device_processing_order = make_device_processing_order(m.devices);
+			app->model.lock_write(m);
+			app->model.lock_publish(m);
 			return;
 		}
 		else {
@@ -96,9 +97,9 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& msg) -> void {
-	const auto m     = app->model.lock_write();
-	auto in_dev_ptr  = m->devices.find({msg.in_dev_id});
-	auto out_dev_ptr = m->devices.find({msg.out_dev_id});
+	auto m           = app->model.lock_read();
+	auto in_dev_ptr  = m.devices.find({msg.in_dev_id});
+	auto out_dev_ptr = m.devices.find({msg.out_dev_id});
 	if (!in_dev_ptr)  { throw std::runtime_error(std::format("Input device {} doesn't exist in this sandbox!", msg.in_dev_id)); }
 	if (!out_dev_ptr) { throw std::runtime_error(std::format("Output device {} doesn't exist in this sandbox!", msg.out_dev_id)); }
 	auto out_dev = *out_dev_ptr;
@@ -107,16 +108,17 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& ms
 	conn.other_port_index = msg.in_port;
 	conn.this_port_index  = msg.out_port;
 	out_dev.output_conns = out_dev.output_conns.push_back(conn);
-	m->devices                 = m->devices.insert(out_dev);
-	m->device_processing_order = make_device_processing_order(m->devices);
-	app->model.lock_publish(*m);
+	m.devices                 = m.devices.insert(out_dev);
+	m.device_processing_order = make_device_processing_order(m.devices);
+	app->model.lock_write(m);
+	app->model.lock_publish(m);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect& msg) -> void {
-	const auto m           = app->model.lock_write();
-	const auto in_dev_ptr  = m->devices.find({msg.in_dev_id});
-	const auto out_dev_ptr = m->devices.find({msg.out_dev_id});
+	auto m                 = app->model.lock_read();
+	const auto in_dev_ptr  = m.devices.find({msg.in_dev_id});
+	const auto out_dev_ptr = m.devices.find({msg.out_dev_id});
 	if (!in_dev_ptr)  { throw std::runtime_error(std::format("Input device {} doesn't exist in this sandbox!", msg.in_dev_id)); }
 	if (!out_dev_ptr) { throw std::runtime_error(std::format("Output device {} doesn't exist in this sandbox!", msg.out_dev_id)); }
 	auto out_dev = *out_dev_ptr;
@@ -128,17 +130,18 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect&
 	if (pos == out_dev.output_conns.end()) {
 		throw std::runtime_error(std::format("Output device {} port {} is not connected to input device {} port {}!", msg.out_dev_id, msg.out_port, msg.in_dev_id, msg.in_port));
 	}
-	out_dev.output_conns       = out_dev.output_conns.erase(pos.index());
-	m->devices                 = m->devices.insert(out_dev);
-	m->device_processing_order = make_device_processing_order(m->devices);
-	app->model.lock_publish(*m);
+	out_dev.output_conns      = out_dev.output_conns.erase(pos.index());
+	m.devices                 = m.devices.insert(out_dev);
+	m.device_processing_order = make_device_processing_order(m.devices);
+	app->model.lock_write(m);
+	app->model.lock_publish(m);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg) -> void {
-	const auto m = app->model.lock_write();
-	const auto dev_id = id::device{msg.dev_id};
-	const auto devices = m->devices;
+	auto m             = app->model.lock_read();
+	const auto dev_id  = id::device{msg.dev_id};
+	const auto devices = m.devices;
 	// Remove any internal connections to this device
 	for (auto dev : devices) {
 		for (auto pos = dev.output_conns.begin(); pos != dev.output_conns.end(); ++pos) {
@@ -146,12 +149,13 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg)
 				dev.output_conns = dev.output_conns.erase(pos.index());
 			}
 		}
-		m->devices = m->devices.insert(dev);
+		m.devices = m.devices.insert(dev);
 	}
-	m->devices                 = m->devices.erase({msg.dev_id});
-	m->clap_devices            = m->clap_devices.erase({msg.dev_id});
-	m->device_processing_order = make_device_processing_order(m->devices);
-	app->model.lock_publish(*m);
+	m.devices                 = m.devices.erase({msg.dev_id});
+	m.clap_devices            = m.clap_devices.erase({msg.dev_id});
+	m.device_processing_order = make_device_processing_order(m.devices);
+	app->model.lock_write(m);
+	app->model.lock_publish(m);
 }
 
 static
@@ -172,7 +176,7 @@ static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_load& msg) -> void {
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
-	if (type == scuff_plugin_type::clap) {
+	if (type == scuff_plugin_type_clap) {
 		if (!clap::main::load(app, dev_id, msg.state)) {
 			app->msg_sender.enqueue(scuff::msg::out::report_error{"Failed to load device state"});
 		}
@@ -184,7 +188,7 @@ static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_save& msg) -> void {
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
-	if (type == scuff_plugin_type::clap) {
+	if (type == scuff_plugin_type_clap) {
 		const auto state = clap::main::save(app, dev_id);
 		if (state.empty()) {
 			app->msg_sender.enqueue(scuff::msg::out::report_error{"Failed to save device state"});
@@ -209,7 +213,7 @@ static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value& msg) -> void {
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
-	if (type == scuff_plugin_type::clap) {
+	if (type == scuff_plugin_type_clap) {
 		if (const auto value = clap::main::get_param_value(*app, dev_id, msg.param_idx)) {
 			app->msg_sender.enqueue(scuff::msg::out::return_param_value{*value, msg.callback});
 		}
@@ -221,7 +225,7 @@ static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value_text& msg) -> void {
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
-	if (type == scuff_plugin_type::clap) {
+	if (type == scuff_plugin_type_clap) {
 		const auto text = clap::main::get_param_value_text(*app, dev_id, msg.param_idx, msg.value);
 		app->msg_sender.enqueue(scuff::msg::out::return_param_value_text{text, msg.callback});
 		return;

@@ -46,7 +46,7 @@ struct audio_sync {
 	auto lock_gc() -> void                                 { published_model_.garbage_collect(); }
 	auto lock_publish(T model) -> void                     { published_model_.set(std::move(model)); }
 	auto lock_read() const -> T                            { return *working_model_.lock(); }
-	auto lock_write()                                      { return working_model_.lock(); }
+	auto lock_write(T model) -> void                       { *working_model_.lock() = std::move(model); }
 private:
 	lg::plain_guarded<T> working_model_;
 	audio_data<T> published_model_;

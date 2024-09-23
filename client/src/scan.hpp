@@ -94,8 +94,9 @@ auto read_broken_plugfile(const nlohmann::json& j) -> void {
 	pf.id    = id::plugfile{id_gen_++};
 	pf.path  = path;
 	pf.error = error;
-	const auto m = DATA_->model.lock_write();
-	m->plugfiles = m->plugfiles.insert(std::move(pf));
+	auto m = DATA_->model.lock_read();
+	m.plugfiles = m.plugfiles.insert(std::move(pf));
+	DATA_->model.lock_write(m);
 	DATA_->callbacks.on_plugfile_broken.fn(&DATA_->callbacks.on_plugfile_broken, pf.id.value);
 }
 
@@ -116,8 +117,9 @@ auto read_broken_plugin(const nlohmann::json& j) -> void {
 		plugin.name    = name;
 		plugin.vendor  = vendor;
 		plugin.version = version;
-		const auto m = DATA_->model.lock_write();
-		m->plugins = m->plugins.insert(std::move(plugin));
+		auto m = DATA_->model.lock_read();
+		m.plugins = m.plugins.insert(std::move(plugin));
+		DATA_->model.lock_write(m);
 		DATA_->callbacks.on_plugin_broken.fn(&DATA_->callbacks.on_plugin_broken, plugin.id.value);
 	}
 }
@@ -137,8 +139,9 @@ auto read_plugfile(scan::scanner* scanner, const nlohmann::json& j) -> void {
 	plugfile pf;
 	pf.id   = id::plugfile{id_gen_++};
 	pf.path = path;
-	const auto m = DATA_->model.lock_write();
-	m->plugfiles = m->plugfiles.insert(std::move(pf));
+	auto m = DATA_->model.lock_read();
+	m.plugfiles = m.plugfiles.insert(std::move(pf));
+	DATA_->model.lock_write(m);
 	DATA_->callbacks.on_plugfile_scanned.fn(&DATA_->callbacks.on_plugfile_scanned, pf.id.value);
 	basio::post(scanner->context, [scanner, path] { async_scan_clap_file(scanner, path); });
 }
@@ -159,8 +162,9 @@ auto read_plugin(scan::scanner*, const nlohmann::json& j) -> void {
 		plugin.name    = name;
 		plugin.vendor  = vendor;
 		plugin.version = version;
-		const auto m = DATA_->model.lock_write();
-		m->plugins = m->plugins.insert(std::move(plugin));
+		auto m = DATA_->model.lock_read();
+		m.plugins = m.plugins.insert(std::move(plugin));
+		DATA_->model.lock_write(m);
 		DATA_->callbacks.on_plugin_scanned.fn(&DATA_->callbacks.on_plugin_scanned, plugin.id.value);
 		// TODO: if flags & scuff_scan_flag_reload_failed_devices,
 		//       reload any unloaded devices which use this plugin 

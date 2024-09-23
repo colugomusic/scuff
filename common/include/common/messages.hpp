@@ -30,7 +30,7 @@ struct device_gui_show        { scuff_device dev_id; };
 struct device_load            { scuff_device dev_id; std::vector<std::byte> state; };
 struct device_save            { scuff_device dev_id; size_t callback; };
 struct device_set_render_mode { scuff_device dev_id; scuff_render_mode mode; };
-struct event                  { scuff_device dev_id; scuff::event event; };
+struct event                  { scuff_device dev_id; scuff::events::event event; };
 struct get_param_value        { scuff_device dev_id; scuff_param param_idx; size_t callback; };
 struct get_param_value_text   { scuff_device dev_id; scuff_param param_idx; double value; size_t callback; };
 struct set_sample_rate        { double sr; };

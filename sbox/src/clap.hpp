@@ -43,22 +43,22 @@ auto unset_flags(device_atomic_flags* atomic_flags, uint32_t flags_to_unset) -> 
 
 [[nodiscard]] static
 auto is_active(const device& device) -> bool {
-	return is_flag_set(device.ext.data->atomic_flags, device_atomic_flags::active);
+	return is_flag_set(device.service.data->atomic_flags, device_atomic_flags::active);
 }
 
 [[nodiscard]] static
 auto is_processing(const device& device) -> bool {
-	return is_flag_set(device.ext.data->atomic_flags, device_atomic_flags::processing);
+	return is_flag_set(device.service.data->atomic_flags, device_atomic_flags::processing);
 }
 
 [[nodiscard]] static
 auto is_scheduled_to_process(const device& device) -> bool {
-	return is_flag_set(device.ext.data->atomic_flags, device_atomic_flags::schedule_process);
+	return is_flag_set(device.service.data->atomic_flags, device_atomic_flags::schedule_process);
 }
 
 static
 auto send_msg(const device& dev, const clap::device_msg::msg& msg) -> void {
-	dev.ext.data->msg_q.enqueue(msg);
+	dev.service.data->msg_q.enqueue(msg);
 }
 
 static
@@ -115,26 +115,26 @@ auto get_host_data(const clap_host_t* host) -> device_host_data& {
 
 static
 auto cb_request_param_flush(sbox::app* app, id::device dev_id) -> void {
-	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
-	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_param_flush, std::memory_order_relaxed);
+	const auto svc = app->model.lockfree_read()->clap_devices.at(dev_id).service;
+	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_param_flush, std::memory_order_relaxed);
 }
 
 static
 auto cb_request_process(sbox::app* app, id::device dev_id) -> void {
-	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
-	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_active | device_atomic_flags::schedule_process);
+	const auto svc = app->model.lockfree_read()->clap_devices.at(dev_id).service;
+	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_active | device_atomic_flags::schedule_process);
 }
 
 static
 auto cb_request_restart(sbox::app* app, id::device dev_id) -> void {
-	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
-	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_restart);
+	const auto svc = app->model.lockfree_read()->clap_devices.at(dev_id).service;
+	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_restart);
 }
 
 static
 auto cb_request_callback(sbox::app* app, id::device dev_id) -> void {
-	const auto ext = app->model.lockfree_read()->clap_devices.at(dev_id).ext;
-	ext.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_callback);
+	const auto svc = app->model.lockfree_read()->clap_devices.at(dev_id).service;
+	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_callback);
 }
 
 static
@@ -166,15 +166,17 @@ static
 // Could be called from main thread or audio thread, but
 // never both simultaneously, for the same device.
 auto flush_device_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
-	const auto& input_events  = clap_dev.ext.audio->input_events;
-	const auto& output_events = clap_dev.ext.audio->output_events;
+	const auto& input_events  = clap_dev.service.audio->input_events;
+	const auto& output_events = clap_dev.service.audio->output_events;
 	const auto& iface         = clap_dev.iface->plugin;
 	if (!iface.params) {
 		// May not actually be intialized
 		return;
 	}
+	// TODO: convert input events here
 	iface.params->flush(iface.plugin, &input_events, &output_events);
-	dev.shm->data->events_in.clear();
+	// TODO: convert output events here
+	// TODO: figure this out: clap_dev.service.data->input_event_buffer.clear();
 }
 
 } // namespace scuff::sbox::clap
@@ -192,11 +194,11 @@ auto can_render_audio(const clap::audio_buffers& buffers) -> bool {
 
 [[nodiscard]] static
 auto try_to_wake_up(const clap::device& dev) -> bool {
-	unset_flags(&dev.ext.data->atomic_flags, device_atomic_flags::schedule_process);
+	unset_flags(&dev.service.data->atomic_flags, device_atomic_flags::schedule_process);
 	if (!dev.iface->plugin.plugin->start_processing(dev.iface->plugin.plugin)) {
 		return false;
 	}
-	set_flags(&dev.ext.data->atomic_flags, device_atomic_flags::processing);
+	set_flags(&dev.service.data->atomic_flags, device_atomic_flags::processing);
 	return true;
 }
 
@@ -218,7 +220,7 @@ auto output_is_quiet(const shm::device& shm) -> bool {
 static
 auto go_to_sleep(const clap::device& dev) -> void {
 	dev.iface->plugin.plugin->stop_processing(dev.iface->plugin.plugin);
-	unset_flags(&dev.ext.data->atomic_flags, device_atomic_flags::processing);
+	unset_flags(&dev.service.data->atomic_flags, device_atomic_flags::processing);
 }
 
 [[nodiscard]] static
@@ -262,22 +264,29 @@ auto handle_event_process_result(const clap::device& dev, clap_process_status st
 static
 auto process_audio_device(const sbox::device& dev, const clap::device& clap_dev) -> void {
 	const auto& iface   = clap_dev.iface->plugin;
-	const auto& process = clap_dev.ext.audio->process;
-	auto& flags         = clap_dev.ext.data->atomic_flags;
-	auto& audio_buffers = clap_dev.ext.audio->buffers;
+	const auto& process = clap_dev.service.audio->process;
+	auto& flags         = clap_dev.service.data->atomic_flags;
+	auto& audio_buffers = clap_dev.service.audio->buffers;
+	// TODO: convert input events here
 	const auto status   = iface.plugin->process(iface.plugin, &process);
-	handle_audio_process_result(*dev.shm, clap_dev, status);
-	dev.shm->data->events_in.clear();
+	handle_audio_process_result(*dev.service.shm, clap_dev, status);
+	// TODO: convert output events here
+	// TODO: figure this out
+	//clap_dev.service.data->input_event_buffer.clear();
+	//dev.service.shm->data->events_in.clear();
 }
 
 static
 auto process_event_device(const sbox::device& dev, const clap::device& clap_dev) -> void {
 	const auto& iface   = clap_dev.iface->plugin;
-	const auto& process = clap_dev.ext.audio->process;
-	auto& flags         = clap_dev.ext.data->atomic_flags;
+	const auto& process = clap_dev.service.audio->process;
+	auto& flags         = clap_dev.service.data->atomic_flags;
+	// TODO: convert input events here
 	const auto status   = iface.plugin->process(iface.plugin, &process);
 	handle_event_process_result(clap_dev, status);
-	dev.shm->data->events_in.clear();
+	// TODO: convert output events here
+	// TODO: figure this out
+	//dev.shm->data->events_in.clear();
 }
 
 auto process(const sbox::app& app, const sbox::device& dev) -> void {
@@ -296,7 +305,7 @@ auto process(const sbox::app& app, const sbox::device& dev) -> void {
 		}
 	}
 	if (iface.audio_ports) {
-		if (can_render_audio(clap_dev.ext.audio->buffers)) {
+		if (can_render_audio(clap_dev.service.audio->buffers)) {
 			process_audio_device(dev, clap_dev);
 			return;
 		}
@@ -363,10 +372,10 @@ auto retrieve_audio_port_info(const iface_plugin& iface) -> audio_port_info {
 [[nodiscard]] static
 auto make_input_event_list(const clap::device& dev) -> clap_input_events_t {
 	clap_input_events_t list;
-	list.ctx = &dev.ext.data->input_event_buffer;
+	list.ctx = &dev.service.data->input_events_context;
 	list.size = [](const clap_input_events_t* list) -> uint32_t {
-		const auto& event_buffer = *static_cast<const events::clap::event_buffer*>(list->ctx);
-		return static_cast<uint32_t>(event_buffer.size());
+		const auto& ctx = *static_cast<const clap::event_queue_context*>(list->ctx);
+		return static_cast<uint32_t>(ctx.service_data->input_event_buffer.size());
 	};
 	list.get = [](const clap_input_events_t* list, uint32_t index) -> const clap_event_header_t* {
 		const auto& event_buffer = *static_cast<const events::clap::event_buffer*>(list->ctx);
@@ -376,16 +385,12 @@ auto make_input_event_list(const clap::device& dev) -> clap_input_events_t {
 }
 
 [[nodiscard]] static
-auto find_param(void* cookie, clap_id param_id) -> scuff_param {
-}
-
-[[nodiscard]] static
 auto make_output_event_list(const clap::device& dev) -> clap_output_events_t {
 	clap_output_events_t list;
-	list.ctx = &dev.ext.data->output_event_buffer;
+	list.ctx = &dev.service.data->output_events_context;
 	list.try_push = [](const clap_output_events_t* list, const clap_event_header_t* hdr) -> bool {
-		const auto event_buffer = static_cast<events::clap::event_buffer*>(list->ctx);
-		event_buffer->push_back(scuff::events::clap::to_event(*hdr));
+		const auto ctx = static_cast<clap::event_queue_context*>(list->ctx);
+		ctx->service_data->output_event_buffer.push_back(scuff::events::clap::to_event(*hdr));
 		return true;
 	};
 	return list;
@@ -393,9 +398,9 @@ auto make_output_event_list(const clap::device& dev) -> clap_output_events_t {
 
 static
 // AUDIO DEVICE
-auto initialize_process_struct_for_audio_device(const shm::device& shm, clap::device_ext_audio* audio) -> void {
-	audio->input_events                = make_input_event_list(shm);
-	audio->output_events               = make_output_event_list(shm);
+auto initialize_process_struct_for_audio_device(const clap::device& dev, clap::device_service_audio* audio) -> void {
+	audio->input_events                = make_input_event_list(dev);
+	audio->output_events               = make_output_event_list(dev);
 	audio->process.frames_count        = SCUFF_VECTOR_SIZE;
 	audio->process.audio_inputs_count  = static_cast<uint32_t>(audio->buffers.inputs.buffers.size());
 	audio->process.audio_inputs        = audio->buffers.inputs.buffers.data();
@@ -409,9 +414,9 @@ auto initialize_process_struct_for_audio_device(const shm::device& shm, clap::de
 
 static
 // EVENT-ONLY DEVICE
-auto initialize_process_struct_for_event_device(const shm::device& shm, clap::device_ext_audio* audio) -> void {
-	audio->input_events                = make_input_event_list(shm);
-	audio->output_events               = make_output_event_list(shm);
+auto initialize_process_struct_for_event_device(const clap::device& dev, clap::device_service_audio* audio) -> void {
+	audio->input_events                = make_input_event_list(dev);
+	audio->output_events               = make_output_event_list(dev);
 	static auto dummy_buffer           = clap_audio_buffer_t{0};
 	audio->process.frames_count        = SCUFF_VECTOR_SIZE;
 	audio->process.audio_inputs_count  = 0;
@@ -425,35 +430,36 @@ auto initialize_process_struct_for_event_device(const shm::device& shm, clap::de
 }
 
 [[nodiscard]] static
-auto init_audio(const sbox::device& dev, const clap::device& clap_dev) -> std::shared_ptr<const device_ext_audio> {
-	auto out = device_ext_audio{};
+auto init_audio(const sbox::device& dev, const clap::device& clap_dev) -> std::shared_ptr<const device_service_audio> {
+	auto out = device_service_audio{};
 	if (clap_dev.iface->plugin.audio_ports) {
 		// AUDIO PLUGIN
-		make_audio_buffers(*dev.shm, clap_dev.ext.audio_port_info, &out.buffers);
-		initialize_process_struct_for_audio_device(*dev.shm, &out);
+		make_audio_buffers(*dev.service.shm, clap_dev.service.audio_port_info, &out.buffers);
+		initialize_process_struct_for_audio_device(clap_dev, &out);
 	}
 	else {
 		// EVENT-ONLY PLUGIN
-		initialize_process_struct_for_event_device(*dev.shm, &out);
+		initialize_process_struct_for_event_device(clap_dev, &out);
 	}
-	return std::make_shared<const device_ext_audio>(std::move(out));
+	return std::make_shared<const device_service_audio>(std::move(out));
 }
 
 [[nodiscard]] static
 auto init_audio(clap::device&& clap_dev, const sbox::device& dev) -> device {
-	clap_dev.ext.audio = init_audio(dev, clap_dev);
+	clap_dev.service.audio = init_audio(dev, clap_dev);
 	return clap_dev;
 }
 
 static
 auto init_audio(sbox::app* app, id::device dev_id) -> void {
-	const auto m                 = app->model.lock_write();
-	auto dev                     = m->devices.at(dev_id);
-	auto clap_dev                = m->clap_devices.at(dev_id);
-	clap_dev.ext.audio_port_info = retrieve_audio_port_info(clap_dev.iface->plugin);
-	clap_dev                     = init_audio(std::move(clap_dev), dev);
-	m->clap_devices              = m->clap_devices.insert(clap_dev);
-	app->model.lock_publish(*m);
+	auto m                           = app->model.lock_read();
+	auto dev                         = m.devices.at(dev_id);
+	auto clap_dev                    = m.clap_devices.at(dev_id);
+	clap_dev.service.audio_port_info = retrieve_audio_port_info(clap_dev.iface->plugin);
+	clap_dev                         = init_audio(std::move(clap_dev), dev);
+	m.clap_devices                   = m.clap_devices.insert(clap_dev);
+	app->model.lock_write(m);
+	app->model.lock_publish(m);
 }
 
 static
@@ -502,17 +508,17 @@ auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui
 
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log_begin& msg) -> void {
-	dev.ext.data->log_collector.severity = msg.severity;
-	dev.ext.data->log_collector.chunks.clear();
+	dev.service.data->log_collector.severity = msg.severity;
+	dev.service.data->log_collector.chunks.clear();
 }
 
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log_end& msg) -> void {
 	std::string text;
-	for (const auto& chunk : dev.ext.data->log_collector.chunks) {
+	for (const auto& chunk : dev.service.data->log_collector.chunks) {
 		text.append(chunk.c_str());
 	}
-	switch (*dev.ext.data->log_collector.severity) {
+	switch (*dev.service.data->log_collector.severity) {
 		default:
 		case CLAP_LOG_DEBUG:
 		case CLAP_LOG_INFO: {
@@ -531,13 +537,13 @@ auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log
 			break;
 		}
 	}
-	dev.ext.data->log_collector.severity = std::nullopt;
-	dev.ext.data->log_collector.chunks.clear();
+	dev.service.data->log_collector.severity = std::nullopt;
+	dev.service.data->log_collector.chunks.clear();
 }
 
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log_text& msg) -> void {
-	dev.ext.data->log_collector.chunks.push_back(msg.text);
+	dev.service.data->log_collector.chunks.push_back(msg.text);
 }
 
 static
@@ -550,7 +556,7 @@ auto update(sbox::app* app) -> void {
 	const auto m = app->model.lock_read();
 	for (const auto& dev : m.clap_devices) {
 		clap::device_msg::msg msg;
-		while (dev.ext.data->msg_q.try_dequeue(msg)) {
+		while (dev.service.data->msg_q.try_dequeue(msg)) {
 			process_msg(app, dev, msg);
 		}
 	}
@@ -745,16 +751,18 @@ auto init_params(clap::device&& dev) -> clap::device {
 }
 
 [[nodiscard]] static
-auto make_ext_data(sbox::app* app, id::device id) -> std::shared_ptr<clap::device_ext_data> {
-	auto data = std::make_shared<clap::device_ext_data>();
+auto make_ext_data(sbox::app* app, id::device id) -> std::shared_ptr<clap::device_service_data> {
+	auto data = std::make_shared<clap::device_service_data>();
 	data->host_data.app = app;
 	data->host_data.id  = id;
+	data->input_events_context.service_data  = data.get();
+	data->output_events_context.service_data = data.get();
 	return data;
 }
 
 [[nodiscard]] static
-auto make_shm_device(std::string_view instance_id, id::device dev_id) -> std::shared_ptr<shm::device> {
-	return std::make_shared<shm::device>(bip::create_only, shm::device::make_id(instance_id, dev_id));
+auto make_shm_device(std::string_view instance_id, id::device dev_id) -> shm::device {
+	return shm::device{bip::create_only, shm::device::make_id(instance_id, dev_id)};
 }
 
 static
@@ -780,23 +788,23 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 		throw std::runtime_error("clap_plugin_factory.create_plugin failed");
 	}
 	get_extensions(&iface.plugin);
-	auto dev                     = sbox::device{};
-	auto clap_dev                = clap::device{};
-	dev.id                       = dev_id;
-	dev.type                     = scuff_plugin_type::clap;
-	dev.shm                      = make_shm_device(app->instance_id, dev_id);
-	clap_dev.ext.audio_port_info = retrieve_audio_port_info(iface.plugin);
-	const auto audio_in_count    = clap_dev.ext.audio_port_info->inputs.size();
-	const auto audio_out_count   = clap_dev.ext.audio_port_info->outputs.size();
-	dev.shm->data->audio_in.resize(audio_in_count);
-	dev.shm->data->audio_out.resize(audio_out_count);
-	clap_dev.id                  = dev_id;
-	clap_dev.iface               = std::move(iface);
-	clap_dev.name                = clap_dev.iface->plugin.plugin->desc->name;
-	clap_dev.ext.data            = std::move(ext_data);
-	clap_dev                     = init_gui(std::move(clap_dev));
-	clap_dev                     = init_audio(std::move(clap_dev), dev);
-	clap_dev                     = init_params(std::move(clap_dev));
+	auto dev                         = sbox::device{};
+	auto clap_dev                    = clap::device{};
+	dev.id                           = dev_id;
+	dev.type                         = scuff_plugin_type_clap;
+	dev.service.shm                  = make_shm_device(app->instance_id, dev_id);
+	clap_dev.service.audio_port_info = retrieve_audio_port_info(iface.plugin);
+	const auto audio_in_count    = clap_dev.service.audio_port_info->inputs.size();
+	const auto audio_out_count   = clap_dev.service.audio_port_info->outputs.size();
+	dev.service.shm->data->audio_in.resize(audio_in_count);
+	dev.service.shm->data->audio_out.resize(audio_out_count);
+	clap_dev.id           = dev_id;
+	clap_dev.iface        = std::move(iface);
+	clap_dev.name         = clap_dev.iface->plugin.plugin->desc->name;
+	clap_dev.service.data = std::move(ext_data);
+	clap_dev              = init_gui(std::move(clap_dev));
+	clap_dev              = init_audio(std::move(clap_dev), dev);
+	clap_dev              = init_params(std::move(clap_dev));
 	for (size_t i = 0; i < clap_dev.params.size(); i++) {
 		const auto& param = clap_dev.params[i];
 		shm::param_info info;
@@ -807,12 +815,13 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 		info.name          = param.info.name;
 		info.clap.id       = param.info.id;
 		info.clap.cookie   = param.info.cookie;
-		dev.shm->data->param_info[i] = std::move(info);
+		dev.service.shm->data->param_info[i] = std::move(info);
 	}
-	const auto m    = app->model.lock_write();
-	m->devices      = m->devices.insert(dev);
-	m->clap_devices = m->clap_devices.insert(clap_dev);
-	app->msg_sender.enqueue(scuff::msg::out::return_created_device{dev.id.value, dev.shm->id().data(), callback});
+	auto m         = app->model.lock_read();
+	m.devices      = m.devices.insert(dev);
+	m.clap_devices = m.clap_devices.insert(clap_dev);
+	app->model.lock_write(m);
+	app->msg_sender.enqueue(scuff::msg::out::return_created_device{dev.id.value, dev.service.shm->id().data(), callback});
 }
 
 [[nodiscard]] static
