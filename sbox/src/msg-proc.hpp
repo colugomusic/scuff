@@ -206,7 +206,10 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_set_render_
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::event& msg) -> void {
-	// TODO: push event onto device's event queue
+	const auto dev_id  = id::device{msg.dev_id};
+	const auto devices = app->model.lock_read().devices;
+	const auto dev     = devices.at(dev_id);
+	dev.service.input_events_from_main->enqueue(msg.event);
 }
 
 static

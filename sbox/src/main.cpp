@@ -25,12 +25,25 @@ auto copy_data_from_connected_outputs(const sbox::app& app, const sbox::device& 
 }
 
 static
-auto do_processing(const sbox::app& app, const sbox::device& dev) -> void {
-	if (dev.type == scuff_plugin_type_clap) {
-		scuff::sbox::clap::audio::process(app, dev);
+auto transfer_input_events_from_main(const sbox::device& dev) -> void {
+	scuff::events::event event;
+	while (dev.service.input_events_from_main->try_dequeue(event)) {
+		dev.service.shm->data->events_in.push_back(event);
 	}
-	else {
-		// Not implemented yet.
+}
+
+static
+auto do_processing(const sbox::app& app, const sbox::device& dev) -> void {
+	transfer_input_events_from_main(dev);
+	switch (dev.type) {
+		case scuff_plugin_type_clap: {
+			scuff::sbox::clap::audio::process(app, dev);
+			break;
+		}
+		case scuff_plugin_type_vst3: {
+			// Not implemented yet.
+			break;
+		}
 	}
 	audio::copy_data_from_connected_outputs(app, dev);
 }

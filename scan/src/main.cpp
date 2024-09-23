@@ -10,7 +10,7 @@
 
 namespace scanner {
 
-enum class plugfile_type { unknown, clap, possible_vst2, vst3 };
+enum class plugfile_type { unknown, clap, vst3 };
 
 template <typename ClassType, typename T, typename... Args>
 concept IsMemberFn = requires(ClassType obj, T t, Args... args) {
@@ -48,7 +48,6 @@ auto to_string(plugfile_type type) -> std::string {
 	switch (type) {
 		case plugfile_type::clap:          { return "clap"; }
 		case plugfile_type::vst3:          { return "vst3"; }
-		case plugfile_type::possible_vst2: { return "possible-vst2"; }
 		default:                           { return "unknown"; }
 	}
 }
@@ -90,9 +89,8 @@ auto get_plugfile_search_paths(const options& opts) -> std::vector<std::filesyst
 
 [[nodiscard]] static
 auto to_plugfile(const std::filesystem::path& path) -> std::optional<plugfile> {
-	if (scuff::os::is_clap_file(path))         { return plugfile{plugfile_type::clap, path}; }
-	if (scuff::os::is_vst3_file(path))         { return plugfile{plugfile_type::vst3, path}; }
-	if (scuff::os::could_be_a_vst2_file(path)) { return plugfile{plugfile_type::possible_vst2, path}; }
+	if (scuff::os::is_clap_file(path)) { return plugfile{plugfile_type::clap, path}; }
+	if (scuff::os::is_vst3_file(path)) { return plugfile{plugfile_type::vst3, path}; }
 	return std::nullopt;
 }
 
@@ -175,11 +173,6 @@ auto scan_vst3_plugfile_safe(const plugfile& pf) -> void {
 	// Not implemented
 }
 
-static
-auto scan_possible_vst2_plugfile_safe(const plugfile& pf) -> void {
-	// Not implemented
-}
-
 static auto clap_host_get_extension(const clap_host* host, const char* id) -> const void* { return nullptr; }
 static auto clap_host_request_callback(const clap_host* host) -> void {}
 static auto clap_host_request_process(const clap_host* host) -> void {}
@@ -251,17 +244,11 @@ auto scan_vst3_plugfile_full(const plugfile& pf) -> void {
 }
 
 static
-auto scan_possible_vst2_plugfile_full(const plugfile& pf) -> void {
-	// Not implemented
-}
-
-static
 auto scan_plugfile_full(const options& opts) -> void {
 	if (const auto pf = to_plugfile(opts.file_to_scan)) {
 		switch (pf->type) {
 			case plugfile_type::clap:          { scan_clap_plugfile_full(*pf); break; }
 			case plugfile_type::vst3:          { scan_vst3_plugfile_full(*pf); break; }
-			case plugfile_type::possible_vst2: { scan_possible_vst2_plugfile_full(*pf); break; }
 			default:                           { break; }
 		}
 		return;
@@ -274,7 +261,6 @@ auto scan_plugfile_safe(const plugfile& pf) -> void {
 	switch (pf.type) {
 		case plugfile_type::clap:          { scan_clap_plugfile_safe(pf); break; }
 		case plugfile_type::vst3:          { scan_vst3_plugfile_safe(pf); break; }
-		case plugfile_type::possible_vst2: { scan_possible_vst2_plugfile_safe(pf); break; }
 		default:                           { break; }
 	}
 }

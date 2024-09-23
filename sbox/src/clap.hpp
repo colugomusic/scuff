@@ -163,6 +163,45 @@ auto cb_gui_resize_hints_changed(sbox::app* app, id::device dev_id) -> void {
 }
 
 static
+auto convert_input_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
+	auto get_cookie = [dev](scuff_param param) -> void* {
+		return dev.service.shm->data->param_info[param].clap.cookie;
+	};
+	auto get_id = [dev](scuff_param param) -> clap_id {
+		return dev.service.shm->data->param_info[param].clap.id;
+	};
+	auto fns = scuff::events::clap::scuff_to_clap_conversion_fns{get_cookie, get_id};
+	scuff::events::clap::event_buffer input_clap_events;
+	for (const auto& event : dev.service.shm->data->events_in) {
+		input_clap_events.push_back(scuff::events::clap::from_scuff(event, fns));
+	}
+	clap_dev.service.data->input_event_buffer = std::move(input_clap_events);
+	dev.service.shm->data->events_in.clear();
+}
+
+static
+auto convert_output_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
+	auto find_param = [dev](clap_id id) -> scuff_param {
+		auto has_id = [id](const shm::param_info& info) -> bool {
+			return info.clap.id == id;
+		};
+		const auto& infos = dev.service.shm->data->param_info;
+		const auto pos    = std::find_if(std::begin(infos), std::end(infos), has_id);
+		if (pos == std::end(infos)) {
+			throw std::runtime_error(std::format("Could not find parameter with CLAP id: {}", id));
+		}
+		return static_cast<scuff_param>(std::distance(std::begin(infos), pos));
+	};
+	auto fns = scuff::events::clap::clap_to_scuff_conversion_fns{find_param};
+	scuff::events::event_buffer output_scuff_events;
+	for (const auto& event : clap_dev.service.data->output_event_buffer) {
+		output_scuff_events.push_back(scuff::events::clap::to_scuff(event, fns));
+	}
+	dev.service.shm->data->events_out = std::move(output_scuff_events);
+	clap_dev.service.data->output_event_buffer.clear();
+}
+
+static
 // Could be called from main thread or audio thread, but
 // never both simultaneously, for the same device.
 auto flush_device_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
@@ -173,10 +212,9 @@ auto flush_device_events(const sbox::device& dev, const clap::device& clap_dev) 
 		// May not actually be intialized
 		return;
 	}
-	// TODO: convert input events here
+	convert_input_events(dev, clap_dev);
 	iface.params->flush(iface.plugin, &input_events, &output_events);
-	// TODO: convert output events here
-	// TODO: figure this out: clap_dev.service.data->input_event_buffer.clear();
+	convert_output_events(dev, clap_dev);
 }
 
 } // namespace scuff::sbox::clap
@@ -267,13 +305,10 @@ auto process_audio_device(const sbox::device& dev, const clap::device& clap_dev)
 	const auto& process = clap_dev.service.audio->process;
 	auto& flags         = clap_dev.service.data->atomic_flags;
 	auto& audio_buffers = clap_dev.service.audio->buffers;
-	// TODO: convert input events here
-	const auto status   = iface.plugin->process(iface.plugin, &process);
+	convert_input_events(dev, clap_dev);
+	const auto status = iface.plugin->process(iface.plugin, &process);
 	handle_audio_process_result(*dev.service.shm, clap_dev, status);
-	// TODO: convert output events here
-	// TODO: figure this out
-	//clap_dev.service.data->input_event_buffer.clear();
-	//dev.service.shm->data->events_in.clear();
+	convert_output_events(dev, clap_dev);
 }
 
 static
@@ -281,12 +316,10 @@ auto process_event_device(const sbox::device& dev, const clap::device& clap_dev)
 	const auto& iface   = clap_dev.iface->plugin;
 	const auto& process = clap_dev.service.audio->process;
 	auto& flags         = clap_dev.service.data->atomic_flags;
-	// TODO: convert input events here
+	convert_input_events(dev, clap_dev);
 	const auto status   = iface.plugin->process(iface.plugin, &process);
 	handle_event_process_result(clap_dev, status);
-	// TODO: convert output events here
-	// TODO: figure this out
-	//dev.shm->data->events_in.clear();
+	convert_output_events(dev, clap_dev);
 }
 
 auto process(const sbox::app& app, const sbox::device& dev) -> void {

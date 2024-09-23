@@ -68,16 +68,14 @@ using event = std::variant<
 	clap_event_transport_t
 >;
 
-template <typename Fn> concept find_param_fn             = requires(Fn fn, void* cookie, clap_id param_id) { { fn(cookie, param_id) } -> std::same_as<scuff_param>; };
-template <typename Fn> concept find_param_from_id_fn     = requires(Fn fn, clap_id param_id) { { fn(param_id) } -> std::same_as<scuff_param>; };
-template <typename Fn> concept get_param_cookie_fn       = requires(Fn fn, scuff_param param) { { fn(param) } -> std::same_as<void*>; };
-template <typename Fn> concept get_param_id_fn           = requires(Fn fn, scuff_param param) { { fn(param) } -> std::same_as<clap_id>; };
-template <typename T>  concept has_find_param_fn         = requires { { T::find_param } -> find_param_fn; };
-template <typename T>  concept has_find_param_from_id_fn = requires { { T::find_param_from_id } -> find_param_from_id_fn; };
-template <typename T>  concept has_get_param_cookie_fn   = requires { { T::get_param_cookie } -> get_param_cookie_fn; };
-template <typename T>  concept has_get_param_id_fn       = requires { { T::get_param_id } -> get_param_id_fn; };
+template <typename Fn> concept find_param_fn           = requires(Fn fn, clap_id param_id) { { fn(param_id) } -> std::same_as<scuff_param>; };
+template <typename Fn> concept get_param_cookie_fn     = requires(Fn fn, scuff_param param) { { fn(param) } -> std::same_as<void*>; };
+template <typename Fn> concept get_param_id_fn         = requires(Fn fn, scuff_param param) { { fn(param) } -> std::same_as<clap_id>; };
+template <typename T>  concept has_find_param_fn       = requires { { T::find_param } -> find_param_fn; };
+template <typename T>  concept has_get_param_cookie_fn = requires { { T::get_param_cookie } -> get_param_cookie_fn; };
+template <typename T>  concept has_get_param_id_fn     = requires { { T::get_param_id } -> get_param_id_fn; };
 
-template <typename T> concept clap_to_scuff_conversion = has_find_param_fn<T> && has_find_param_from_id_fn<T>;
+template <typename T> concept clap_to_scuff_conversion = has_find_param_fn<T>;
 template <typename T> concept scuff_to_clap_conversion = has_get_param_cookie_fn<T> && has_get_param_id_fn<T>;
 
 template <scuff::events::clap::find_param_fn FindParamFn>
@@ -357,7 +355,7 @@ template <clap_to_scuff_conversion Conv> [[nodiscard]] static
 auto to_scuff_(const clap_event_param_gesture_t& e, const Conv& fns) -> scuff::events::event {
 	scuff_event_param_gesture out;
 	out.header = to_scuff(e.header);
-	out.param  = fns.find_param_from_id(e.param_id);
+	out.param  = fns.find_param(e.param_id);
 	return out;
 }
 
@@ -370,7 +368,7 @@ auto to_scuff_(const clap_event_param_mod_t& e, const Conv& fns) -> scuff::event
 	out.key        = e.key;
 	out.note_id    = e.note_id;
 	out.port_index = e.port_index;
-	out.param      = fns.find_param(e.cookie, e.param_id);
+	out.param      = fns.find_param(e.param_id);
 	return out;
 }
 
@@ -383,7 +381,7 @@ auto to_scuff_(const clap_event_param_value_t& e, const Conv& fns) -> scuff::eve
 	out.key        = e.key;
 	out.note_id    = e.note_id;
 	out.port_index = e.port_index;
-	out.param      = fns.find_param(e.cookie, e.param_id);
+	out.param      = fns.find_param(e.param_id);
 	return out;
 }
 

@@ -42,7 +42,7 @@ struct port_conn {
 
 struct device_service {
 	immer::box<shm::device> shm;
-	std::shared_ptr<scuff::events::event_buffer> output_events;
+	std::shared_ptr<rwq<scuff::events::event>> input_events_from_main = std::make_shared<rwq<scuff::events::event>>(SCUFF_EVENT_PORT_SIZE);
 };
 
 struct device {

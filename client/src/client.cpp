@@ -34,7 +34,7 @@ auto write_events(const scuff::device& dev, const scuff_event_writer& writer) ->
 	const auto event_count = std::min(writer.count(&writer), size_t(SCUFF_EVENT_PORT_SIZE));
 	for (size_t j = 0; j < event_count; j++) {
 		const auto header = writer.get(&writer, j);
-		buffer.push_back(scuff::events::to_event(*header)); // TODO: remember to clear this in the sandbox process
+		buffer.push_back(scuff::events::to_event(*header));
 	}
 }
 
