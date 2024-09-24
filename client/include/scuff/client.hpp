@@ -1,11 +1,11 @@
 #pragma once
 
-#include "common/constants.hpp"
-#include "common/events.hpp"
-#include "common/param_info.hpp"
-#include "common/plugin_type.hpp"
-#include "common/render_mode.hpp"
-#include "common/types.hpp"
+#include "common/c_constants.h"
+#include "common/c_events.h"
+#include "common/c_param_info.h"
+#include "common/c_plugin_type.h"
+#include "common/c_render_mode.h"
+#include "common/c_types.h"
 #include <stdbool.h>
 
 enum {
