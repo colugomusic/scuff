@@ -70,6 +70,7 @@ typedef struct scuff_on_sbox_warning_t          { void* ctx; void (*fn)(const st
 typedef struct scuff_on_scan_complete_t         { void* ctx; void (*fn)(const struct scuff_on_scan_complete_t* ctx); } scuff_on_scan_complete;
 typedef struct scuff_on_scan_error_t            { void* ctx; void (*fn)(const struct scuff_on_scan_error_t*, const char* error); } scuff_on_scan_error;
 typedef struct scuff_on_scan_started_t          { void* ctx; void (*fn)(const struct scuff_on_scan_started_t* ctx ); } scuff_on_scan_started;
+typedef struct scuff_return_bytes_t             { void* ctx; void (*fn)(const struct scuff_return_bytes_t*, const void* bytes, size_t count); } scuff_return_bytes; 
 typedef struct scuff_return_device_t            { void* ctx; void (*fn)(const struct scuff_return_device_t*, scuff_device dev, bool success); } scuff_return_device; 
 typedef struct scuff_return_double_t            { void* ctx; void (*fn)(const struct scuff_return_double_t*, double value); } scuff_return_double;
 typedef struct scuff_return_string_t            { void* ctx; void (*fn)(const struct scuff_return_string_t*, const char* text); } scuff_return_string; 
@@ -165,9 +166,6 @@ void             scuff_device_gui_show(scuff_device dev);
 // If the device failed to load successfully, return the error string.
 const char*      scuff_device_get_error(scuff_device dev);
 
-// Set the render mode for the given device.
-void             scuff_device_set_render_mode(scuff_device dev, scuff_render_mode mode);
-
 // Return the device name.
 const char*      scuff_device_get_name(scuff_device dev);
 
@@ -187,8 +185,23 @@ bool             scuff_device_has_gui(scuff_device dev);
 // Return true if the device has parameters.
 bool             scuff_device_has_params(scuff_device dev);
 
+// Load the device state asynchronously.
+void             scuff_device_load(scuff_device dev, const void* bytes, size_t count);
+
+// Save the device state asynchronously.
+void             scuff_device_save(scuff_device dev, scuff_return_bytes fn);
+
+// Set the render mode for the given device.
+void             scuff_device_set_render_mode(scuff_device dev, scuff_render_mode mode);
+
 // Return true if the device loaded successfully.
 bool             scuff_device_was_loaded_successfully(scuff_device dev);
+
+// Activate audio processing for the sandbox group.
+void             scuff_group_activate(scuff_group group, scuff_sample_rate sr);
+
+// Deactivate audio processing for the sandbox group.
+void             scuff_group_deactivate(scuff_group group);
 
 // Create a new group.
 // - Every sandbox has to belong to a group.
@@ -268,9 +281,6 @@ void             scuff_restart(scuff_sbox sbox, const char* sbox_exe_path);
 // Scan the system for plugins. If the scanner process is already
 // running, it is restarted.
 void             scuff_scan(const char* scan_exe_path, int flags);
-
-// Set the sample rate for all devices.
-void             scuff_set_sample_rate(scuff_sample_rate sr);
 
 #ifdef __cplusplus
 } // extern "C"
