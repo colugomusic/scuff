@@ -168,7 +168,7 @@ auto convert_input_events(const sbox::device& dev, const clap::device& clap_dev)
 		return dev.service.shm->data->param_info[param].clap.cookie;
 	};
 	auto get_id = [dev](scuff_param param) -> clap_id {
-		return dev.service.shm->data->param_info[param].clap.id;
+		return dev.service.shm->data->param_info[param].id;
 	};
 	auto fns = scuff::events::clap::scuff_to_clap_conversion_fns{get_cookie, get_id};
 	scuff::events::clap::event_buffer input_clap_events;
@@ -182,8 +182,8 @@ auto convert_input_events(const sbox::device& dev, const clap::device& clap_dev)
 static
 auto convert_output_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
 	auto find_param = [dev](clap_id id) -> scuff_param {
-		auto has_id = [id](const shm::param_info& info) -> bool {
-			return info.clap.id == id;
+		auto has_id = [id](const scuff_param_info& info) -> bool {
+			return info.id == id;
 		};
 		const auto& infos = dev.service.shm->data->param_info;
 		const auto pos    = std::find_if(std::begin(infos), std::end(infos), has_id);
@@ -840,14 +840,15 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	clap_dev              = init_params(std::move(clap_dev));
 	for (size_t i = 0; i < clap_dev.params.size(); i++) {
 		const auto& param = clap_dev.params[i];
-		shm::param_info info;
-		info.id            = std::format("clap/{}", param.info.id);
+		scuff_param_info info;
+		info.id            = param.info.id;
 		info.default_value = param.info.default_value;
 		info.max_value     = param.info.max_value;
 		info.min_value     = param.info.min_value;
-		info.name          = param.info.name;
-		info.clap.id       = param.info.id;
 		info.clap.cookie   = param.info.cookie;
+		const auto name_buffer_size = std::min(std::size(info.name), std::size(param.info.name));
+		std::copy_n(std::begin(param.info.name), name_buffer_size, std::begin(info.name));
+		info.name[name_buffer_size - 1] = '\0';
 		dev.service.shm->data->param_info[i] = std::move(info);
 	}
 	auto m         = app->model.lock_read();

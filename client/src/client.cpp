@@ -568,8 +568,8 @@ auto param_get_value(scuff_device dev, scuff_param param, scuff_return_double fn
 	sbox.service->enqueue(scuff::msg::in::get_param_value{dev, param, callback});
 }
 
-static
-auto param_find(id::device dev_id, scuff_param_id param_id) -> scuff_param {
+[[nodiscard]] static
+auto param_find(id::device dev_id, uint32_t param_id) -> scuff_param {
 	const auto m    = DATA_->model.lock_read();
 	const auto dev  = m.devices.at(dev_id);
 	const auto lock = std::unique_lock{dev.shm->data->param_info_mutex};
@@ -582,15 +582,15 @@ auto param_find(id::device dev_id, scuff_param_id param_id) -> scuff_param {
 	return SCUFF_INVALID_INDEX;
 }
 
-static
-auto param_get_id(id::device dev_id, scuff_param param) -> scuff_param_id {
+[[nodiscard]] static
+auto param_get_info(id::device dev_id, scuff_param param) -> scuff_param_info {
 	const auto m    = DATA_->model.lock_read();
 	const auto dev  = m.devices.at(dev_id);
 	const auto lock = std::unique_lock{dev.shm->data->param_info_mutex};
 	if (param >= dev.shm->data->param_info.size()) {
 		throw std::runtime_error("Invalid parameter index.");
 	}
-	return dev.shm->data->param_info[param].id.c_str();
+	return dev.shm->data->param_info[param];
 }
 
 static
@@ -856,14 +856,9 @@ auto scuff_param_get_value(scuff_device dev, scuff_param param, scuff_return_dou
 	catch (const std::exception& err) { scuff::report_error(err.what()); }
 }
 
-auto scuff_param_find(scuff_device dev, scuff_param_id param_id) -> scuff_param {
-	try                               { return scuff::param_find({dev}, param_id); }
-	catch (const std::exception& err) { scuff::report_error(err.what()); return SCUFF_INVALID_INDEX; }
-}
-
-auto scuff_param_get_id(scuff_device dev, scuff_param param) -> scuff_param_id {
-	try                               { return scuff::param_get_id({dev}, param); }
-	catch (const std::exception& err) { scuff::report_error(err.what()); return ""; }
+auto scuff_param_get_info(scuff_device dev, scuff_param param) -> scuff_param_info {
+	try                               { return scuff::param_get_info({dev}, param); }
+	catch (const std::exception& err) { scuff::report_error(err.what()); return {0}; }
 }
 
 auto scuff_push_event(scuff_device dev, const scuff_event_header* event) -> void {

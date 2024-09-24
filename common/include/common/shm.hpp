@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/events.hpp"
+#include "common/c_param_info.h"
 #include "messages.hpp"
 #include <array>
 #include <boost/interprocess/containers/string.hpp>
@@ -12,7 +13,6 @@
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
 #include <boost/interprocess/ipc/message_queue.hpp>
 #include <boost/static_string.hpp>
-#include <clap/id.h>
 #include <deque>
 #include <mutex>
 #include <numeric>
@@ -110,23 +110,11 @@ struct device_flags {
 	int value = 0;
 };
 
-struct param_info {
-	boost::static_string<SCUFF_PARAM_ID_MAX> id;
-	boost::static_string<SCUFF_PARAM_NAME_MAX> name;
-	double min_value;
-	double max_value;
-	double default_value;
-	struct {
-		void* cookie;
-		clap_id id;
-	} clap;
-};
-
 struct device_data {
 	device_flags flags;
 	scuff::events::event_buffer events_in;
 	scuff::events::event_buffer events_out;
-	bc::static_vector<param_info, SCUFF_MAX_PARAMS> param_info;
+	bc::static_vector<scuff_param_info, SCUFF_MAX_PARAMS> param_info;
 	bc::static_vector<audio_buffer, SCUFF_MAX_AUDIO_PORTS> audio_in;
 	bc::static_vector<audio_buffer, SCUFF_MAX_AUDIO_PORTS> audio_out;
 	bip::interprocess_mutex param_info_mutex; // Lock this when rescanning parameters

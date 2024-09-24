@@ -10,7 +10,7 @@
 #define SCUFF_MAX_AUDIO_PORTS   16
 #define SCUFF_MAX_PARAMS        512
 #define SCUFF_PARAM_ID_MAX      32
-#define SCUFF_PARAM_NAME_MAX    32
+#define SCUFF_PARAM_NAME_MAX    64
 #define SCUFF_POLL_SLEEP_MS     10
 #define SCUFF_VECTOR_SIZE       256      // Hard-coded for now just to make things easier.
 #define SCUFF_VST3_EXT          ".vst3"
