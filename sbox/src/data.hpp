@@ -2,7 +2,7 @@
 
 #include "clap_data.hpp"
 #include "common/audio_sync.hpp"
-#include "common/c_plugin_type.h"
+#include "common/plugin_type.hpp"
 #include "common/events.hpp"
 #include "common/slot_buffer.hpp"
 #include "options.hpp"
@@ -42,14 +42,14 @@ struct port_conn {
 
 struct device_service {
 	immer::box<shm::device> shm;
-	std::shared_ptr<rwq<scuff::events::event>> input_events_from_main = std::make_shared<rwq<scuff::events::event>>(SCUFF_EVENT_PORT_SIZE);
+	std::shared_ptr<rwq<scuff::events::event>> input_events_from_main = std::make_shared<rwq<scuff::events::event>>(EVENT_PORT_SIZE);
 };
 
 struct device {
 	id::device id;
 	device_flags flags;
 	device_ui ui;
-	scuff_plugin_type type;
+	plugin_type type;
 	immer::box<std::string> name;
 	immer::flex_vector<port_conn> output_conns;
 	device_service service;

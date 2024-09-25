@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common/events.hpp"
-#include "common/c_param_info.h"
+#include "common/param_info.hpp"
 #include "messages.hpp"
 #include <array>
 #include <boost/interprocess/containers/string.hpp>
@@ -95,11 +95,11 @@ struct msg_buffer {
 		return count;
 	}
 private:
-	bc::static_vector<std::byte, SCUFF_MSG_BUFFER_SIZE> bytes_;
+	bc::static_vector<std::byte, MSG_BUFFER_SIZE> bytes_;
 	bip::interprocess_mutex mutex_;
 };
 
-using audio_buffer = std::array<float, SCUFF_VECTOR_SIZE * SCUFF_CHANNEL_COUNT>;
+using audio_buffer = std::array<float, VECTOR_SIZE * CHANNEL_COUNT>;
 
 struct device_flags {
 	enum e {
@@ -114,9 +114,9 @@ struct device_data {
 	device_flags flags;
 	scuff::events::event_buffer events_in;
 	scuff::events::event_buffer events_out;
-	bc::static_vector<scuff_param_info, SCUFF_MAX_PARAMS> param_info;
-	bc::static_vector<audio_buffer, SCUFF_MAX_AUDIO_PORTS> audio_in;
-	bc::static_vector<audio_buffer, SCUFF_MAX_AUDIO_PORTS> audio_out;
+	bc::static_vector<scuff::param_info, MAX_PARAMS> param_info;
+	bc::static_vector<audio_buffer, MAX_AUDIO_PORTS> audio_in;
+	bc::static_vector<audio_buffer, MAX_AUDIO_PORTS> audio_out;
 	bip::interprocess_mutex param_info_mutex; // Lock this when rescanning parameters
 };
 

@@ -1,9 +1,9 @@
 #pragma once
 
-#include "c_constants.h"
-#include "c_plugin_type.h"
-#include "c_render_mode.h"
-#include "c_types.h"
+#include "constants.hpp"
+#include "plugin_type.hpp"
+#include "render_mode.hpp"
+#include "types.hpp"
 #include "types.hpp"
 #include "events.hpp"
 #include <clap/id.h>
@@ -21,18 +21,18 @@ namespace scuff::msg::in {
 
 struct clean_shutdown         {};
 struct close_all_editors      {};
-struct device_create          { scuff_device dev_id; scuff_plugin_type type; std::string plugfile_path; std::string plugin_id; size_t callback; };
+struct device_create          { id::device::type dev_id; plugin_type type; std::string plugfile_path; std::string plugin_id; size_t callback; };
 struct device_connect         { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
 struct device_disconnect      { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
-struct device_erase           { scuff_device dev_id; };
-struct device_gui_hide        { scuff_device dev_id; };
-struct device_gui_show        { scuff_device dev_id; };
-struct device_load            { scuff_device dev_id; std::vector<std::byte> state; };
-struct device_save            { scuff_device dev_id; size_t callback; };
-struct device_set_render_mode { scuff_device dev_id; scuff_render_mode mode; };
-struct event                  { scuff_device dev_id; scuff::events::event event; };
-struct get_param_value        { scuff_device dev_id; scuff_param param_idx; size_t callback; };
-struct get_param_value_text   { scuff_device dev_id; scuff_param param_idx; double value; size_t callback; };
+struct device_erase           { id::device::type dev_id; };
+struct device_gui_hide        { id::device::type dev_id; };
+struct device_gui_show        { id::device::type dev_id; };
+struct device_load            { id::device::type dev_id; std::vector<std::byte> state; };
+struct device_save            { id::device::type dev_id; size_t callback; };
+struct device_set_render_mode { id::device::type dev_id; render_mode mode; };
+struct event                  { id::device::type dev_id; scuff::events::event event; };
+struct get_param_value        { id::device::type dev_id; size_t param_idx; size_t callback; };
+struct get_param_value_text   { id::device::type dev_id; size_t param_idx; double value; size_t callback; };
 struct set_sample_rate        { double sr; };
 
 using msg = std::variant<
@@ -59,15 +59,15 @@ namespace scuff::msg::out {
 
 // These messages are sent back from a sandbox process to the client.
 
-struct device_param_info_changed { scuff_device dev_id; std::string new_shmid; };
+struct device_param_info_changed { id::device::type dev_id; std::string new_shmid; };
 struct report_error              { std::string text; };
 struct report_fatal_error        { std::string text; };
 struct report_info               { std::string text; };
 struct report_warning            { std::string text; };
-struct return_created_device     { scuff_device dev_id; std::string ports_shmid; size_t callback; };
+struct return_created_device     { id::device::type dev_id; std::string ports_shmid; size_t callback; };
 struct return_param_value        { double value; size_t callback; };
 struct return_param_value_text   { std::string text; size_t callback; };
-struct return_state              { scuff_device dev_id; std::vector<std::byte> bytes; size_t callback; };
+struct return_state              { id::device::type dev_id; std::vector<std::byte> bytes; size_t callback; };
 
 using msg = std::variant<
 	device_param_info_changed,

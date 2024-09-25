@@ -2,7 +2,7 @@
 #include <cs_plain_guarded.h>
 #include <deque>
 #include <nappgui.h>
-#include <scuff/client.h>
+#include <scuff/client.hpp>
 #include <stdlib.h>
 #include <string>
 #include <variant>
@@ -14,10 +14,10 @@ namespace host {
 
 namespace to_main {
 
-struct plugfile_broken  { scuff_plugfile plugfile; };
-struct plugfile_scanned { scuff_plugfile plugfile; };
-struct plugin_broken    { scuff_plugin plugin; };
-struct plugin_scanned   { scuff_plugin plugin; };
+struct plugfile_broken  { scuff::id::plugfile plugfile; };
+struct plugfile_scanned { scuff::id::plugfile plugfile; };
+struct plugin_broken    { scuff::id::plugin plugin; };
+struct plugin_scanned   { scuff::id::plugin plugin; };
 struct scan_error       { std::string error; };
 struct scan_started     {};
 struct scan_complete    {};
@@ -132,7 +132,7 @@ auto on_window_close(host::app* app, Event* e) -> void {
 
 static
 auto on_btn_rescan_clicked(host::app* app, Event* e) -> void {
-	scuff_scan(edit_get_text(app->ui.paths.path_edit_scan_exe.edit), {});
+	scuff::scan(edit_get_text(app->ui.paths.path_edit_scan_exe.edit), {});
 }
 
 static
@@ -300,81 +300,64 @@ auto create_window(host::app* app) -> void {
 }
 
 static
-auto on_scuff_plugfile_broken(const scuff_on_plugfile_broken* ctx, scuff_plugfile pf) -> void {
-	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+auto on_scuff_plugfile_broken(host::app* app, scuff::id::plugfile pf) -> void {
 	app->to_main.lock()->push_back(to_main::plugfile_broken{pf});
 }
 
 static
-auto on_scuff_plugfile_scanned(const scuff_on_plugfile_scanned* ctx, scuff_plugfile pf) -> void {
-	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+auto on_scuff_plugfile_scanned(host::app* app, scuff::id::plugfile pf) -> void {
 	app->to_main.lock()->push_back(to_main::plugfile_scanned{pf});
 }
 
 static
-auto on_scuff_plugin_broken(const scuff_on_plugin_broken* ctx, scuff_plugin p) -> void {
-	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+auto on_scuff_plugin_broken(host::app* app, scuff::id::plugin p) -> void {
 	app->to_main.lock()->push_back(to_main::plugin_broken{p});
 }
 
 static
-auto on_scuff_plugin_scanned(const scuff_on_plugin_scanned* ctx, scuff_plugin p) -> void {
-	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+auto on_scuff_plugin_scanned(host::app* app, scuff::id::plugin p) -> void {
 	app->to_main.lock()->push_back(to_main::plugin_scanned{p});
 }
 
 static
-auto on_scuff_sbox_crashed(const scuff_on_sbox_crashed* ctx, scuff_sbox sbox, const char* error) -> void {
-	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+auto on_scuff_sbox_crashed(host::app* app, scuff::id::sandbox sbox, const char* error) -> void {
 	// TODO: on_scuff_sbox_crashed
 }
 
 static
-auto on_scuff_sbox_started(const scuff_on_sbox_started* ctx, scuff_sbox sbox) -> void {
-	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+auto on_scuff_sbox_started(host::app* app, scuff::id::sandbox sbox) -> void {
 	app->to_main.lock()->push_back(to_main::scan_started{});
 }
 
 static
-auto on_scuff_scan_complete(const scuff_on_scan_complete* ctx) -> void {
-	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+auto on_scuff_scan_complete(host::app* app) -> void {
 	app->to_main.lock()->push_back(to_main::scan_complete{});
 }
 
 static
-auto on_scuff_scan_error(const scuff_on_scan_error* ctx, const char* error) -> void {
-	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+auto on_scuff_scan_error(host::app* app, const char* error) -> void {
 	app->to_main.lock()->push_back(to_main::scan_error{error});
 }
 
 static
-auto on_scuff_scan_started(const scuff_on_scan_started* ctx) -> void {
-	const auto app = reinterpret_cast<host::app*>(ctx->ctx);
+auto on_scuff_scan_started(host::app* app) -> void {
 	app->to_main.lock()->push_back(to_main::scan_started{});
-}
-
-template <typename Cb, typename Fn> [[nodiscard]] static
-auto make_scuff_cb(Fn fn, host::app* app) -> Cb {
-	Cb cb;
-	cb.ctx = app;
-	cb.fn = fn;
-	return cb;
 }
 
 static
 auto initialize_scuff(host::app* app) -> void {
-	scuff_config cfg;
-	cfg.callbacks.on_plugfile_broken  = make_scuff_cb<scuff_on_plugfile_broken>(on_scuff_plugfile_broken, app);
-	cfg.callbacks.on_plugfile_scanned = make_scuff_cb<scuff_on_plugfile_scanned>(on_scuff_plugfile_scanned, app);
-	cfg.callbacks.on_plugin_broken    = make_scuff_cb<scuff_on_plugin_broken>(on_scuff_plugin_broken, app);
-	cfg.callbacks.on_plugin_scanned   = make_scuff_cb<scuff_on_plugin_scanned>(on_scuff_plugin_scanned, app);
-	cfg.callbacks.on_sbox_crashed     = make_scuff_cb<scuff_on_sbox_crashed>(on_scuff_sbox_crashed, app);
-	cfg.callbacks.on_sbox_started     = make_scuff_cb<scuff_on_sbox_started>(on_scuff_sbox_started, app);
-	cfg.callbacks.on_scan_complete    = make_scuff_cb<scuff_on_scan_complete>(on_scuff_scan_complete, app);
-	cfg.callbacks.on_scan_error       = make_scuff_cb<scuff_on_scan_error>(on_scuff_scan_error, app);
-	cfg.callbacks.on_scan_started     = make_scuff_cb<scuff_on_scan_started>(on_scuff_scan_started, app);
+	scuff::config cfg;
+	cfg.callbacks.on_plugfile_broken  = [app](auto... args) { on_scuff_plugfile_broken(app, args...); };
+	cfg.callbacks.on_plugfile_scanned = [app](auto... args) { on_scuff_plugfile_scanned(app, args...); };
+	cfg.callbacks.on_plugin_broken    = [app](auto... args) { on_scuff_plugin_broken(app, args...); };
+	cfg.callbacks.on_plugin_scanned   = [app](auto... args) { on_scuff_plugin_scanned(app, args...); };
+	cfg.callbacks.on_sbox_crashed     = [app](auto... args) { on_scuff_sbox_crashed(app, args...); };
+	cfg.callbacks.on_sbox_started     = [app](auto... args) { on_scuff_sbox_started(app, args...); };
+	cfg.callbacks.on_scan_complete    =	[app](auto... args) { on_scuff_scan_complete(app); };
+	cfg.callbacks.on_scan_error       = [app](auto... args) { on_scuff_scan_error(app, args...); };
+	cfg.callbacks.on_scan_started     = [app](auto... args) { on_scuff_scan_started(app); };
 	try {
-		scuff_init(&cfg);
+		scuff::init(&cfg);
 	} catch (const std::exception& e) {
 		fprintf(stderr, "scuff_init failed: %s\n", e.what());
 	}
@@ -390,7 +373,7 @@ auto create() -> host::app* {
 
 static
 auto destroy(host::app** app) -> void {
-	scuff_shutdown();
+	scuff::shutdown();
 	window_destroy(&(*app)->ui.window);
 	delete *app;
 	*app = nullptr;
@@ -415,8 +398,8 @@ auto get_some_messages(host::app* app) -> std::vector<to_main::msg> {
 static
 auto process_(host::app* app, const to_main::plugfile_broken& msg) -> void {
 	plugfile my_pf;
-	my_pf.path   = scuff_plugfile_get_path(msg.plugfile);
-	my_pf.status = scuff_plugfile_get_error(msg.plugfile);
+	my_pf.path   = scuff::get_path(msg.plugfile);
+	my_pf.status = scuff::get_error(msg.plugfile);
 	app->plugfiles.push_back(my_pf);
 	app->plugfiles.dirty = true;
 }
@@ -424,7 +407,7 @@ auto process_(host::app* app, const to_main::plugfile_broken& msg) -> void {
 static
 auto process_(host::app* app, const to_main::plugfile_scanned& msg) -> void {
 	plugfile my_pf;
-	my_pf.path   = scuff_plugfile_get_path(msg.plugfile);
+	my_pf.path   = scuff::get_path(msg.plugfile);
 	my_pf.status = "Working";
 	app->plugfiles.push_back(my_pf);
 	app->plugfiles.dirty = true;
@@ -433,9 +416,9 @@ auto process_(host::app* app, const to_main::plugfile_scanned& msg) -> void {
 static
 auto process_(host::app* app, const to_main::plugin_broken& msg) -> void {
 	host::plugin plugin;
-	plugin.name = scuff_plugin_get_name(msg.plugin);
-	plugin.vendor = scuff_plugin_get_vendor(msg.plugin);
-	plugin.status = scuff_plugin_get_error(msg.plugin);
+	plugin.name = scuff::get_name(msg.plugin);
+	plugin.vendor = scuff::get_vendor(msg.plugin);
+	plugin.status = scuff::get_error(msg.plugin);
 	app->plugins.push_back(plugin);
 	app->plugins.dirty = true;
 }
@@ -443,8 +426,8 @@ auto process_(host::app* app, const to_main::plugin_broken& msg) -> void {
 static
 auto process_(host::app* app, const to_main::plugin_scanned& msg) -> void {
 	host::plugin plugin;
-	plugin.name = scuff_plugin_get_name(msg.plugin);
-	plugin.vendor = scuff_plugin_get_vendor(msg.plugin);
+	plugin.name = scuff::get_name(msg.plugin);
+	plugin.vendor = scuff::get_vendor(msg.plugin);
 	plugin.status = "Working";
 	app->plugins.push_back(plugin);
 	app->plugins.dirty = true;

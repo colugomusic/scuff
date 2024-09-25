@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.30)
 project(scuff)
 
+set(SCUFF_BUILD_CLIENT    ON CACHE BOOL "Build the client library")
+set(SCUFF_BUILD_SBOX      ON CACHE BOOL "Build the sandbox exe")
+set(SCUFF_BUILD_SCANNER   ON CACHE BOOL "Build the scanner exe")
+set(SCUFF_BUILD_TEST_HOST ON CACHE BOOL "Build the test host")
+
 if (SCUFF_BUILD_CLIENT)
 	add_subdirectory(client)
 endif()

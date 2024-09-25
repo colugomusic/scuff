@@ -5,7 +5,7 @@ if (NOT TARGET scuff::common)
 endif()
 include(../CPM.cmake)
 list (APPEND src
-	include/scuff/client.h
+	include/scuff/client.hpp
 	src/client.cpp
 	src/data.hpp
 	src/scan.hpp

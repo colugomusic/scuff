@@ -7,7 +7,7 @@
 namespace scuff::sbox::main {
 
 [[nodiscard]] static
-auto get_device_type(const sbox::app& app, id::device dev_id) -> scuff_plugin_type {
+auto get_device_type(const sbox::app& app, id::device dev_id) -> plugin_type {
 	return app.model.lock_read().devices.at(dev_id).type;
 }
 
@@ -51,7 +51,7 @@ auto make_device_processing_order(immer::table<device> devices) -> immer::vector
 
 static
 auto set_sample_rate(sbox::app* app, const sbox::device& dev, double sr) -> void {
-	if (dev.type == scuff_plugin_type_clap) {
+	if (dev.type == plugin_type::clap) {
 		if (!clap::main::set_sample_rate(*app, dev.id, sr)) {
 			app->msg_sender.enqueue(scuff::msg::out::report_error{std::format("Failed to set sample rate for device {}", dev.id.value)});
 		}
@@ -77,7 +77,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors&
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
 	try {
-		if (msg.type == scuff_plugin_type_clap) {
+		if (msg.type == plugin_type::clap) {
 			clap::main::create_device(app, {msg.dev_id}, msg.plugfile_path, msg.plugin_id, msg.callback);
 			auto m = app->model.lock_read();
 			m.device_processing_order = make_device_processing_order(m.devices);
@@ -176,7 +176,7 @@ static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_load& msg) -> void {
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
-	if (type == scuff_plugin_type_clap) {
+	if (type == plugin_type::clap) {
 		if (!clap::main::load(app, dev_id, msg.state)) {
 			app->msg_sender.enqueue(scuff::msg::out::report_error{"Failed to load device state"});
 		}
@@ -188,7 +188,7 @@ static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_save& msg) -> void {
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
-	if (type == scuff_plugin_type_clap) {
+	if (type == plugin_type::clap) {
 		const auto state = clap::main::save(app, dev_id);
 		if (state.empty()) {
 			app->msg_sender.enqueue(scuff::msg::out::report_error{"Failed to save device state"});
@@ -216,8 +216,8 @@ static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value& msg) -> void {
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
-	if (type == scuff_plugin_type_clap) {
-		if (const auto value = clap::main::get_param_value(*app, dev_id, msg.param_idx)) {
+	if (type == plugin_type::clap) {
+		if (const auto value = clap::main::get_param_value(*app, dev_id, {msg.param_idx})) {
 			app->msg_sender.enqueue(scuff::msg::out::return_param_value{*value, msg.callback});
 		}
 		return;
@@ -228,8 +228,8 @@ static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value_text& msg) -> void {
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
-	if (type == scuff_plugin_type_clap) {
-		const auto text = clap::main::get_param_value_text(*app, dev_id, msg.param_idx, msg.value);
+	if (type == plugin_type::clap) {
+		const auto text = clap::main::get_param_value_text(*app, dev_id, {msg.param_idx}, msg.value);
 		app->msg_sender.enqueue(scuff::msg::out::return_param_value_text{text, msg.callback});
 		return;
 	}

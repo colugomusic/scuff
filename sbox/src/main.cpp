@@ -36,11 +36,11 @@ static
 auto do_processing(const sbox::app& app, const sbox::device& dev) -> void {
 	transfer_input_events_from_main(dev);
 	switch (dev.type) {
-		case scuff_plugin_type_clap: {
+		case plugin_type::clap: {
 			scuff::sbox::clap::audio::process(app, dev);
 			break;
 		}
-		case scuff_plugin_type_vst3: {
+		case plugin_type::vst3: {
 			// Not implemented yet.
 			break;
 		}

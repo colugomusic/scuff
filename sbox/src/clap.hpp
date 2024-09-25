@@ -164,11 +164,11 @@ auto cb_gui_resize_hints_changed(sbox::app* app, id::device dev_id) -> void {
 
 static
 auto convert_input_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
-	auto get_cookie = [dev](scuff_param param) -> void* {
-		return dev.service.shm->data->param_info[param].clap.cookie;
+	auto get_cookie = [dev](idx::param param) -> void* {
+		return dev.service.shm->data->param_info[param.value].clap.cookie;
 	};
-	auto get_id = [dev](scuff_param param) -> clap_id {
-		return dev.service.shm->data->param_info[param].id;
+	auto get_id = [dev](idx::param param) -> clap_id {
+		return dev.service.shm->data->param_info[param.value].id.value;
 	};
 	auto fns = scuff::events::clap::scuff_to_clap_conversion_fns{get_cookie, get_id};
 	scuff::events::clap::event_buffer input_clap_events;
@@ -181,16 +181,16 @@ auto convert_input_events(const sbox::device& dev, const clap::device& clap_dev)
 
 static
 auto convert_output_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
-	auto find_param = [dev](clap_id id) -> scuff_param {
-		auto has_id = [id](const scuff_param_info& info) -> bool {
-			return info.id == id;
+	auto find_param = [dev](clap_id id) -> idx::param {
+		auto has_id = [id](const scuff::param_info& info) -> bool {
+			return info.id.value == id;
 		};
 		const auto& infos = dev.service.shm->data->param_info;
 		const auto pos    = std::find_if(std::begin(infos), std::end(infos), has_id);
 		if (pos == std::end(infos)) {
 			throw std::runtime_error(std::format("Could not find parameter with CLAP id: {}", id));
 		}
-		return static_cast<scuff_param>(std::distance(std::begin(infos), pos));
+		return static_cast<idx::param>(std::distance(std::begin(infos), pos));
 	};
 	auto fns = scuff::events::clap::clap_to_scuff_conversion_fns{find_param};
 	scuff::events::event_buffer output_scuff_events;
@@ -351,7 +351,7 @@ auto process(const sbox::app& app, const sbox::device& dev) -> void {
 namespace scuff::sbox::clap::main {
 
 static
-auto make_audio_buffers(bc::static_vector<shm::audio_buffer, SCUFF_MAX_AUDIO_PORTS>* shm_buffers, const std::vector<clap_audio_port_info_t>& port_info, audio_buffers_detail* out) -> void {
+auto make_audio_buffers(bc::static_vector<shm::audio_buffer, MAX_AUDIO_PORTS>* shm_buffers, const std::vector<clap_audio_port_info_t>& port_info, audio_buffers_detail* out) -> void {
 	out->arrays.resize(port_info.size());
 	out->buffers.resize(port_info.size());
 	for (size_t port_index = 0; port_index < port_info.size(); port_index++) {
@@ -434,7 +434,7 @@ static
 auto initialize_process_struct_for_audio_device(const clap::device& dev, clap::device_service_audio* audio) -> void {
 	audio->input_events                = make_input_event_list(dev);
 	audio->output_events               = make_output_event_list(dev);
-	audio->process.frames_count        = SCUFF_VECTOR_SIZE;
+	audio->process.frames_count        = VECTOR_SIZE;
 	audio->process.audio_inputs_count  = static_cast<uint32_t>(audio->buffers.inputs.buffers.size());
 	audio->process.audio_inputs        = audio->buffers.inputs.buffers.data();
 	audio->process.audio_outputs_count = static_cast<uint32_t>(audio->buffers.outputs.buffers.size());
@@ -451,7 +451,7 @@ auto initialize_process_struct_for_event_device(const clap::device& dev, clap::d
 	audio->input_events                = make_input_event_list(dev);
 	audio->output_events               = make_output_event_list(dev);
 	static auto dummy_buffer           = clap_audio_buffer_t{0};
-	audio->process.frames_count        = SCUFF_VECTOR_SIZE;
+	audio->process.frames_count        = VECTOR_SIZE;
 	audio->process.audio_inputs_count  = 0;
 	audio->process.audio_inputs        = &dummy_buffer;
 	audio->process.audio_outputs_count = 0;
@@ -824,7 +824,7 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	auto dev                         = sbox::device{};
 	auto clap_dev                    = clap::device{};
 	dev.id                           = dev_id;
-	dev.type                         = scuff_plugin_type_clap;
+	dev.type                         = plugin_type::clap;
 	dev.service.shm                  = make_shm_device(app->instance_id, dev_id);
 	clap_dev.service.audio_port_info = retrieve_audio_port_info(iface.plugin);
 	const auto audio_in_count    = clap_dev.service.audio_port_info->inputs.size();
@@ -840,8 +840,8 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	clap_dev              = init_params(std::move(clap_dev));
 	for (size_t i = 0; i < clap_dev.params.size(); i++) {
 		const auto& param = clap_dev.params[i];
-		scuff_param_info info;
-		info.id            = param.info.id;
+		scuff::param_info info;
+		info.id            = {param.info.id};
 		info.default_value = param.info.default_value;
 		info.max_value     = param.info.max_value;
 		info.min_value     = param.info.min_value;
@@ -859,10 +859,10 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 }
 
 [[nodiscard]] static
-auto get_param_value(const sbox::app& app, id::device dev_id, scuff_param param_idx) -> std::optional<double> {
+auto get_param_value(const sbox::app& app, id::device dev_id, idx::param param_idx) -> std::optional<double> {
 	const auto dev = app.model.lock_read().clap_devices.at(dev_id);
 	if (dev.iface->plugin.params) {
-		const auto param = dev.params[param_idx];
+		const auto param = dev.params[param_idx.value];
 		double value;
 		if (dev.iface->plugin.params->get_value(dev.iface->plugin.plugin, param.info.id, &value)) {
 			return value;
@@ -872,11 +872,11 @@ auto get_param_value(const sbox::app& app, id::device dev_id, scuff_param param_
 }
 
 [[nodiscard]] static
-auto get_param_value_text(const sbox::app& app, id::device dev_id, scuff_param param_idx, double value) -> std::string {
+auto get_param_value_text(const sbox::app& app, id::device dev_id, idx::param param_idx, double value) -> std::string {
 	static constexpr auto BUFFER_SIZE = 50;
 	const auto dev = app.model.lock_read().clap_devices.at(dev_id);
 	if (dev.iface->plugin.params) {
-		const auto param = dev.params[param_idx];
+		const auto param = dev.params[param_idx.value];
 		char buffer[BUFFER_SIZE];
 		if (!dev.iface->plugin.params->value_to_text(dev.iface->plugin.plugin, param.info.id, value, buffer, BUFFER_SIZE)) {
 			return std::to_string(value);
@@ -932,7 +932,7 @@ auto set_sample_rate(const sbox::app& app, id::device dev_id, double sr) -> bool
 	const auto m   = app.model.lock_read();
 	const auto dev = m.clap_devices.at(dev_id);
 	dev.iface->plugin.plugin->deactivate(dev.iface->plugin.plugin);
-	return dev.iface->plugin.plugin->activate(dev.iface->plugin.plugin, sr, SCUFF_VECTOR_SIZE, SCUFF_VECTOR_SIZE);
+	return dev.iface->plugin.plugin->activate(dev.iface->plugin.plugin, sr, VECTOR_SIZE, VECTOR_SIZE);
 }
 
 } // scuff::sbox::clap::main

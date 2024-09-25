@@ -1,6 +1,6 @@
 #pragma once
 
-#include "client.h"
+#include "client.hpp"
 #include "common/audio_sync.hpp"
 #include "common/shm.hpp"
 #include "common/slot_buffer.hpp"
@@ -16,13 +16,10 @@ namespace basio = boost::asio;
 
 namespace scuff {
 
-using return_device = std::function<void(id::device dev_id, bool success)>;
-using return_state  = std::function<void(const std::vector<std::byte>& bytes)>;
-
 using return_device_fns = slot_buffer<return_device>;
-using return_double_fns = slot_buffer<scuff_return_double>;
-using return_state_fns  = slot_buffer<return_state>;
-using return_string_fns = slot_buffer<scuff_return_string>;
+using return_double_fns = slot_buffer<return_double>;
+using return_state_fns  = slot_buffer<return_bytes>;
+using return_string_fns = slot_buffer<return_string>;
 
 struct return_buffers {
 	return_device_fns devices;
@@ -82,7 +79,7 @@ struct device {
 	id::device id;
 	id::plugin plugin;
 	id::sandbox sbox;
-	scuff_plugin_type type;
+	plugin_type type;
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
 	immer::box<std::string> name;
@@ -131,7 +128,7 @@ struct model {
 
 struct data {
 	std::string       instance_id;
-	scuff_callbacks   callbacks;
+	scuff::callbacks  callbacks;
 	std::jthread      poll_thread;
 	std::jthread      scan_thread;
 	audio_sync<model> model;
