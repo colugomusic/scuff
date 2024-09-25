@@ -10,6 +10,7 @@
 #include <concepts>
 #include <vector>
 
+namespace scuff {
 
 namespace fn_sig {
 
