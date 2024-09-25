@@ -39,11 +39,9 @@ enum class type {
 };
 
 struct header {
-	uint32_t size;
 	uint32_t time;
-	uint16_t CLAP_space_id;
 	events::type event_type;
-	events::flags flags;
+	uint16_t flags;
 };
 
 struct note {

@@ -18,7 +18,7 @@ struct param {
 
 namespace scuff::id {
 
-static constexpr auto INVALID = -1;
+static constexpr int64_t INVALID = -1;
 
 struct device   { using type = int64_t; type value = INVALID; explicit operator bool() const { return value != INVALID; } auto operator<=>(const device& rhs) const = default; };
 struct sandbox  { using type = int64_t; type value = INVALID; explicit operator bool() const { return value != INVALID; } auto operator<=>(const sandbox& rhs) const = default; };

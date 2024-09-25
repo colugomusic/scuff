@@ -316,9 +316,9 @@ auto find(ext::id::plugin plugin_id) -> id::plugin {
 }
 
 [[nodiscard]] static
-auto create_device(model&& m, const sandbox& sbox, plugin_type type, ext::id::plugin plugin_ext_id, id::plugin plugin_id, return_device return_fn) -> model {
+auto create_device(model&& m, id::device dev_id, const sandbox& sbox, plugin_type type, ext::id::plugin plugin_ext_id, id::plugin plugin_id, return_device return_fn) -> model {
 	scuff::device dev;
-	dev.id            = scuff::id::device{scuff::id_gen_++};
+	dev.id            = dev_id;
 	dev.sbox          = {sbox.id};
 	dev.plugin_ext_id = plugin_ext_id;
 	dev.plugin        = plugin_id;
@@ -342,13 +342,15 @@ auto create_device(model&& m, const sandbox& sbox, plugin_type type, ext::id::pl
 	return m;
 }
 
-static
-auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id, return_device fn) -> void {
+[[nodiscard]] static
+auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id, return_device fn) -> id::device {
 	auto m               = DATA_->model.lock_read();
 	const auto& sbox     = m.sandboxes.at(sbox_id);
 	const auto plugin_id = id::plugin{find(plugin_ext_id)};
-	m = create_device(std::move(m), sbox, type, {plugin_ext_id}, plugin_id, fn);
+	const auto dev_id    = id::device{scuff::id_gen_++};
+	m = create_device(std::move(m), dev_id, sbox, type, {plugin_ext_id}, plugin_id, fn);
 	DATA_->model.lock_write(m);
+	return dev_id;
 }
 
 static
@@ -402,7 +404,8 @@ auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id, return_device fn)
 			fn(dev_id, success);
 		};
 		auto m = DATA_->model.lock_read();
-		m = create_device(std::move(m), dst_sbox, type, plugin_ext_id, plugin, return_fn);
+		const auto dev_id = id::device{scuff::id_gen_++};
+		m = create_device(std::move(m), dev_id, dst_sbox, type, plugin_ext_id, plugin, return_fn);
 		DATA_->model.lock_write(m);
 	});
 	src_sbox.service->enqueue(msg::in::device_save{src_dev_id.value, save_cb});
@@ -752,9 +755,9 @@ auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port
 	catch (const std::exception& err) { impl::report_error(err.what()); }
 }
 
-auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_device fn) -> void {
-	try                               { impl::create_device(sbox, type, plugin_id, fn); }
-	catch (const std::exception& err) { impl::report_error(err.what()); }
+auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_device fn) -> id::device {
+	try                               { return impl::create_device(sbox, type, plugin_id, fn); }
+	catch (const std::exception& err) { impl::report_error(err.what()); return {}; }
 }
 
 auto disconnect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void {

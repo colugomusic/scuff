@@ -104,11 +104,11 @@ auto type_from_scuff(events::type type) -> uint16_t {
 }
 
 [[nodiscard]] static
-auto from_scuff(const events::header& hdr) -> clap_event_header_t {
+auto from_scuff(const events::header& hdr, uint32_t size) -> clap_event_header_t {
 	clap_event_header_t out;
-	out.space_id = hdr.CLAP_space_id;
+	out.space_id = CLAP_CORE_EVENT_SPACE_ID;
 	out.flags    = flags_from_scuff(hdr.flags);
-	out.size     = hdr.size;
+	out.size     = size;
 	out.time     = hdr.time;
 	out.type     = type_from_scuff(hdr.event_type);
 	return out;
@@ -117,7 +117,7 @@ auto from_scuff(const events::header& hdr) -> clap_event_header_t {
 template <scuff_to_clap_conversion Conv> [[nodiscard]] static
 auto from_scuff_(const midi_sysex& e, const Conv& fns) -> event {
 	clap_event_midi_sysex_t out;
-	out.header     = from_scuff(e.header);
+	out.header     = from_scuff(e.header, sizeof(clap_event_midi_sysex_t));
 	out.port_index = e.port_index;
 	out.size       = e.size;
 	out.buffer     = e.buffer;
@@ -127,7 +127,7 @@ auto from_scuff_(const midi_sysex& e, const Conv& fns) -> event {
 template <scuff_to_clap_conversion Conv> [[nodiscard]] static
 auto from_scuff_(const midi& e, const Conv& fns) -> event {
 	clap_event_midi_t out;
-	out.header     = from_scuff(e.header);
+	out.header     = from_scuff(e.header, sizeof(clap_event_midi_t));
 	out.port_index = e.port_index;
 	std::copy(std::begin(e.data), std::end(e.data), std::begin(out.data));
 	return out;
@@ -136,7 +136,7 @@ auto from_scuff_(const midi& e, const Conv& fns) -> event {
 template <scuff_to_clap_conversion Conv> [[nodiscard]] static
 auto from_scuff_(const midi2& e, const Conv& fns) -> event {
 	clap_event_midi2_t out;
-	out.header     = from_scuff(e.header);
+	out.header     = from_scuff(e.header, sizeof(clap_event_midi2_t));
 	out.port_index = e.port_index;
 	std::copy(std::begin(e.data), std::end(e.data), std::begin(out.data));
 	return out;
@@ -146,7 +146,7 @@ template <scuff_to_clap_conversion Conv> [[nodiscard]] static
 auto from_scuff_(const note_expression& e, const Conv& fns) -> event {
 	clap_event_note_expression_t out;
 	out.expression_id = int32_t(e.id);
-	out.header        = from_scuff(e.header);
+	out.header        = from_scuff(e.header, sizeof(clap_event_note_expression_t));
 	out.key           = e.key;
 	out.note_id       = e.note_id;
 	out.port_index    = e.port_index;
@@ -157,7 +157,7 @@ auto from_scuff_(const note_expression& e, const Conv& fns) -> event {
 template <scuff_to_clap_conversion Conv> [[nodiscard]] static
 auto from_scuff_(const param_gesture& e, const Conv& fns) -> event {
 	clap_event_param_gesture_t out;
-	out.header   = from_scuff(e.header);
+	out.header   = from_scuff(e.header, sizeof(clap_event_param_gesture_t));
 	out.param_id = fns.get_param_id({e.param});
 	return out;
 }
@@ -167,7 +167,7 @@ auto from_scuff_(const param_mod& e, const Conv& fns) -> event {
 	clap_event_param_mod_t out;
 	out.amount     = e.amount;
 	out.channel    = e.channel;
-	out.header     = from_scuff(e.header);
+	out.header     = from_scuff(e.header, sizeof(clap_event_param_mod_t));
 	out.key        = e.key;
 	out.note_id    = e.note_id;
 	out.port_index = e.port_index;
@@ -180,7 +180,7 @@ template <scuff_to_clap_conversion Conv> [[nodiscard]] static
 auto from_scuff_(const param_value& e, const Conv& fns) -> event {
 	clap_event_param_value_t out;
 	out.channel    = e.channel;
-	out.header     = from_scuff(e.header);
+	out.header     = from_scuff(e.header, sizeof(clap_event_param_value_t));
 	out.key        = e.key;
 	out.note_id    = e.note_id;
 	out.port_index = e.port_index;
@@ -196,7 +196,7 @@ auto from_scuff_(const transport& e, const Conv& fns) -> event {
 	out.bar_number         = e.bar_number;
 	out.bar_start          = e.bar_start;
 	out.flags              = transport_flags_from_scuff(e.flags);
-	out.header             = from_scuff(e.header);
+	out.header             = from_scuff(e.header, sizeof(clap_event_transport_t));
 	out.loop_end_beats     = e.loop_end_beats;
 	out.loop_end_seconds   = e.loop_end_seconds;
 	out.loop_start_beats   = e.loop_start_beats;
@@ -251,11 +251,9 @@ auto type_to_scuff(uint16_t type) -> scuff::events::type {
 [[nodiscard]] static
 auto to_scuff(const clap_event_header_t& hdr) -> scuff::events::header {
 	scuff::events::header out;
-	out.CLAP_space_id = hdr.space_id;
-	out.flags         = scuff::events::flags(flags_to_scuff(hdr.flags));
-	out.size          = hdr.size;
-	out.time          = hdr.time;
-	out.event_type    = type_to_scuff(hdr.type);
+	out.flags      = scuff::events::flags(flags_to_scuff(hdr.flags));
+	out.time       = hdr.time;
+	out.event_type = type_to_scuff(hdr.type);
 	return out;
 }
 
