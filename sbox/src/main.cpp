@@ -26,7 +26,7 @@ auto copy_data_from_connected_outputs(const sbox::app& app, const sbox::device& 
 
 static
 auto transfer_input_events_from_main(const sbox::device& dev) -> void {
-	scuff::events::event event;
+	scuff::event event;
 	while (dev.service.input_events_from_main->try_dequeue(event)) {
 		dev.service.shm->data->events_in.push_back(event);
 	}

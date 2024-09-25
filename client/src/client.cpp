@@ -587,7 +587,7 @@ auto get_info(id::device dev_id, idx::param param) -> param_info {
 }
 
 static
-auto push_event(id::device dev, const events::event& event) -> void {
+auto push_event(id::device dev, const scuff::event& event) -> void {
 	const auto m       = DATA_->model.lock_read();
 	const auto& device = m.devices.at({dev});
 	const auto& sbox   = m.sandboxes.at(device.sbox);
@@ -857,7 +857,7 @@ auto get_info(id::device dev, idx::param param) -> param_info {
 	catch (const std::exception& err) { impl::report_error(err.what()); return {0}; }
 }
 
-auto push_event(id::device dev, const events::event& event) -> void {
+auto push_event(id::device dev, const scuff::event& event) -> void {
 	try                               { impl::push_event(dev, event); }
 	catch (const std::exception& err) { impl::report_error(err.what()); }
 }

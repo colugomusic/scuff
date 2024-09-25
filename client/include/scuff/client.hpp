@@ -7,7 +7,6 @@
 #include "common/plugin_type.hpp"
 #include "common/render_mode.hpp"
 #include "common/types.hpp"
-#include <concepts>
 #include <vector>
 
 namespace scuff {
@@ -17,8 +16,8 @@ namespace fn_sig {
 using write_floats = auto (float* floats) -> void;
 using read_floats  = auto (const float* floats) -> void;
 using get_count    = auto (void) -> size_t;
-using get_event    = auto (size_t index) -> events::event;
-using push_event   = auto (const events::event& event) -> void;
+using get_event    = auto (size_t index) -> scuff::event;
+using push_event   = auto (const scuff::event& event) -> void;
 
 } // fn_sig
 
@@ -282,7 +281,7 @@ const char*      get_vendor(id::plugin plugin);
 const char*      get_version(id::plugin plugin);
 
 // Push a device event
-void             push_event(id::device dev, const events::event& event);
+void             push_event(id::device dev, const scuff::event& event);
 
 // Restart the sandbox.
 void             restart(id::sandbox sbox, const char* sbox_exe_path);

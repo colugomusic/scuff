@@ -193,7 +193,7 @@ auto convert_output_events(const sbox::device& dev, const clap::device& clap_dev
 		return static_cast<idx::param>(std::distance(std::begin(infos), pos));
 	};
 	auto fns = scuff::events::clap::clap_to_scuff_conversion_fns{find_param};
-	scuff::events::event_buffer output_scuff_events;
+	scuff::event_buffer output_scuff_events;
 	for (const auto& event : clap_dev.service.data->output_event_buffer) {
 		output_scuff_events.push_back(scuff::events::clap::to_scuff(event, fns));
 	}

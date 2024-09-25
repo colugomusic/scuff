@@ -260,7 +260,7 @@ auto to_scuff(const clap_event_header_t& hdr) -> scuff::events::header {
 }
 
 template <clap_to_scuff_conversion Conv> [[nodiscard]] static
-auto to_scuff_(const clap_event_midi_sysex_t& e, const Conv& fns) -> scuff::events::event {
+auto to_scuff_(const clap_event_midi_sysex_t& e, const Conv& fns) -> scuff::event {
 	scuff::events::midi_sysex out;
 	out.buffer     = e.buffer;
 	out.header     = to_scuff(e.header);
@@ -270,7 +270,7 @@ auto to_scuff_(const clap_event_midi_sysex_t& e, const Conv& fns) -> scuff::even
 }
 
 template <clap_to_scuff_conversion Conv> [[nodiscard]] static
-auto to_scuff_(const clap_event_midi_t& e, const Conv& fns) -> scuff::events::event {
+auto to_scuff_(const clap_event_midi_t& e, const Conv& fns) -> scuff::event {
 	scuff::events::midi out;
 	out.header     = to_scuff(e.header);
 	out.port_index = e.port_index;
@@ -279,7 +279,7 @@ auto to_scuff_(const clap_event_midi_t& e, const Conv& fns) -> scuff::events::ev
 }
 
 template <clap_to_scuff_conversion Conv> [[nodiscard]] static
-auto to_scuff_(const clap_event_midi2_t& e, const Conv& fns) -> scuff::events::event {
+auto to_scuff_(const clap_event_midi2_t& e, const Conv& fns) -> scuff::event {
 	scuff::events::midi2 out;
 	out.header     = to_scuff(e.header);
 	out.port_index = e.port_index;
@@ -288,7 +288,7 @@ auto to_scuff_(const clap_event_midi2_t& e, const Conv& fns) -> scuff::events::e
 }
 
 template <clap_to_scuff_conversion Conv> [[nodiscard]] static
-auto to_scuff_(const clap_event_note_expression_t& e, const Conv& fns) -> scuff::events::event {
+auto to_scuff_(const clap_event_note_expression_t& e, const Conv& fns) -> scuff::event {
 	scuff::events::note_expression out;
 	out.id            = scuff::events::note_expression_id(e.expression_id);
 	out.header        = to_scuff(e.header);
@@ -300,7 +300,7 @@ auto to_scuff_(const clap_event_note_expression_t& e, const Conv& fns) -> scuff:
 }
 
 template <clap_to_scuff_conversion Conv> [[nodiscard]] static
-auto to_scuff_(const clap_event_param_gesture_t& e, const Conv& fns) -> scuff::events::event {
+auto to_scuff_(const clap_event_param_gesture_t& e, const Conv& fns) -> scuff::event {
 	scuff::events::param_gesture out;
 	out.header = to_scuff(e.header);
 	out.param  = fns.find_param(e.param_id).value;
@@ -308,7 +308,7 @@ auto to_scuff_(const clap_event_param_gesture_t& e, const Conv& fns) -> scuff::e
 }
 
 template <clap_to_scuff_conversion Conv> [[nodiscard]] static
-auto to_scuff_(const clap_event_param_mod_t& e, const Conv& fns) -> scuff::events::event {
+auto to_scuff_(const clap_event_param_mod_t& e, const Conv& fns) -> scuff::event {
 	scuff::events::param_mod out;
 	out.header     = to_scuff(e.header);
 	out.amount     = e.amount;
@@ -321,7 +321,7 @@ auto to_scuff_(const clap_event_param_mod_t& e, const Conv& fns) -> scuff::event
 }
 
 template <clap_to_scuff_conversion Conv> [[nodiscard]] static
-auto to_scuff_(const clap_event_param_value_t& e, const Conv& fns) -> scuff::events::event {
+auto to_scuff_(const clap_event_param_value_t& e, const Conv& fns) -> scuff::event {
 	scuff::events::param_value out;
 	out.header     = to_scuff(e.header);
 	out.value      = e.value;
@@ -334,7 +334,7 @@ auto to_scuff_(const clap_event_param_value_t& e, const Conv& fns) -> scuff::eve
 }
 
 template <clap_to_scuff_conversion Conv> [[nodiscard]] static
-auto to_scuff_(const clap_event_transport_t& e, const Conv& fns) -> scuff::events::event {
+auto to_scuff_(const clap_event_transport_t& e, const Conv& fns) -> scuff::event {
 	scuff::events::transport out;
 	out.header             = to_scuff(e.header);
 	out.bar_number         = e.bar_number;
@@ -354,13 +354,13 @@ auto to_scuff_(const clap_event_transport_t& e, const Conv& fns) -> scuff::event
 }
 
 template <scuff_to_clap_conversion Conv> [[nodiscard]] static
-auto from_scuff(const scuff::events::event& e, const Conv& fns) -> event {
+auto from_scuff(const scuff::event& e, const Conv& fns) -> event {
 	return fast_visit([&fns](const auto& e) -> event { return from_scuff_(e, fns); }, e);
 }
 
 template <clap_to_scuff_conversion Conv> [[nodiscard]] static
-auto to_scuff(const event& e, const Conv& fns) -> scuff::events::event {
-	return fast_visit([&fns](const auto& e) -> scuff::events::event { return to_scuff_(e, fns); }, e);
+auto to_scuff(const event& e, const Conv& fns) -> scuff::event {
+	return fast_visit([&fns](const auto& e) -> scuff::event { return to_scuff_(e, fns); }, e);
 }
 
 using event_buffer = bc::static_vector<scuff::events::clap::event, EVENT_PORT_SIZE>;

@@ -1,14 +1,8 @@
 #pragma once
 
 #include "constants.hpp"
-#include "serialization.hpp"
 #include "types.hpp"
-#include "visit.hpp"
-#include <boost/container/static_vector.hpp>
-#include <string_view>
 #include <variant>
-
-namespace bc = boost::container;
 
 namespace scuff::events {
 
@@ -156,22 +150,19 @@ struct midi2 {
 	uint32_t data[4];
 };
 
-using event = std::variant<
-	midi_sysex,
-	midi,
-	midi2,
-	note_expression,
-	param_gesture,
-	param_mod,
-	param_value,
-	transport
->;
-
-using event_buffer = bc::static_vector<event, scuff::EVENT_PORT_SIZE>;
-
 } // scuff::events
 
-static
-auto deserialize(std::span<const std::byte>* bytes, scuff::events::event* e) -> void {
-	deserialize(bytes, e, "scuff::event");
-}
+namespace scuff {
+
+using event = std::variant<
+	events::midi_sysex,
+	events::midi,
+	events::midi2,
+	events::note_expression,
+	events::param_gesture,
+	events::param_mod,
+	events::param_value,
+	events::transport
+>;
+
+} // scuff

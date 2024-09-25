@@ -1,11 +1,8 @@
 #pragma once
 
-#include "constants.hpp"
 #include "plugin_type.hpp"
 #include "render_mode.hpp"
-#include "types.hpp"
-#include "types.hpp"
-#include "events.hpp"
+#include "serialize_events.hpp"
 #include <clap/id.h>
 #include <cs_plain_guarded.h>
 #include <deque>
@@ -30,7 +27,7 @@ struct device_gui_show        { id::device::type dev_id; };
 struct device_load            { id::device::type dev_id; std::vector<std::byte> state; };
 struct device_save            { id::device::type dev_id; size_t callback; };
 struct device_set_render_mode { id::device::type dev_id; render_mode mode; };
-struct event                  { id::device::type dev_id; scuff::events::event event; };
+struct event                  { id::device::type dev_id; scuff::event event; };
 struct get_param_value        { id::device::type dev_id; size_t param_idx; size_t callback; };
 struct get_param_value_text   { id::device::type dev_id; size_t param_idx; double value; size_t callback; };
 struct set_sample_rate        { double sr; };

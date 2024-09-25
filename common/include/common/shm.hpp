@@ -1,9 +1,10 @@
 #pragma once
 
-#include "common/events.hpp"
+#include "common/event_buffer.hpp"
 #include "common/param_info.hpp"
 #include "messages.hpp"
 #include <array>
+#include <boost/container/static_vector.hpp>
 #include <boost/interprocess/containers/string.hpp>
 #include <boost/interprocess/containers/vector.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
@@ -18,6 +19,7 @@
 #include <numeric>
 #include <string>
 
+namespace bc  = boost::container;
 namespace bip = boost::interprocess;
 
 namespace scuff::shm {
@@ -112,8 +114,8 @@ struct device_flags {
 
 struct device_data {
 	device_flags flags;
-	scuff::events::event_buffer events_in;
-	scuff::events::event_buffer events_out;
+	scuff::event_buffer events_in;
+	scuff::event_buffer events_out;
 	bc::static_vector<scuff::param_info, MAX_PARAMS> param_info;
 	bc::static_vector<audio_buffer, MAX_AUDIO_PORTS> audio_in;
 	bc::static_vector<audio_buffer, MAX_AUDIO_PORTS> audio_out;
