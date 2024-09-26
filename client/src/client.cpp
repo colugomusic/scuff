@@ -311,6 +311,16 @@ auto is_running(id::sandbox sbox) -> bool {
 }
 
 static
+auto activate(id::group group, double sr) -> void {
+	// TODO: impl::activate
+}
+
+static
+auto deactivate(id::group group) -> void {
+	// TODO: impl::deactivate
+}
+
+static
 auto close_all_editors() -> void {
 	const auto sandboxes = scuff::DATA_->model.lock_read().sandboxes;
 	for (const auto& sandbox : sandboxes) {
@@ -358,7 +368,7 @@ auto find(ext::id::plugin plugin_id) -> id::plugin {
 }
 
 [[nodiscard]] static
-auto create_device(model&& m, id::device dev_id, const sandbox& sbox, plugin_type type, ext::id::plugin plugin_ext_id, id::plugin plugin_id, return_device return_fn) -> model {
+auto create_device_async(model&& m, id::device dev_id, const sandbox& sbox, plugin_type type, ext::id::plugin plugin_ext_id, id::plugin plugin_id, return_device return_fn) -> model {
 	scuff::device dev;
 	dev.id            = dev_id;
 	dev.sbox          = {sbox.id};
@@ -385,12 +395,12 @@ auto create_device(model&& m, id::device dev_id, const sandbox& sbox, plugin_typ
 }
 
 [[nodiscard]] static
-auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id, return_device fn) -> id::device {
+auto create_device_async(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id, return_device fn) -> id::device {
 	auto m               = DATA_->model.lock_read();
 	const auto& sbox     = m.sandboxes.at(sbox_id);
 	const auto plugin_id = id::plugin{find(plugin_ext_id)};
 	const auto dev_id    = id::device{scuff::id_gen_++};
-	m = create_device(std::move(m), dev_id, sbox, type, {plugin_ext_id}, plugin_id, fn);
+	m = create_device_async(std::move(m), dev_id, sbox, type, {plugin_ext_id}, plugin_id, fn);
 	DATA_->model.lock_write(m);
 	return dev_id;
 }
@@ -447,7 +457,7 @@ auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id, return_device fn)
 		};
 		auto m = DATA_->model.lock_read();
 		const auto dev_id = id::device{scuff::id_gen_++};
-		m = create_device(std::move(m), dev_id, dst_sbox, type, plugin_ext_id, plugin, return_fn);
+		m = create_device_async(std::move(m), dev_id, dst_sbox, type, plugin_ext_id, plugin, return_fn);
 		DATA_->model.lock_write(m);
 	});
 	src_sbox.service->enqueue(msg::in::device_save{src_dev_id.value, save_cb});
@@ -695,6 +705,11 @@ auto restart(id::sandbox sbox, const char* sbox_exe_path) -> void {
 }
 
 static
+auto save_async(id::device dev, return_bytes fn) -> void {
+	// TODO: impl::save_async
+}
+
+static
 auto do_scan(const char* scan_exe_path, int flags) -> void {
 	scan_::stop_if_it_is_already_running();
 	scan_::start(scan_exe_path, flags);
@@ -797,6 +812,11 @@ auto shutdown() -> void {
 	scuff::initialized_ = false;
 }
 
+auto activate(id::group group, double sr) -> void {
+	try                               { impl::activate(group, sr); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
 auto close_all_editors() -> void {
 	try                               { impl::close_all_editors(); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
@@ -807,9 +827,14 @@ auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
-auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_device fn) -> id::device {
-	try                               { return impl::create_device(sbox, type, plugin_id, fn); }
+auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_device fn) -> id::device {
+	try                               { return impl::create_device_async(sbox, type, plugin_id, fn); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
+}
+
+auto deactivate(id::group group) -> void {
+	try                               { impl::deactivate(group); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
 auto disconnect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void {
@@ -999,6 +1024,11 @@ auto receive_report(const general_reporter& reporter) -> void {
 
 auto receive_report(id::group group_id, const group_reporter& reporter) -> void {
 	try                               { impl::receive_report(group_id, reporter); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto save_async(id::device dev, return_bytes fn) -> void {
+	try                               { impl::save_async(dev, fn); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 

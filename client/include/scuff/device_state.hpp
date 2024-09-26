@@ -30,7 +30,7 @@ struct device_state {
 			body->cv.notify_all();
 		};
 		body_->awaiting = true;
-		scuff::save(id, fn);
+		scuff::save_async(id, fn);
 	}
 	// Will have to block if we are still waiting for the data to be returned.
 	auto get_bytes() const -> const std::vector<std::byte>& {

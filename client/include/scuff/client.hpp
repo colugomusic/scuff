@@ -89,6 +89,7 @@ using return_bytes             = std::function<void(const std::vector<std::byte>
 using return_device            = std::function<void(id::device dev, bool success)>;
 using return_double            = std::function<void(double value)>;
 using return_string            = std::function<void(std::string_view text)>;
+using return_void              = std::function<void(void)>;
 
 struct general_reporter {
 	scuff::on_error on_error;
@@ -165,13 +166,16 @@ auto close_all_editors(void) -> void;
 //    to cross from one sandbox to another, within the same sandbox group.
 auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void;
 
-// Create a device and add it to the sandbox asynchronously.
-//  - When the operation is complete, call the given function with the device id.
+// Create a device and add it to the sandbox.
 //  - If the device fails to load, it will still be created, but it will be in an error
 //    state.
 //  - You can create a device with a plugin ID that hasn't been scanned yet. It will be
 //    created in an error state and will remain that way until the plugin is found by
 //    a future scan where the reload_failed_devices flag is set.
+auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id) -> id::device;
+
+// Create a device and add it to the sandbox asynchronously.
+//  - When the operation is complete, call the given function with the device id.
 auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_device fn) -> id::device;
 
 // Create a new group.
@@ -194,10 +198,8 @@ auto disconnect(id::device dev_out, size_t port_out, id::device dev_in, size_t p
 // - The target device can belong to a different sandbox.
 auto duplicate(id::device dev, id::sandbox sbox) -> id::device;
 
-// Create a device by duplicating an existing device, and add it to the sandbox,
-// asynchronously.
-// When the operation is complete, call the given function with the device id.
-// - The target device can belong to a different sandbox.
+// Duplicate a device asynchronously.
+// - When the operation is complete, call the given function with the device id.
 auto duplicate_async(id::device dev, id::sandbox sbox, return_device fn) -> id::device;
 
 // Erase a device.
@@ -254,8 +256,11 @@ auto get_name(id::plugin plugin) -> const char*;
 // Return the file path of the plugin file.
 auto get_path(id::plugfile plugfile) -> const char*;
 
+// Get the current value of the parameter.
+auto get_value(id::device dev, idx::param param) -> double;
+
 // Get the current value of the parameter, asynchronously.
-// When the result is ready, call the given function with it.
+//  - When the result is ready, call the given function with it.
 auto get_value_async(id::device dev, idx::param param, return_double fn) -> void;
 
 // Returns the plugin vendor.
@@ -279,8 +284,11 @@ auto get_plugin(id::device dev) -> id::plugin;
 // Return the plugin type.
 auto get_type(id::plugin plugin) -> plugin_type;
 
-// Calculate the string representation of the given value asynchronously.
-// When it is ready, call the given function with it.
+// Calculate the string representation of the given value.
+auto get_value_text(id::device dev, idx::param param, double value) -> std::string;
+
+// Calculate the string representation of the given value, asynchronously.
+//  - When it is ready, call the given function with it.
 auto get_value_text_async(id::device dev, idx::param param, double value, return_string fn) -> void;
 
 // Return a list of plugins which at least appear to be working
@@ -305,8 +313,9 @@ auto is_running(id::sandbox sbox) -> bool;
 // Return true if the plugin scanner process is currently running.
 auto is_scanning(void) -> bool;
 
-// Load the device state asynchronously.
-auto load(id::device dev, const void* bytes, size_t count) -> void;
+// Load the device state, asynchronously.
+//  - When the operation is complete, call the given function.
+auto load_async(id::device dev, const void* bytes, size_t count, return_void fn) -> void;
 
 // Push a device event
 auto push_event(id::device dev, const scuff::event& event) -> void;
@@ -314,7 +323,11 @@ auto push_event(id::device dev, const scuff::event& event) -> void;
 // Restart the sandbox.
 auto restart(id::sandbox sbox, const char* sbox_exe_path) -> void;
 
-// Save the device state asynchronously.
+// Save the device state.
+auto save(id::device dev) -> std::vector<std::byte>;
+
+// Save the device state, asynchronously.
+//  - When the operation is complete, call the given function with the result.
 auto save_async(id::device dev, return_bytes fn) -> void;
 
 // Scan the system for plugins. If the scanner process is already
