@@ -1,4 +1,5 @@
 #include "common/os.hpp"
+#include "common/plugin_type.hpp"
 #include "common/util.hpp"
 #include <clap/factory/plugin-factory.h>
 #include <cxxopts.hpp>
@@ -9,8 +10,6 @@
 #include <vector>
 
 namespace scanner {
-
-enum class plugfile_type { unknown, clap, vst3 };
 
 template <typename ClassType, typename T, typename... Args>
 concept IsMemberFn = requires(ClassType obj, T t, Args... args) {
@@ -34,7 +33,7 @@ private:
 };
 
 struct plugfile {
-	plugfile_type type;
+	scuff::plugin_type type;
 	std::filesystem::path path;
 };
 
@@ -42,15 +41,6 @@ struct options {
 	std::vector<std::filesystem::path> additional_search_paths;
 	std::string file_to_scan;
 };
-
-[[nodiscard]] static
-auto to_string(plugfile_type type) -> std::string {
-	switch (type) {
-		case plugfile_type::clap:          { return "clap"; }
-		case plugfile_type::vst3:          { return "vst3"; }
-		default:                           { return "unknown"; }
-	}
-}
 
 [[nodiscard]] static
 auto parse_options(int argc, const char* argv[]) -> options {
@@ -89,8 +79,8 @@ auto get_plugfile_search_paths(const options& opts) -> std::vector<std::filesyst
 
 [[nodiscard]] static
 auto to_plugfile(const std::filesystem::path& path) -> std::optional<plugfile> {
-	if (scuff::os::is_clap_file(path)) { return plugfile{plugfile_type::clap, path}; }
-	if (scuff::os::is_vst3_file(path)) { return plugfile{plugfile_type::vst3, path}; }
+	if (scuff::os::is_clap_file(path)) { return plugfile{scuff::plugin_type::clap, path}; }
+	if (scuff::os::is_vst3_file(path)) { return plugfile{scuff::plugin_type::vst3, path}; }
 	return std::nullopt;
 }
 
@@ -109,7 +99,7 @@ auto find_plugfiles(const std::filesystem::path& search_path) -> std::vector<plu
 
 static
 auto add(nlohmann::json* j, const plugfile& pf) -> void {
-	(*j)["plugfile-type"] = to_string(pf.type);
+	(*j)["plugfile-type"] = scuff::to_string(pf.type);
 	(*j)["path"]          = pf.path;
 }
 
@@ -247,21 +237,21 @@ static
 auto scan_plugfile_full(const options& opts) -> void {
 	if (const auto pf = to_plugfile(opts.file_to_scan)) {
 		switch (pf->type) {
-			case plugfile_type::clap:          { scan_clap_plugfile_full(*pf); break; }
-			case plugfile_type::vst3:          { scan_vst3_plugfile_full(*pf); break; }
-			default:                           { break; }
+			case scuff::plugin_type::clap: { scan_clap_plugfile_full(*pf); break; }
+			case scuff::plugin_type::vst3: { scan_vst3_plugfile_full(*pf); break; }
+			default:                       { break; }
 		}
 		return;
 	}
-	report_broken_plugfile({plugfile_type::unknown, opts.file_to_scan}, "This doesn't look like a real plugin file.");
+	report_broken_plugfile({scuff::plugin_type::unknown, opts.file_to_scan}, "This doesn't look like a real plugin file.");
 }
 
 static
 auto scan_plugfile_safe(const plugfile& pf) -> void {
 	switch (pf.type) {
-		case plugfile_type::clap:          { scan_clap_plugfile_safe(pf); break; }
-		case plugfile_type::vst3:          { scan_vst3_plugfile_safe(pf); break; }
-		default:                           { break; }
+		case scuff::plugin_type::clap: { scan_clap_plugfile_safe(pf); break; }
+		case scuff::plugin_type::vst3: { scan_vst3_plugfile_safe(pf); break; }
+		default:                       { break; }
 	}
 }
 

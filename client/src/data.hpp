@@ -105,6 +105,7 @@ struct group {
 struct plugin {
 	id::plugin id;
 	id::plugfile plugfile;
+	plugin_type type;
 	ext::id::plugin ext_id;
 	immer::box<std::string> error;
 	immer::box<std::string> name;
@@ -114,6 +115,7 @@ struct plugin {
 
 struct plugfile {
 	id::plugfile id;
+	plugin_type type;
 	immer::box<std::string> error;
 	immer::box<std::string> path;
 };

@@ -506,6 +506,11 @@ auto get_plugin(id::device dev) -> id::plugin {
 }
 
 [[nodiscard]] static
+auto get_type(id::plugin id) -> plugin_type {
+	return DATA_->model.lock_read().plugins.at(id).type;
+}
+
+[[nodiscard]] static
 auto has_gui(id::device dev) -> bool {
 	const auto m       = DATA_->model.lock_read();
 	const auto& device = m.devices.at(dev);
@@ -975,6 +980,11 @@ auto erase(id::sandbox sbox) -> void {
 auto get_error(id::sandbox sbox) -> const char* {
 	try                               { return impl::get_error(sbox); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return ""; }
+}
+
+auto get_type(id::plugin plugin) -> plugin_type {
+	try                               { return impl::get_type(plugin); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return plugin_type{}; }
 }
 
 auto set_sample_rate(double sr) -> void {

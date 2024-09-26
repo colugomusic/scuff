@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/os.hpp"
+#include "common/plugin_type.hpp"
 #include "data.hpp"
 #include "report.hpp"
 #include <boost/process.hpp>
@@ -95,6 +96,7 @@ auto read_broken_plugfile(const nlohmann::json& j) -> void {
 	pf.id    = id::plugfile{id_gen_++};
 	pf.path  = path;
 	pf.error = error;
+	pf.type  = scuff::plugin_type_from_string(plugfile_type);
 	auto m = DATA_->model.lock_read();
 	m.plugfiles = m.plugfiles.insert(std::move(pf));
 	DATA_->model.lock_write(m);
@@ -106,7 +108,8 @@ auto read_broken_plugin(const nlohmann::json& j) -> void {
 	const std::string plugfile_type = j["plugfile-type"];
 	const std::string path          = j["path"];
 	const std::string error         = j["error"];
-	if (plugfile_type == "clap") {
+	const auto type = scuff::plugin_type_from_string(plugfile_type);
+	if (type == scuff::plugin_type::clap) {
 		const std::string name    = j["name"];
 		const std::string id      = j["id"];
 		const std::string url     = j["url"];
@@ -116,6 +119,7 @@ auto read_broken_plugin(const nlohmann::json& j) -> void {
 		plugin.id      = id::plugin{id_gen_++};
 		plugin.ext_id  = ext::id::plugin{id};
 		plugin.name    = name;
+		plugin.type    = type;
 		plugin.vendor  = vendor;
 		plugin.version = version;
 		auto m = DATA_->model.lock_read();
@@ -140,6 +144,7 @@ auto read_plugfile(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 	plugfile pf;
 	pf.id   = id::plugfile{id_gen_++};
 	pf.path = path;
+	pf.type = scuff::plugin_type_from_string(plugfile_type);
 	auto m = DATA_->model.lock_read();
 	m.plugfiles = m.plugfiles.insert(std::move(pf));
 	DATA_->model.lock_write(m);
@@ -151,7 +156,8 @@ static
 auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 	const std::string plugfile_type = j["plugfile-type"];
 	const std::string path          = j["path"];
-	if (plugfile_type == "clap") {
+	const auto type = scuff::plugin_type_from_string(plugfile_type);
+	if (type == scuff::plugin_type::clap) {
 		const std::string name    = j["name"];
 		const std::string id      = j["id"];
 		const std::string url     = j["url"];
@@ -161,6 +167,7 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 		plugin.id      = id::plugin{id_gen_++};
 		plugin.ext_id  = ext::id::plugin{id};
 		plugin.name    = name;
+		plugin.type    = type;
 		plugin.vendor  = vendor;
 		plugin.version = version;
 		auto m = DATA_->model.lock_read();
