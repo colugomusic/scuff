@@ -480,6 +480,26 @@ auto erase(id::device dev_id) -> void {
 }
 
 [[nodiscard]] static
+auto find(id::device dev, ext::id::param param_id) -> idx::param {
+	// TODO: impl::find
+	return {};
+}
+
+[[nodiscard]] static
+auto find(id::device dev_id, uint32_t param_id) -> idx::param {
+	const auto m    = DATA_->model.lock_read();
+	const auto dev  = m.devices.at(dev_id);
+	const auto lock = std::unique_lock{dev.shm->data->param_info_mutex};
+	for (size_t i = 0; i < dev.shm->data->param_info.size(); i++) {
+		const auto& info = dev.shm->data->param_info[i];
+		if (info.id.value == param_id) {
+			return {i};
+		}
+	}
+	return {};
+}
+
+[[nodiscard]] static
 auto get_error(id::device dev) -> const char* {
 	return DATA_->model.lock_read().devices.at(dev).error->c_str();
 }
@@ -552,6 +572,30 @@ auto set_render_mode(id::device dev, render_mode mode) -> void {
 	sbox.service->enqueue(scuff::msg::in::device_set_render_mode{dev.value, mode});
 }
 
+[[nodiscard]] static
+auto get_broken_plugfiles() -> std::vector<id::plugfile> {
+	std::vector<id::plugfile> out;
+	const auto m = DATA_->model.lock_read();
+	for (const auto& pf : m.plugfiles) {
+		if (!pf.error->empty()) {
+			out.push_back(pf.id);
+		}
+	}
+	return out;
+}
+
+[[nodiscard]] static
+auto get_broken_plugins() -> std::vector<id::plugin> {
+	std::vector<id::plugin> out;
+	const auto m = DATA_->model.lock_read();
+	for (const auto& plugin : m.plugins) {
+		if (!plugin.error->empty()) {
+			out.push_back(plugin.id);
+		}
+	}
+	return out;
+}
+
 static
 auto gui_hide(id::device dev) -> void {
 	const auto m       = DATA_->model.lock_read();
@@ -613,7 +657,7 @@ auto is_scanning() -> bool {
 }
 
 static
-auto get_value(id::device dev, idx::param param, return_double fn) -> void {
+auto get_value_async(id::device dev, idx::param param, return_double fn) -> void {
 	const auto& m       = DATA_->model.lock_read();
 	const auto& device  = m.devices.at({dev});
 	const auto& sbox    = m.sandboxes.at(device.sbox);
@@ -621,17 +665,9 @@ auto get_value(id::device dev, idx::param param, return_double fn) -> void {
 	sbox.service->enqueue(scuff::msg::in::get_param_value{dev.value, param.value, callback});
 }
 
-[[nodiscard]] static
-auto find(id::device dev_id, uint32_t param_id) -> idx::param {
-	const auto m    = DATA_->model.lock_read();
-	const auto dev  = m.devices.at(dev_id);
-	const auto lock = std::unique_lock{dev.shm->data->param_info_mutex};
-	for (size_t i = 0; i < dev.shm->data->param_info.size(); i++) {
-		const auto& info = dev.shm->data->param_info[i];
-		if (info.id.value == param_id) {
-			return {i};
-		}
-	}
+static
+auto get_value(id::device dev, idx::param param) -> double {
+	// TODO: impl::get_value
 	return {};
 }
 
@@ -677,6 +713,17 @@ auto get_ext_id(id::plugin plugin) -> ext::id::plugin {
 [[nodiscard]] static
 auto get_name(id::plugin plugin) -> const char* {
 	return DATA_->model.lock_read().plugins.at({plugin}).name->c_str();
+}
+
+[[nodiscard]] static
+auto get_value_text(id::device dev, idx::param param, double value) -> std::string {
+	// TODO: impl::get_value_text
+	return {};
+}
+
+static
+auto get_value_text_async(id::device dev, idx::param param, double value, return_string fn) -> void {
+	// TODO: impl::get_value_text_async
 }
 
 [[nodiscard]] static
@@ -762,6 +809,18 @@ auto get_error(id::sandbox sbox) -> const char* {
 	return DATA_->model.lock_read().sandboxes.at(sbox).error->c_str();
 }
 
+[[nodiscard]] static
+auto get_working_plugins() -> std::vector<id::plugin> {
+	std::vector<id::plugin> out;
+	const auto m = DATA_->model.lock_read();
+	for (const auto& plugin : m.plugins) {
+		if (plugin.error->empty()) {
+			out.push_back(plugin.id);
+		}
+	}
+	return out;
+}
+
 static
 auto set_sample_rate(double sr) -> void {
 	const auto m = DATA_->model.lock_read();
@@ -832,6 +891,11 @@ auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plu
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
+auto create_sandbox(id::group group_id, const char* sbox_exe_path) -> id::sandbox {
+	try                               { return impl::create_sandbox(group_id, sbox_exe_path); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
+}
+
 auto deactivate(id::group group) -> void {
 	try                               { impl::deactivate(group); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
@@ -850,6 +914,21 @@ auto duplicate(id::device dev, id::sandbox sbox, return_device fn) -> void {
 auto erase(id::device dev) -> void {
 	try                               { impl::erase({dev}); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto erase(id::sandbox sbox) -> void {
+	try                               { impl::erase(sbox); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto find(id::device dev, ext::id::param param_id) -> idx::param {
+	try                               { return impl::find(dev, param_id); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
+}
+
+auto find(ext::id::plugin plugin_id) -> id::plugin {
+	try                               { return impl::find(plugin_id); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
 auto get_error(id::device device) -> const char* {
@@ -877,21 +956,6 @@ auto get_plugin(id::device dev) -> id::plugin {
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
-auto has_gui(id::device dev) -> bool {
-	try                               { return impl::has_gui(dev); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
-}
-
-auto has_params(id::device dev) -> bool {
-	try                               { return impl::has_params(dev); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
-}
-
-auto set_render_mode(id::device dev, render_mode mode) -> void {
-	try                               { impl::set_render_mode(dev, mode); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
-}
-
 auto gui_hide(id::device dev) -> void {
 	try                               { impl::gui_hide(dev); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
@@ -900,11 +964,6 @@ auto gui_hide(id::device dev) -> void {
 auto gui_show(id::device dev) -> void {
 	try                               { impl::gui_show(dev); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
-}
-
-auto was_loaded_successfully(id::device dev) -> bool {
-	try                               { return impl::was_loaded_successfully(dev); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
 }
 
 auto create_group() -> id::group {
@@ -917,39 +976,14 @@ auto erase(id::group group) -> void {
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
-auto is_running(id::sandbox sbox) -> bool {
-	try                               { return impl::is_running(sbox); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
-}
-
-auto is_scanning() -> bool {
-	try                               { return impl::is_scanning(); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
-}
-
-auto get_value(id::device dev, idx::param param, return_double fn) -> void {
-	try                               { impl::get_value(dev, param, fn); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
-}
-
-auto get_info(id::device dev, idx::param param) -> param_info {
-	try                               { return impl::get_info({dev}, param); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {0}; }
-}
-
-auto push_event(id::device dev, const scuff::event& event) -> void {
-	try                               { impl::push_event(dev, event); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
-}
-
-auto find(ext::id::plugin plugin_id) -> id::plugin {
-	try                               { return impl::find(plugin_id); }
+auto get_broken_plugfiles() -> std::vector<id::plugfile> {
+	try                               { return impl::get_broken_plugfiles(); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
-auto get_path(id::plugfile plugfile) -> const char* {
-	try                               { return impl::get_path(plugfile); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return ""; }
+auto get_broken_plugins() -> std::vector<id::plugin> {
+	try                               { return impl::get_broken_plugins(); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
 auto get_error(id::plugfile plugfile) -> const char* {
@@ -962,14 +996,54 @@ auto get_error(id::plugin plugin) -> const char* {
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return ""; }
 }
 
+auto get_error(id::sandbox sbox) -> const char* {
+	try                               { return impl::get_error(sbox); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return ""; }
+}
+
 auto get_ext_id(id::plugin plugin) -> ext::id::plugin {
 	try                               { return impl::get_ext_id(plugin); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
+auto get_info(id::device dev, idx::param param) -> param_info {
+	try                               { return impl::get_info({dev}, param); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {0}; }
+}
+
 auto get_name(id::plugin plugin) -> const char* {
 	try                               { return impl::get_name(plugin); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return ""; }
+}
+
+auto get_path(id::plugfile plugfile) -> const char* {
+	try                               { return impl::get_path(plugfile); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return ""; }
+}
+
+auto get_type(id::plugin plugin) -> plugin_type {
+	try                               { return impl::get_type(plugin); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return plugin_type{}; }
+}
+
+auto get_value(id::device dev, idx::param param) -> double {
+	try                               { return impl::get_value(dev, param); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
+}
+
+auto get_value_async(id::device dev, idx::param param, return_double fn) -> void {
+	try                               { impl::get_value_async(dev, param, fn); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto get_value_text(id::device dev, idx::param param, double value) -> std::string {
+	try                               { return impl::get_value_text(dev, param, value); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return ""; }
+}
+
+auto get_value_text_async(id::device dev, idx::param param, double value, return_string fn) -> void {
+	try                               { impl::get_value_text_async(dev, param, value, fn); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
 auto get_vendor(id::plugin plugin) -> const char* {
@@ -982,6 +1056,36 @@ auto get_version(id::plugin plugin) -> const char* {
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return ""; }
 }
 
+auto get_working_plugins() -> std::vector<id::plugin> {
+	try                               { return impl::get_working_plugins(); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
+}
+
+auto has_gui(id::device dev) -> bool {
+	try                               { return impl::has_gui(dev); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
+}
+
+auto has_params(id::device dev) -> bool {
+	try                               { return impl::has_params(dev); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
+}
+
+auto is_running(id::sandbox sbox) -> bool {
+	try                               { return impl::is_running(sbox); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
+}
+
+auto is_scanning() -> bool {
+	try                               { return impl::is_scanning(); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
+}
+
+auto push_event(id::device dev, const scuff::event& event) -> void {
+	try                               { impl::push_event(dev, event); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
 auto restart(id::sandbox sbox, const char* sbox_exe_path) -> void {
 	try                               { impl::restart(sbox, sbox_exe_path); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
@@ -989,31 +1093,6 @@ auto restart(id::sandbox sbox, const char* sbox_exe_path) -> void {
 
 auto scan(const char* scan_exe_path, int flags) -> void {
 	try                               { impl::do_scan(scan_exe_path, flags); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
-}
-
-auto create_sandbox(id::group group_id, const char* sbox_exe_path) -> id::sandbox {
-	try                               { return impl::create_sandbox(group_id, sbox_exe_path); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
-}
-
-auto erase(id::sandbox sbox) -> void {
-	try                               { impl::erase(sbox); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
-}
-
-auto get_error(id::sandbox sbox) -> const char* {
-	try                               { return impl::get_error(sbox); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return ""; }
-}
-
-auto get_type(id::plugin plugin) -> plugin_type {
-	try                               { return impl::get_type(plugin); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return plugin_type{}; }
-}
-
-auto set_sample_rate(double sr) -> void {
-	try                               { impl::set_sample_rate(sr); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
@@ -1030,6 +1109,21 @@ auto receive_report(id::group group_id, const group_reporter& reporter) -> void 
 auto save_async(id::device dev, return_bytes fn) -> void {
 	try                               { impl::save_async(dev, fn); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto set_render_mode(id::device dev, render_mode mode) -> void {
+	try                               { impl::set_render_mode(dev, mode); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto set_sample_rate(double sr) -> void {
+	try                               { impl::set_sample_rate(sr); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto was_loaded_successfully(id::device dev) -> bool {
+	try                               { return impl::was_loaded_successfully(dev); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
 }
 
 } // scuff
