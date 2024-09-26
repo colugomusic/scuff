@@ -8,6 +8,8 @@ list (APPEND src
 	include/scuff/client.hpp
 	src/client.cpp
 	src/data.hpp
+	src/report.hpp
+	src/report_types.hpp
 	src/scan.hpp
 )
 set(BOOST_LIBS_OPTIONAL header filesystem system regex CACHE STRING "Boost libraries to be compiled" FORCE)

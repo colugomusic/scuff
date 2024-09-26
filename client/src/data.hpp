@@ -4,9 +4,8 @@
 #include "common/audio_sync.hpp"
 #include "common/shm.hpp"
 #include "common/slot_buffer.hpp"
+#include "report_types.hpp"
 #include <boost/asio.hpp>
-#include <cs_plain_guarded.h>
-#include <deque>
 #include <immer/box.hpp>
 #include <immer/map.hpp>
 #include <immer/set.hpp>
@@ -71,6 +70,7 @@ private:
 
 struct group_service {
 	using shptr = std::shared_ptr<group_service>;
+	report::msg::group_q reporter;
 	shm::group shm;
 	uint64_t epoch = 0;
 };
@@ -127,11 +127,11 @@ struct model {
 };
 
 struct data {
-	std::string       instance_id;
-	scuff::callbacks  callbacks;
-	std::jthread      poll_thread;
-	std::jthread      scan_thread;
-	audio_sync<model> model;
+	std::string            instance_id;
+	std::jthread           poll_thread;
+	std::jthread           scan_thread;
+	report::msg::general_q reporter;
+	audio_sync<model>      model;
 };
 
 static std::atomic_bool      initialized_ = false;

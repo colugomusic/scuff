@@ -2,6 +2,7 @@
 
 #include "common/os.hpp"
 #include "data.hpp"
+#include "report.hpp"
 #include <boost/process.hpp>
 #include <deque>
 #include <nlohmann/json.hpp>
@@ -97,7 +98,7 @@ auto read_broken_plugfile(const nlohmann::json& j) -> void {
 	auto m = DATA_->model.lock_read();
 	m.plugfiles = m.plugfiles.insert(std::move(pf));
 	DATA_->model.lock_write(m);
-	DATA_->callbacks.on_plugfile_broken(pf.id);
+	report::send(report::msg::plugfile_broken{pf.id});
 }
 
 static
@@ -120,7 +121,7 @@ auto read_broken_plugin(const nlohmann::json& j) -> void {
 		auto m = DATA_->model.lock_read();
 		m.plugins = m.plugins.insert(std::move(plugin));
 		DATA_->model.lock_write(m);
-		DATA_->callbacks.on_plugin_broken(plugin.id);
+		report::send(report::msg::plugin_broken{plugin.id});
 	}
 }
 
@@ -142,7 +143,7 @@ auto read_plugfile(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 	auto m = DATA_->model.lock_read();
 	m.plugfiles = m.plugfiles.insert(std::move(pf));
 	DATA_->model.lock_write(m);
-	DATA_->callbacks.on_plugfile_scanned(pf.id);
+	report::send(report::msg::plugfile_scanned{pf.id});
 	basio::post(scanner->context, [scanner, path] { async_scan_clap_file(scanner, path); });
 }
 
@@ -165,7 +166,7 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 		auto m = DATA_->model.lock_read();
 		m.plugins = m.plugins.insert(std::move(plugin));
 		DATA_->model.lock_write(m);
-		DATA_->callbacks.on_plugin_scanned(plugin.id);
+		report::send(report::msg::plugin_scanned{plugin.id});
 		// TODO: if flags & scuff_scan_flag_reload_failed_devices,
 		//       reload any unloaded devices which use this plugin 
 	}
@@ -186,13 +187,8 @@ auto stdout_respond(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 }
 
 static
-auto report_error(std::string_view err) -> void {
-	DATA_->callbacks.on_scan_error(err.data());
-}
-
-static
 auto report_exception(const std::exception& err) -> void {
-	report_error(err.what());
+	report::send(report::msg::scan_error{err.what()});
 }
 
 auto read_lines(scan_::scanner* scanner, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred, respond_fn respond) -> void {
@@ -226,7 +222,7 @@ static
 auto scan_system_for_installed_plugins(scan_::scanner* scanner) -> void {
 	if (!(std::filesystem::exists(scanner->exe_path) && std::filesystem::is_regular_file(scanner->exe_path))) {
 		const auto err = std::format("Scanner executable not found: {}", scanner->exe_path);
-		report_error(err);
+		report::send(report::msg::scan_error{err});
 		return;
 	}
 	const auto exe_args = make_exe_args_for_plugin_listing();
@@ -240,12 +236,12 @@ auto thread(std::stop_token token, std::string scan_exe_path, int flags) -> void
 	scan_::scanner scanner;
 	scanner.exe_path = scan_exe_path;
 	scanner.flags    = flags;
-	DATA_->callbacks.on_scan_started();
+	report::send(report::msg::scan_started{});
 	basio::post(scanner.context, [&scanner] { scan_system_for_installed_plugins(&scanner); });
 	while (!(token.stop_requested() || scanner.context.stopped())) {
 		scanner.context.run_one();
 	}
-	DATA_->callbacks.on_scan_complete();
+	report::send(report::msg::scan_complete{});
 }
 
 [[nodiscard]] static

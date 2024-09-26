@@ -12,27 +12,27 @@ namespace lg = libguarded;
 
 namespace host {
 
-namespace to_main {
-
-struct plugfile_broken  { scuff::id::plugfile plugfile; };
-struct plugfile_scanned { scuff::id::plugfile plugfile; };
-struct plugin_broken    { scuff::id::plugin plugin; };
-struct plugin_scanned   { scuff::id::plugin plugin; };
-struct scan_error       { std::string error; };
-struct scan_started     {};
-struct scan_complete    {};
-
-using msg = std::variant<
-	plugfile_broken,
-	plugfile_scanned,
-	plugin_broken,
-	plugin_scanned,
-	scan_complete,
-	scan_error,
-	scan_started
->;
-
-} // to_main
+//namespace to_main {
+//
+//struct plugfile_broken  { scuff::id::plugfile plugfile; };
+//struct plugfile_scanned { scuff::id::plugfile plugfile; };
+//struct plugin_broken    { scuff::id::plugin plugin; };
+//struct plugin_scanned   { scuff::id::plugin plugin; };
+//struct scan_error       { std::string error; };
+//struct scan_started     {};
+//struct scan_complete    {};
+//
+//using msg = std::variant<
+//	plugfile_broken,
+//	plugfile_scanned,
+//	plugin_broken,
+//	plugin_scanned,
+//	scan_complete,
+//	scan_error,
+//	scan_started
+//>;
+//
+//} // to_main
 
 namespace ui {
 
@@ -111,7 +111,7 @@ struct app {
 	ui::main ui;
 	with_dirt<std::vector<plugfile>> plugfiles;
 	with_dirt<std::vector<plugin>> plugins;
-	lg::plain_guarded<std::deque<to_main::msg>> to_main;
+	//lg::plain_guarded<std::deque<to_main::msg>> to_main;
 };
 
 static
@@ -300,23 +300,46 @@ auto create_window(host::app* app) -> void {
 }
 
 static
+auto on_scuff_error(host::app* app, std::string_view error) -> void {
+	textview_printf(app->ui.log.view, "%s\n", error.data());
+}
+
+static
 auto on_scuff_plugfile_broken(host::app* app, scuff::id::plugfile pf) -> void {
-	app->to_main.lock()->push_back(to_main::plugfile_broken{pf});
+	plugfile my_pf;
+	my_pf.path   = scuff::get_path(pf);
+	my_pf.status = scuff::get_error(pf);
+	app->plugfiles.push_back(my_pf);
+	app->plugfiles.dirty = true;
 }
 
 static
 auto on_scuff_plugfile_scanned(host::app* app, scuff::id::plugfile pf) -> void {
-	app->to_main.lock()->push_back(to_main::plugfile_scanned{pf});
+	plugfile my_pf;
+	my_pf.path   = scuff::get_path(pf);
+	my_pf.status = "Working";
+	app->plugfiles.push_back(my_pf);
+	app->plugfiles.dirty = true;
 }
 
 static
 auto on_scuff_plugin_broken(host::app* app, scuff::id::plugin p) -> void {
-	app->to_main.lock()->push_back(to_main::plugin_broken{p});
+	host::plugin plugin;
+	plugin.name   = scuff::get_name(p);
+	plugin.vendor = scuff::get_vendor(p);
+	plugin.status = scuff::get_error(p);
+	app->plugins.push_back(plugin);
+	app->plugins.dirty = true;
 }
 
 static
 auto on_scuff_plugin_scanned(host::app* app, scuff::id::plugin p) -> void {
-	app->to_main.lock()->push_back(to_main::plugin_scanned{p});
+	host::plugin plugin;
+	plugin.name   = scuff::get_name(p);
+	plugin.vendor = scuff::get_vendor(p);
+	plugin.status = "Working";
+	app->plugins.push_back(plugin);
+	app->plugins.dirty = true;
 }
 
 static
@@ -326,41 +349,32 @@ auto on_scuff_sbox_crashed(host::app* app, scuff::id::sandbox sbox, const char* 
 
 static
 auto on_scuff_sbox_started(host::app* app, scuff::id::sandbox sbox) -> void {
-	app->to_main.lock()->push_back(to_main::scan_started{});
+	// TODO: on_scuff_sbox_started
 }
 
 static
 auto on_scuff_scan_complete(host::app* app) -> void {
-	app->to_main.lock()->push_back(to_main::scan_complete{});
+	textview_writef(app->ui.log.view, "Scan complete\n");
 }
 
 static
-auto on_scuff_scan_error(host::app* app, const char* error) -> void {
-	app->to_main.lock()->push_back(to_main::scan_error{error});
+auto on_scuff_scan_error(host::app* app, std::string_view error) -> void {
+	textview_printf(app->ui.log.view, "%s\n", error.data());
 }
 
 static
 auto on_scuff_scan_started(host::app* app) -> void {
-	app->to_main.lock()->push_back(to_main::scan_started{});
+	textview_writef(app->ui.log.view, "Scan started\n");
+	app->plugfiles.clear();
+	app->plugfiles.dirty = true;
+	app->plugins.clear();
+	app->plugins.dirty = true;
 }
 
 static
 auto initialize_scuff(host::app* app) -> void {
-	scuff::config cfg;
-	cfg.callbacks.on_plugfile_broken  = [app](auto... args) { on_scuff_plugfile_broken(app, args...); };
-	cfg.callbacks.on_plugfile_scanned = [app](auto... args) { on_scuff_plugfile_scanned(app, args...); };
-	cfg.callbacks.on_plugin_broken    = [app](auto... args) { on_scuff_plugin_broken(app, args...); };
-	cfg.callbacks.on_plugin_scanned   = [app](auto... args) { on_scuff_plugin_scanned(app, args...); };
-	cfg.callbacks.on_sbox_crashed     = [app](auto... args) { on_scuff_sbox_crashed(app, args...); };
-	cfg.callbacks.on_sbox_started     = [app](auto... args) { on_scuff_sbox_started(app, args...); };
-	cfg.callbacks.on_scan_complete    =	[app](auto... args) { on_scuff_scan_complete(app); };
-	cfg.callbacks.on_scan_error       = [app](auto... args) { on_scuff_scan_error(app, args...); };
-	cfg.callbacks.on_scan_started     = [app](auto... args) { on_scuff_scan_started(app); };
-	try {
-		scuff::init(&cfg);
-	} catch (const std::exception& e) {
-		fprintf(stderr, "scuff_init failed: %s\n", e.what());
-	}
+	auto on_error = [app](auto... args) { on_scuff_error(app, args...); };
+	scuff::init(on_error);
 }
 
 [[nodiscard]] static
@@ -390,79 +404,18 @@ auto take_some(std::deque<T>* vec) -> std::vector<T> {
 	return out;
 }
 
-template <size_t N> [[nodiscard]] static
-auto get_some_messages(host::app* app) -> std::vector<to_main::msg> {
-	return take_some<to_main::msg, N>(app->to_main.lock().get());
-}
-
-static
-auto process_(host::app* app, const to_main::plugfile_broken& msg) -> void {
-	plugfile my_pf;
-	my_pf.path   = scuff::get_path(msg.plugfile);
-	my_pf.status = scuff::get_error(msg.plugfile);
-	app->plugfiles.push_back(my_pf);
-	app->plugfiles.dirty = true;
-}
-
-static
-auto process_(host::app* app, const to_main::plugfile_scanned& msg) -> void {
-	plugfile my_pf;
-	my_pf.path   = scuff::get_path(msg.plugfile);
-	my_pf.status = "Working";
-	app->plugfiles.push_back(my_pf);
-	app->plugfiles.dirty = true;
-}
-
-static
-auto process_(host::app* app, const to_main::plugin_broken& msg) -> void {
-	host::plugin plugin;
-	plugin.name = scuff::get_name(msg.plugin);
-	plugin.vendor = scuff::get_vendor(msg.plugin);
-	plugin.status = scuff::get_error(msg.plugin);
-	app->plugins.push_back(plugin);
-	app->plugins.dirty = true;
-}
-
-static
-auto process_(host::app* app, const to_main::plugin_scanned& msg) -> void {
-	host::plugin plugin;
-	plugin.name = scuff::get_name(msg.plugin);
-	plugin.vendor = scuff::get_vendor(msg.plugin);
-	plugin.status = "Working";
-	app->plugins.push_back(plugin);
-	app->plugins.dirty = true;
-}
-
-static
-auto process_(host::app* app, const to_main::scan_complete& msg) -> void {
-	textview_writef(app->ui.log.view, "Scan complete\n");
-}
-
-static
-auto process_(host::app* app, const to_main::scan_error& msg) -> void {
-	textview_printf(app->ui.log.view, "%s\n", msg.error.c_str());
-}
-
-static
-auto process_(host::app* app, const to_main::scan_started& msg) -> void {
-	textview_writef(app->ui.log.view, "Scan started\n");
-	app->plugfiles.clear();
-	app->plugfiles.dirty = true;
-	app->plugins.clear();
-	app->plugins.dirty = true;
-}
-
-static
-auto process(host::app* app, const to_main::msg& msg) -> void {
-	std::visit([app](const auto& msg) { process_(app, msg); }, msg);
-}
-
 static
 auto update(host::app* app, double prtime, double ctime) -> void {
-	const auto msgs = get_some_messages<10>(app);
-	for (const auto& msg : msgs) {
-		process(app, msg);
-	}
+	scuff::general_reporter reporter;
+	reporter.on_error            = [app](auto... args) { on_scuff_error(app, args...); };
+	reporter.on_plugfile_broken  = [app](auto... args) { on_scuff_plugfile_broken(app, args...); };
+	reporter.on_plugfile_scanned = [app](auto... args) { on_scuff_plugfile_scanned(app, args...); };
+	reporter.on_plugin_broken    = [app](auto... args) { on_scuff_plugin_broken(app, args...); };
+	reporter.on_plugin_scanned   = [app](auto... args) { on_scuff_plugin_scanned(app, args...); };
+	reporter.on_scan_complete    = [app](auto... args) { on_scuff_scan_complete(app); };
+	reporter.on_scan_error       = [app](auto... args) { on_scuff_scan_error(app, args...); };
+	reporter.on_scan_started     = [app](auto... args) { on_scuff_scan_started(app); };
+	scuff::receive_report(reporter);
 	if (app->plugfiles.dirty) {
 		std::sort(app->plugfiles.begin(), app->plugfiles.end());
 		tableview_update(app->ui.plugfile_table.view);

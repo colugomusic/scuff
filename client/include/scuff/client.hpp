@@ -8,6 +8,7 @@
 #include "common/render_mode.hpp"
 #include "common/types.hpp"
 #include <any>
+#include <string_view>
 #include <vector>
 
 namespace scuff {
@@ -23,6 +24,10 @@ using push_event   = auto (const scuff::event& event) -> void;
 } // fn_sig
 
 template <typename Signature> using stack_fn = stdext::inplace_function<Signature, STACK_FN_CAPACITY>;
+
+enum group_flags {
+	group_flag_no_reporting = 1 << 0, // Set this if you intend to ignore all reports from this group.
+};
 
 enum scan_flags {
 	scan_flag_reload_failed_devices = 1 << 0, // If a plugin is scanned which wasn't previously known,
@@ -65,49 +70,46 @@ struct group_process {
 	scuff::output_devices output_devices;
 };
 
-// Users should assume that any of these callbacks can be called from any non-realtime thread.
-// Every callback must be provided when calling scuff::init.
-using on_device_error          = std::function<void(id::device dev, const char* error)>;
+using on_device_error          = std::function<void(id::device dev, std::string_view error)>;
 using on_device_params_changed = std::function<void(id::device dev)>;
-using on_error                 = std::function<void(const char* error)>;
+using on_error                 = std::function<void(std::string_view error)>;
 using on_plugfile_broken       = std::function<void(id::plugfile plugfile)>;
 using on_plugfile_scanned      = std::function<void(id::plugfile plugfile)>;
 using on_plugin_broken         = std::function<void(id::plugin plugin)>;
 using on_plugin_scanned        = std::function<void(id::plugin plugin)>;
-using on_sbox_crashed          = std::function<void(id::sandbox sbox, const char* error)>;
-using on_sbox_error            = std::function<void(id::sandbox sbox, const char* error)>;
-using on_sbox_info             = std::function<void(id::sandbox sbox, const char* info)>;
+using on_sbox_crashed          = std::function<void(id::sandbox sbox, std::string_view error)>;
+using on_sbox_error            = std::function<void(id::sandbox sbox, std::string_view error)>;
+using on_sbox_info             = std::function<void(id::sandbox sbox, std::string_view info)>;
 using on_sbox_started          = std::function<void(id::sandbox sbox)>;
-using on_sbox_warning          = std::function<void(id::sandbox sbox, const char* warning)>;
+using on_sbox_warning          = std::function<void(id::sandbox sbox, std::string_view warning)>;
 using on_scan_complete         = std::function<void()>;
-using on_scan_error            = std::function<void(const char* error)>;
+using on_scan_error            = std::function<void(std::string_view error)>;
 using on_scan_started          = std::function<void()>;
 using return_bytes             = std::function<void(const std::vector<std::byte>& bytes)>;
 using return_device            = std::function<void(id::device dev, bool success)>;
 using return_double            = std::function<void(double value)>;
-using return_string            = std::function<void(const char* text)>;
+using return_string            = std::function<void(std::string_view text)>;
 
-
-struct callbacks {
-	on_device_error on_device_error;
-	on_device_params_changed on_device_params_changed;
-	on_error on_error;
-	on_plugfile_broken on_plugfile_broken;
-	on_plugfile_scanned on_plugfile_scanned;
-	on_plugin_broken on_plugin_broken;
-	on_plugin_scanned on_plugin_scanned;
-	on_sbox_crashed on_sbox_crashed;
-	on_sbox_error on_sbox_error;
-	on_sbox_info on_sbox_info;
-	on_sbox_started on_sbox_started;
-	on_sbox_warning on_sbox_warning;
-	on_scan_complete on_scan_complete;
-	on_scan_error on_scan_error;
-	on_scan_started on_scan_started;
+struct general_reporter {
+	scuff::on_error on_error;
+	scuff::on_plugfile_broken on_plugfile_broken;
+	scuff::on_plugfile_scanned on_plugfile_scanned;
+	scuff::on_plugin_broken on_plugin_broken;
+	scuff::on_plugin_scanned on_plugin_scanned;
+	scuff::on_scan_complete on_scan_complete;
+	scuff::on_scan_error on_scan_error;
+	scuff::on_scan_started on_scan_started;
 };
 
-struct config {
-	scuff::callbacks callbacks;
+struct group_reporter {
+	scuff::on_device_error on_device_error;
+	scuff::on_device_params_changed on_device_params_changed;
+	scuff::on_error on_error;
+	scuff::on_sbox_crashed on_sbox_crashed;
+	scuff::on_sbox_error on_sbox_error;
+	scuff::on_sbox_info on_sbox_info;
+	scuff::on_sbox_started on_sbox_started;
+	scuff::on_sbox_warning on_sbox_warning;
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -129,11 +131,23 @@ auto audio_process(group_process process) -> void;
 //  - If an error occurs during initialization then the error callback will be called.
 //  - Returns true if the initialization was successful, or if scuff was already
 //    initialized.
-auto init(const scuff::config* config) -> bool;
+auto init(const scuff::on_error& on_error) -> bool;
 
 // Call this when you're done with the sandboxing system.
-//  - Don't call anything else after this.
+//  - Don't call anything else after this, except for init() to reinitialize.
 auto shutdown(void) -> void;
+
+// Call this periodically to receive general report messages for the sandboxing system.
+auto receive_report(const general_reporter& reporter) -> void;
+
+// Call this periodically to receive report messages for the group.
+// In a simple audio application with one audio thread and one UI thread you might call
+// this in your UI message loop.
+// If you are doing offline processing in a background thread then maybe you could call
+// this once per audio buffer.
+// If you don't call this then report messages will pile up unless you set the
+// group_flag_no_reporting flag when creating the group.
+auto receive_report(scuff::id::group group, const group_reporter& reporter) -> void;
 
 // Close all editor windows.
 auto close_all_editors(void) -> void;
@@ -151,9 +165,6 @@ auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port
 //    created in an error state and will remain that way until the plugin is found by
 //    a future scan where the reload_failed_devices flag is set.
 auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_device fn) -> id::device;
-
-// Deactivate audio processing for the device.
-auto deactivate(id::device dev) -> void;
 
 // Remove the given connection between two devices.
 auto disconnect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void;
