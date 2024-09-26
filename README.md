@@ -12,7 +12,7 @@ I am targeting Windows, macOS and Linux. My immediate plan is to start by implem
 
 Here is a blog post about this project: https://www.patreon.com/posts/plugin-110821252
 
-Here is the interface of the client library in its current state: [client/include/scuff/client.h](client/include/scuff/client.h)
+Here is the interface of the client library in its current state: [client/include/scuff/client.hpp](client/include/scuff/client.hpp)
 
 ## Glossary
 
