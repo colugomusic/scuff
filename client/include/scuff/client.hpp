@@ -189,7 +189,7 @@ auto create_group(int flags) -> id::group;
 // - Data can travel between sandboxes in the same group.
 // - If starting the sandbox process fails, the sandbox will still be created,
 //   but it will be in an error state.
-auto create_sandbox(id::group group, const char* sbox_exe_path) -> id::sandbox;
+auto create_sandbox(id::group group, std::string_view sbox_exe_path) -> id::sandbox;
 
 // Remove the given connection between two devices.
 auto disconnect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void;
@@ -322,7 +322,7 @@ auto load_async(id::device dev, const void* bytes, size_t count, return_void fn)
 auto push_event(id::device dev, const scuff::event& event) -> void;
 
 // Restart the sandbox.
-auto restart(id::sandbox sbox, const char* sbox_exe_path) -> void;
+auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void;
 
 // Save the device state.
 auto save(id::device dev) -> std::vector<std::byte>;
@@ -333,7 +333,7 @@ auto save_async(id::device dev, return_bytes fn) -> void;
 
 // Scan the system for plugins. If the scanner process is already
 // running, it is restarted.
-auto scan(const char* scan_exe_path, int flags) -> void;
+auto scan(std::string_view scan_exe_path, int flags) -> void;
 
 // Set device metadata at column.
 auto set_metadata(id::device dev, size_t column, std::any data) -> void;

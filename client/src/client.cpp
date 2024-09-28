@@ -432,8 +432,9 @@ auto device_disconnect(id::device dev_out_id, size_t port_out, id::device dev_in
 }
 
 static
-auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id, return_device fn) -> void {
+auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_device fn) -> id::device {
 	auto m                   = DATA_->model.lock();
+	const auto new_dev_id    = id::device{scuff::id_gen_++};
 	const auto src_dev       = m->devices.at({src_dev_id});
 	const auto src_sbox      = m->sandboxes.at(src_dev.sbox);
 	const auto dst_sbox      = m->sandboxes.at({dst_sbox_id});
@@ -442,7 +443,7 @@ auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id, return_device fn)
 	const auto type          = src_dev.type;
 	// We're going to send a message to the source sandbox to save the source device.
 	// When the saved state is returned, call this function with it:
-	const auto save_cb       = src_sbox.services->return_buffers.states.put([plugin_ext_id, plugin, type, dst_sbox, fn](const std::vector<std::byte>& src_state) {
+	const auto save_cb       = src_sbox.services->return_buffers.states.put([plugin_ext_id, plugin, type, dst_sbox, new_dev_id, fn](const std::vector<std::byte>& src_state) {
 		// Now we're going to send a message to the destination sandbox to actually create the new device,
 		// if the plugin is available.
 		// When the new device is created, call this function with it:
@@ -456,11 +457,17 @@ auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id, return_device fn)
 			fn(dev_id, success);
 		};
 		auto m = DATA_->model.lock();
-		const auto dev_id = id::device{scuff::id_gen_++};
-		*m = create_device_async(std::move(*m), dev_id, dst_sbox, type, plugin_ext_id, plugin, return_fn);
+		*m = create_device_async(std::move(*m), new_dev_id, dst_sbox, type, plugin_ext_id, plugin, return_fn);
 		DATA_->model.commit(std::move(m));
 	});
 	src_sbox.services->enqueue(msg::in::device_save{src_dev_id.value, save_cb});
+	return new_dev_id;
+}
+
+static
+auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id) -> id::device {
+	// TODO: blocking duplicate
+	return {};
 }
 
 static
@@ -736,7 +743,7 @@ auto get_version(id::plugin plugin) -> const char* {
 }
 
 static
-auto restart(id::sandbox sbox, const char* sbox_exe_path) -> void {
+auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 	const auto m       = DATA_->model.read();
 	const auto sandbox = m.sandboxes.at({sbox});
 	const auto& group  = m.groups.at(sandbox.group);
@@ -756,13 +763,13 @@ auto save_async(id::device dev, return_bytes fn) -> void {
 }
 
 static
-auto do_scan(const char* scan_exe_path, int flags) -> void {
+auto do_scan(std::string_view scan_exe_path, int flags) -> void {
 	scan_::stop_if_it_is_already_running();
 	scan_::start(scan_exe_path, flags);
 }
 
 [[nodiscard]] static
-auto create_sandbox(id::group group_id, const char* sbox_exe_path) -> id::sandbox {
+auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::sandbox {
 	sandbox sbox;
 	sbox.id = id::sandbox{id_gen_++};
 	auto m  = DATA_->model.lock();
@@ -934,7 +941,7 @@ auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plu
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
-auto create_sandbox(id::group group_id, const char* sbox_exe_path) -> id::sandbox {
+auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::sandbox {
 	try                               { return impl::create_sandbox(group_id, sbox_exe_path); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
@@ -949,9 +956,14 @@ auto disconnect(id::device dev_out, size_t port_out, id::device dev_in, size_t p
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
-auto duplicate(id::device dev, id::sandbox sbox, return_device fn) -> void {
-	try                               { impl::duplicate(dev, sbox, fn); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+auto duplicate(id::device dev, id::sandbox sbox) -> id::device {
+	try                               { return impl::duplicate(dev, sbox); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
+}
+
+auto duplicate_async(id::device dev, id::sandbox sbox, return_device fn) -> id::device {
+	try                               { return impl::duplicate_async(dev, sbox, fn); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
 auto erase(id::device dev) -> void {
@@ -1129,12 +1141,12 @@ auto push_event(id::device dev, const scuff::event& event) -> void {
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
-auto restart(id::sandbox sbox, const char* sbox_exe_path) -> void {
+auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 	try                               { impl::restart(sbox, sbox_exe_path); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
-auto scan(const char* scan_exe_path, int flags) -> void {
+auto scan(std::string_view scan_exe_path, int flags) -> void {
 	try                               { impl::do_scan(scan_exe_path, flags); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }

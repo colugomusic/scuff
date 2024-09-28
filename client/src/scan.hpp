@@ -257,7 +257,7 @@ auto is_running() -> bool {
 }
 
 static
-auto start(const char* scan_exe_path, int flags) -> void {
+auto start(std::string_view scan_exe_path, int flags) -> void {
 	DATA_->scan_thread = std::jthread{scan_::thread, scan_exe_path, flags};
 }
 
