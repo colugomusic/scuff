@@ -63,7 +63,7 @@ auto send_msg(const device& dev, const clap::device_msg::msg& msg) -> void {
 
 static
 auto send_msg(sbox::app* app, id::device dev_id, const clap::device_msg::msg& msg) -> void {
-	const auto m = app->model.lockfree_read();
+	const auto m = app->model.rt_read();
 	if (const auto dev = m->clap_devices.find(dev_id)) {
 		send_msg(*dev, msg);
 	}
@@ -84,8 +84,8 @@ auto log(sbox::app* app, id::device dev_id, clap_log_severity severity, const ch
 
 [[nodiscard]] static
 auto get_extension(sbox::app* app, id::device dev_id, const char* extension_id) -> const void* {
-	const auto m   = app->model.lock_read();
-	const auto dev = m.clap_devices.at(dev_id);
+	const auto m   = app->model.rt_read();
+	const auto dev = m->clap_devices.at(dev_id);
 	if (extension_id == std::string_view{CLAP_EXT_AUDIO_PORTS})         { return &dev.iface->host.audio_ports; }
 	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU})        { return nullptr; } // Not implemented yet &iface.context_menu; }
 	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU_COMPAT}) { return nullptr; } // Not implemented yet &iface.context_menu; }
@@ -115,25 +115,25 @@ auto get_host_data(const clap_host_t* host) -> device_host_data& {
 
 static
 auto cb_request_param_flush(sbox::app* app, id::device dev_id) -> void {
-	const auto svc = app->model.lockfree_read()->clap_devices.at(dev_id).service;
+	const auto svc = app->model.rt_read()->clap_devices.at(dev_id).service;
 	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_param_flush, std::memory_order_relaxed);
 }
 
 static
 auto cb_request_process(sbox::app* app, id::device dev_id) -> void {
-	const auto svc = app->model.lockfree_read()->clap_devices.at(dev_id).service;
+	const auto svc = app->model.rt_read()->clap_devices.at(dev_id).service;
 	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_active | device_atomic_flags::schedule_process);
 }
 
 static
 auto cb_request_restart(sbox::app* app, id::device dev_id) -> void {
-	const auto svc = app->model.lockfree_read()->clap_devices.at(dev_id).service;
+	const auto svc = app->model.rt_read()->clap_devices.at(dev_id).service;
 	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_restart);
 }
 
 static
 auto cb_request_callback(sbox::app* app, id::device dev_id) -> void {
-	const auto svc = app->model.lockfree_read()->clap_devices.at(dev_id).service;
+	const auto svc = app->model.rt_read()->clap_devices.at(dev_id).service;
 	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_callback);
 }
 
@@ -485,14 +485,13 @@ auto init_audio(clap::device&& clap_dev, const sbox::device& dev) -> device {
 
 static
 auto init_audio(sbox::app* app, id::device dev_id) -> void {
-	auto m                           = app->model.lock_read();
-	auto dev                         = m.devices.at(dev_id);
-	auto clap_dev                    = m.clap_devices.at(dev_id);
+	auto m                           = app->model.lock();
+	auto dev                         = m->devices.at(dev_id);
+	auto clap_dev                    = m->clap_devices.at(dev_id);
 	clap_dev.service.audio_port_info = retrieve_audio_port_info(clap_dev.iface->plugin);
 	clap_dev                         = init_audio(std::move(clap_dev), dev);
-	m.clap_devices                   = m.clap_devices.insert(clap_dev);
-	app->model.lock_write(m);
-	app->model.lock_publish(m);
+	m->clap_devices                  = m->clap_devices.insert(clap_dev);
+	app->model.commit_and_publish(std::move(m));
 }
 
 static
@@ -503,7 +502,7 @@ auto rescan_audio_ports(sbox::app* app, id::device dev_id, uint32_t flags) -> vo
 		is_flag_set(flags, CLAP_AUDIO_PORTS_RESCAN_PORT_TYPE) ||
 		is_flag_set(flags, CLAP_AUDIO_PORTS_RESCAN_IN_PLACE_PAIR) ||
 		is_flag_set(flags, CLAP_AUDIO_PORTS_RESCAN_LIST);
-	const auto m   = app->model.lock_read();
+	const auto m   = app->model.read();
 	const auto dev = m.clap_devices.at(dev_id);
 	if (requires_not_active) {
 		if (is_active(dev)) {
@@ -586,7 +585,7 @@ auto process_msg(sbox::app* app, const device& dev, const clap::device_msg::msg&
 
 static
 auto update(sbox::app* app) -> void {
-	const auto m = app->model.lock_read();
+	const auto m = app->model.read();
 	for (const auto& dev : m.clap_devices) {
 		clap::device_msg::msg msg;
 		while (dev.service.data->msg_q.try_dequeue(msg)) {
@@ -851,16 +850,16 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 		info.name[name_buffer_size - 1] = '\0';
 		dev.service.shm->data->param_info[i] = std::move(info);
 	}
-	auto m         = app->model.lock_read();
-	m.devices      = m.devices.insert(dev);
-	m.clap_devices = m.clap_devices.insert(clap_dev);
-	app->model.lock_write(m);
+	auto m          = app->model.lock();
+	m->devices      = m->devices.insert(dev);
+	m->clap_devices = m->clap_devices.insert(clap_dev);
+	app->model.commit(std::move(m));
 	app->msg_sender.enqueue(scuff::msg::out::return_created_device{dev.id.value, dev.service.shm->id().data(), callback});
 }
 
 [[nodiscard]] static
 auto get_param_value(const sbox::app& app, id::device dev_id, idx::param param_idx) -> std::optional<double> {
-	const auto dev = app.model.lock_read().clap_devices.at(dev_id);
+	const auto dev = app.model.read().clap_devices.at(dev_id);
 	if (dev.iface->plugin.params) {
 		const auto param = dev.params[param_idx.value];
 		double value;
@@ -874,7 +873,7 @@ auto get_param_value(const sbox::app& app, id::device dev_id, idx::param param_i
 [[nodiscard]] static
 auto get_param_value_text(const sbox::app& app, id::device dev_id, idx::param param_idx, double value) -> std::string {
 	static constexpr auto BUFFER_SIZE = 50;
-	const auto dev = app.model.lock_read().clap_devices.at(dev_id);
+	const auto dev = app.model.read().clap_devices.at(dev_id);
 	if (dev.iface->plugin.params) {
 		const auto param = dev.params[param_idx.value];
 		char buffer[BUFFER_SIZE];
@@ -888,7 +887,7 @@ auto get_param_value_text(const sbox::app& app, id::device dev_id, idx::param pa
 
 [[nodiscard]] static
 auto load(sbox::app* app, id::device dev_id, const std::vector<std::byte>& state) -> bool {
-	const auto dev = app->model.lock_read().clap_devices.at(dev_id);
+	const auto dev = app->model.read().clap_devices.at(dev_id);
 	if (dev.iface->plugin.state) {
 		auto bytes = std::span{state};
 		clap_istream_t is;
@@ -908,7 +907,7 @@ auto load(sbox::app* app, id::device dev_id, const std::vector<std::byte>& state
 
 [[nodiscard]] static
 auto save(sbox::app* app, id::device dev_id) -> std::vector<std::byte> {
-	const auto dev = app->model.lock_read().clap_devices.at(dev_id);
+	const auto dev = app->model.read().clap_devices.at(dev_id);
 	if (dev.iface->plugin.state) {
 		std::vector<std::byte> bytes;
 		clap_ostream_t os;
@@ -929,7 +928,7 @@ auto save(sbox::app* app, id::device dev_id) -> std::vector<std::byte> {
 
 [[nodiscard]] static
 auto set_sample_rate(const sbox::app& app, id::device dev_id, double sr) -> bool {
-	const auto m   = app.model.lock_read();
+	const auto m   = app.model.read();
 	const auto dev = m.clap_devices.at(dev_id);
 	dev.iface->plugin.plugin->deactivate(dev.iface->plugin.plugin);
 	return dev.iface->plugin.plugin->activate(dev.iface->plugin.plugin, sr, VECTOR_SIZE, VECTOR_SIZE);

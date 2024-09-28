@@ -181,8 +181,8 @@ auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plu
 // Create a new group.
 // - Every sandbox has to belong to a group.
 // - This is what allows data to travel between sandboxes.
-// - On failure, returns < 0.
-auto create_group(void) -> id::group;
+// - On failure, returns an invalid id
+auto create_group(int flags) -> id::group;
 
 // Create a new sandbox.
 // - Every sandbox has to belong to a group.
@@ -196,6 +196,7 @@ auto disconnect(id::device dev_out, size_t port_out, id::device dev_in, size_t p
 
 // Create a device by duplicating an existing device, and add it to the sandbox.
 // - The target device can belong to a different sandbox.
+// - The target device can belong to a different group.
 auto duplicate(id::device dev, id::sandbox sbox) -> id::device;
 
 // Duplicate a device asynchronously.
@@ -337,8 +338,8 @@ auto scan(const char* scan_exe_path, int flags) -> void;
 // Set device metadata at column.
 auto set_metadata(id::device dev, size_t column, std::any data) -> void;
 
-// Set the render mode for the given device.
-auto set_render_mode(id::device dev, render_mode mode) -> void;
+// Set the render mode for the given group.
+auto set_render_mode(id::group group, render_mode mode) -> void;
 
 // Return true if the device loaded successfully.
 auto was_loaded_successfully(id::device dev) -> bool;

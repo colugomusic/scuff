@@ -42,12 +42,28 @@ private:
 
 template <typename T>
 struct audio_sync {
-	auto lockfree_read() const -> std::shared_ptr<const T> { return published_model_.read(); }
-	auto lock_gc() -> void                                 { published_model_.garbage_collect(); }
-	auto lock_publish(T model) -> void                     { published_model_.set(std::move(model)); }
-	auto lock_read() const -> T                            { return *working_model_.lock(); }
-	auto lock_write(T model) -> void                       { *working_model_.lock() = std::move(model); }
+	struct locked_data {
+		locked_data(T value, std::unique_lock<std::mutex>&& lock) : value_(std::move(value)), lock_(std::move(lock)) {}
+		auto operator*() -> T&             { return value_; }
+		auto operator*() const -> const T& { return value_; }
+		auto operator->() -> T*            { return &value_; }
+		auto operator->() const -> const T*{ return &value_; }
+	private:
+		T value_;
+		std::unique_lock<std::mutex> lock_;
+		friend struct audio_sync<T>;
+	};
+	auto gc() -> void                                   { published_model_.garbage_collect(); }
+	auto publish(T model) -> void                       { published_model_.set(std::move(model)); }
+	auto rt_read() const -> std::shared_ptr<const T>    { return published_model_.read(); }
+	auto lock() const -> locked_data                    { return locked_data{working_model_, std::unique_lock(mutex_)}; }
+	auto read() const -> T                              { return *lock(); }
+	auto commit(locked_data&& data) -> void             { working_model_ = std::move(data.value_); }
+	auto commit_and_publish(locked_data&& data) -> void { working_model_ = std::move(data.value_); publish(working_model_); }
+	auto overwrite(T model) -> void                     { *lock() = std::move(model); }
+	template <typename Fn> auto update(Fn fn) -> void   { auto m = lock(); *m = fn(std::move(*m)); }
 private:
-	lg::plain_guarded<T> working_model_;
+	mutable std::mutex mutex_;
+	T working_model_;
 	audio_data<T> published_model_;
 };

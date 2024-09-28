@@ -6,6 +6,7 @@ endif()
 include(../CPM.cmake)
 list (APPEND src
 	include/scuff/client.hpp
+	include/scuff/managed.hpp
 	src/client.cpp
 	src/data.hpp
 	src/report.hpp

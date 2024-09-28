@@ -8,7 +8,7 @@ namespace scuff::sbox::main {
 
 [[nodiscard]] static
 auto get_device_type(const sbox::app& app, id::device dev_id) -> plugin_type {
-	return app.model.lock_read().devices.at(dev_id).type;
+	return app.model.read().devices.at(dev_id).type;
 }
 
 [[nodiscard]] static
@@ -66,7 +66,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::clean_shutdown& ms
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors& msg) -> void {
-	const auto devices = app->model.lock_read().devices;
+	const auto devices = app->model.read().devices;
 	for (const auto& dev : devices) {
 		if (dev.ui.window) {
 			window_hide(dev.ui.window);
@@ -79,10 +79,10 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 	try {
 		if (msg.type == plugin_type::clap) {
 			clap::main::create_device(app, {msg.dev_id}, msg.plugfile_path, msg.plugin_id, msg.callback);
-			auto m = app->model.lock_read();
+			auto m = app->model.read();
 			m.device_processing_order = make_device_processing_order(m.devices);
-			app->model.lock_write(m);
-			app->model.lock_publish(m);
+			app->model.overwrite(m);
+			app->model.publish(m);
 			return;
 		}
 		else {
@@ -97,7 +97,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& msg) -> void {
-	auto m           = app->model.lock_read();
+	auto m           = app->model.read();
 	auto in_dev_ptr  = m.devices.find({msg.in_dev_id});
 	auto out_dev_ptr = m.devices.find({msg.out_dev_id});
 	if (!in_dev_ptr)  { throw std::runtime_error(std::format("Input device {} doesn't exist in this sandbox!", msg.in_dev_id)); }
@@ -110,13 +110,13 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& ms
 	out_dev.output_conns = out_dev.output_conns.push_back(conn);
 	m.devices                 = m.devices.insert(out_dev);
 	m.device_processing_order = make_device_processing_order(m.devices);
-	app->model.lock_write(m);
-	app->model.lock_publish(m);
+	app->model.overwrite(m);
+	app->model.publish(m);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect& msg) -> void {
-	auto m                 = app->model.lock_read();
+	auto m                 = app->model.read();
 	const auto in_dev_ptr  = m.devices.find({msg.in_dev_id});
 	const auto out_dev_ptr = m.devices.find({msg.out_dev_id});
 	if (!in_dev_ptr)  { throw std::runtime_error(std::format("Input device {} doesn't exist in this sandbox!", msg.in_dev_id)); }
@@ -133,13 +133,13 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect&
 	out_dev.output_conns      = out_dev.output_conns.erase(pos.index());
 	m.devices                 = m.devices.insert(out_dev);
 	m.device_processing_order = make_device_processing_order(m.devices);
-	app->model.lock_write(m);
-	app->model.lock_publish(m);
+	app->model.overwrite(m);
+	app->model.publish(m);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg) -> void {
-	auto m             = app->model.lock_read();
+	auto m             = app->model.read();
 	const auto dev_id  = id::device{msg.dev_id};
 	const auto devices = m.devices;
 	// Remove any internal connections to this device
@@ -154,20 +154,20 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg)
 	m.devices                 = m.devices.erase({msg.dev_id});
 	m.clap_devices            = m.clap_devices.erase({msg.dev_id});
 	m.device_processing_order = make_device_processing_order(m.devices);
-	app->model.lock_write(m);
-	app->model.lock_publish(m);
+	app->model.overwrite(m);
+	app->model.publish(m);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_hide& msg) -> void {
-	const auto devices = app->model.lock_read().devices;
+	const auto devices = app->model.read().devices;
 	const auto device  = devices.at({msg.dev_id});
 	window_hide(device.ui.window);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& msg) -> void {
-	const auto devices = app->model.lock_read().devices;
+	const auto devices = app->model.read().devices;
 	const auto device  = devices.at({msg.dev_id});
 	window_show(device.ui.window);
 }
@@ -207,7 +207,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_set_render_
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::event& msg) -> void {
 	const auto dev_id  = id::device{msg.dev_id};
-	const auto devices = app->model.lock_read().devices;
+	const auto devices = app->model.read().devices;
 	const auto dev     = devices.at(dev_id);
 	dev.service.input_events_from_main->enqueue(msg.event);
 }
@@ -237,7 +237,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value_te
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::set_sample_rate& msg) -> void {
-	const auto m = app->model.lock_read();
+	const auto m = app->model.read();
 	for (const auto& dev : m.devices) {
 		set_sample_rate(app, dev, msg.sr);
 	}

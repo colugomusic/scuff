@@ -5,6 +5,7 @@
 #include "common/shm.hpp"
 #include "common/slot_buffer.hpp"
 #include "report_types.hpp"
+#include <atomic>
 #include <boost/asio.hpp>
 #include <immer/box.hpp>
 #include <immer/map.hpp>
@@ -34,11 +35,11 @@ struct sbox_flags {
 	int value = 0;
 };
 
-struct sandbox_service {
-	using shptr = std::shared_ptr<sandbox_service>;
+struct sandbox_services {
 	bp::child proc;
 	return_buffers return_buffers;
-	sandbox_service(bp::child&& proc, std::string_view shmid)
+	std::atomic_int ref_count = 0;
+	sandbox_services(bp::child&& proc, std::string_view shmid)
 		: proc{std::move(proc)}
 		, shm_{bip::create_only, shm::segment::remove_when_done, shmid}
 	{}
@@ -68,11 +69,16 @@ private:
 	msg::receiver<msg::out::msg> msg_receiver_;
 };
 
-struct group_service {
-	using shptr = std::shared_ptr<group_service>;
+struct group_services {
 	report::msg::group_q reporter;
 	shm::group shm;
 	uint64_t epoch = 0;
+	std::atomic_int ref_count = 0;
+};
+
+struct device_services {
+	std::atomic_int ref_count = 0;
+	shm::device shm;
 };
 
 struct device {
@@ -83,7 +89,7 @@ struct device {
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
 	immer::box<std::string> name;
-	immer::box<shm::device> shm;
+	std::shared_ptr<device_services> services;
 };
 
 struct sandbox {
@@ -92,14 +98,14 @@ struct sandbox {
 	immer::box<std::string> error;
 	immer::set<id::device> devices;
 	sbox_flags flags;
-	sandbox_service::shptr service;
+	std::shared_ptr<sandbox_services> services;
 };
 
 struct group {
 	id::group id;
 	immer::set<id::sandbox> sandboxes;
 	immer::map<id::device, id::device> cross_sbox_conns;
-	group_service::shptr service;
+	std::shared_ptr<group_services> services;
 };
 
 struct plugin {
