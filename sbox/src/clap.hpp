@@ -485,13 +485,14 @@ auto init_audio(clap::device&& clap_dev, const sbox::device& dev) -> device {
 
 static
 auto init_audio(sbox::app* app, id::device dev_id) -> void {
-	auto m                           = app->model.lock();
-	auto dev                         = m->devices.at(dev_id);
-	auto clap_dev                    = m->clap_devices.at(dev_id);
-	clap_dev.service.audio_port_info = retrieve_audio_port_info(clap_dev.iface->plugin);
-	clap_dev                         = init_audio(std::move(clap_dev), dev);
-	m->clap_devices                  = m->clap_devices.insert(clap_dev);
-	app->model.commit_and_publish(std::move(m));
+	app->model.update_publish([=](model&& m) {
+		auto dev                         = m.devices.at(dev_id);
+		auto clap_dev                    = m.clap_devices.at(dev_id);
+		clap_dev.service.audio_port_info = retrieve_audio_port_info(clap_dev.iface->plugin);
+		clap_dev                         = init_audio(std::move(clap_dev), dev);
+		m.clap_devices                  = m.clap_devices.insert(clap_dev);
+		return m;
+	});
 }
 
 static
@@ -850,10 +851,11 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 		info.name[name_buffer_size - 1] = '\0';
 		dev.service.shm->data->param_info[i] = std::move(info);
 	}
-	auto m          = app->model.lock();
-	m->devices      = m->devices.insert(dev);
-	m->clap_devices = m->clap_devices.insert(clap_dev);
-	app->model.commit(std::move(m));
+	app->model.update_publish([=](model&& m) {
+		m.devices      = m.devices.insert(dev);
+		m.clap_devices = m.clap_devices.insert(clap_dev);
+		return m;
+	});
 	app->msg_sender.enqueue(scuff::msg::out::return_created_device{dev.id.value, dev.service.shm->id().data(), callback});
 }
 

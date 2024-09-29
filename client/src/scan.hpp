@@ -97,9 +97,10 @@ auto read_broken_plugfile(const nlohmann::json& j) -> void {
 	pf.path  = path;
 	pf.error = error;
 	pf.type  = scuff::plugin_type_from_string(plugfile_type);
-	auto m = DATA_->model.read();
-	m.plugfiles = m.plugfiles.insert(std::move(pf));
-	DATA_->model.overwrite(m);
+	DATA_->model.update([pf](model&& m){
+		m.plugfiles = m.plugfiles.insert(pf);
+		return m;
+	});
 	report::send(report::msg::plugfile_broken{pf.id});
 }
 
@@ -122,9 +123,10 @@ auto read_broken_plugin(const nlohmann::json& j) -> void {
 		plugin.type    = type;
 		plugin.vendor  = vendor;
 		plugin.version = version;
-		auto m = DATA_->model.read();
-		m.plugins = m.plugins.insert(std::move(plugin));
-		DATA_->model.overwrite(m);
+		DATA_->model.update([plugin](model&& m){
+			m.plugins = m.plugins.insert(plugin);
+			return m;
+		});
 		report::send(report::msg::plugin_broken{plugin.id});
 	}
 }
@@ -145,9 +147,10 @@ auto read_plugfile(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 	pf.id   = id::plugfile{id_gen_++};
 	pf.path = path;
 	pf.type = scuff::plugin_type_from_string(plugfile_type);
-	auto m = DATA_->model.read();
-	m.plugfiles = m.plugfiles.insert(std::move(pf));
-	DATA_->model.overwrite(m);
+	DATA_->model.update([pf](model&& m){
+		m.plugfiles = m.plugfiles.insert(pf);
+		return m;
+	});
 	report::send(report::msg::plugfile_scanned{pf.id});
 	basio::post(scanner->context, [scanner, path] { async_scan_clap_file(scanner, path); });
 }
@@ -170,9 +173,10 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 		plugin.type    = type;
 		plugin.vendor  = vendor;
 		plugin.version = version;
-		auto m = DATA_->model.read();
-		m.plugins = m.plugins.insert(std::move(plugin));
-		DATA_->model.overwrite(m);
+		DATA_->model.update([plugin](model&& m){
+			m.plugins = m.plugins.insert(plugin);
+			return m;
+		});
 		report::send(report::msg::plugin_scanned{plugin.id});
 		// TODO: if flags & scuff_scan_flag_reload_failed_devices,
 		//       reload any unloaded devices which use this plugin 
@@ -258,7 +262,7 @@ auto is_running() -> bool {
 
 static
 auto start(std::string_view scan_exe_path, int flags) -> void {
-	DATA_->scan_thread = std::jthread{scan_::thread, scan_exe_path, flags};
+	DATA_->scan_thread = std::jthread{scan_::thread, std::string{scan_exe_path}, flags};
 }
 
 static

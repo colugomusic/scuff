@@ -7,10 +7,13 @@
 #include "report_types.hpp"
 #include <atomic>
 #include <boost/asio.hpp>
+#pragma warning(push, 0)
 #include <immer/box.hpp>
 #include <immer/map.hpp>
 #include <immer/set.hpp>
 #include <immer/table.hpp>
+#include <immer/vector.hpp>
+#pragma warning(pop)
 
 namespace basio = boost::asio;
 
@@ -89,6 +92,7 @@ struct device {
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
 	immer::box<std::string> name;
+	immer::vector<std::any> metadata;
 	std::shared_ptr<device_services> services;
 };
 

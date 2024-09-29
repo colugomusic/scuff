@@ -79,10 +79,10 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 	try {
 		if (msg.type == plugin_type::clap) {
 			clap::main::create_device(app, {msg.dev_id}, msg.plugfile_path, msg.plugin_id, msg.callback);
-			auto m = app->model.read();
-			m.device_processing_order = make_device_processing_order(m.devices);
-			app->model.overwrite(m);
-			app->model.publish(m);
+			app->model.update_publish([](model&& m){
+				m.device_processing_order = make_device_processing_order(m.devices);
+				return m;
+			});
 			return;
 		}
 		else {
@@ -97,65 +97,65 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& msg) -> void {
-	auto m           = app->model.read();
-	auto in_dev_ptr  = m.devices.find({msg.in_dev_id});
-	auto out_dev_ptr = m.devices.find({msg.out_dev_id});
-	if (!in_dev_ptr)  { throw std::runtime_error(std::format("Input device {} doesn't exist in this sandbox!", msg.in_dev_id)); }
-	if (!out_dev_ptr) { throw std::runtime_error(std::format("Output device {} doesn't exist in this sandbox!", msg.out_dev_id)); }
-	auto out_dev = *out_dev_ptr;
-	port_conn conn;
-	conn.other_device     = {msg.in_dev_id};
-	conn.other_port_index = msg.in_port;
-	conn.this_port_index  = msg.out_port;
-	out_dev.output_conns = out_dev.output_conns.push_back(conn);
-	m.devices                 = m.devices.insert(out_dev);
-	m.device_processing_order = make_device_processing_order(m.devices);
-	app->model.overwrite(m);
-	app->model.publish(m);
+	app->model.update_publish([msg](model&& m){
+		auto in_dev_ptr  = m.devices.find({msg.in_dev_id});
+		auto out_dev_ptr = m.devices.find({msg.out_dev_id});
+		if (!in_dev_ptr)  { throw std::runtime_error(std::format("Input device {} doesn't exist in this sandbox!", msg.in_dev_id)); }
+		if (!out_dev_ptr) { throw std::runtime_error(std::format("Output device {} doesn't exist in this sandbox!", msg.out_dev_id)); }
+		auto out_dev = *out_dev_ptr;
+		port_conn conn;
+		conn.other_device     = {msg.in_dev_id};
+		conn.other_port_index = msg.in_port;
+		conn.this_port_index  = msg.out_port;
+		out_dev.output_conns = out_dev.output_conns.push_back(conn);
+		m.devices                 = m.devices.insert(out_dev);
+		m.device_processing_order = make_device_processing_order(m.devices);
+		return m;
+	});
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect& msg) -> void {
-	auto m                 = app->model.read();
-	const auto in_dev_ptr  = m.devices.find({msg.in_dev_id});
-	const auto out_dev_ptr = m.devices.find({msg.out_dev_id});
-	if (!in_dev_ptr)  { throw std::runtime_error(std::format("Input device {} doesn't exist in this sandbox!", msg.in_dev_id)); }
-	if (!out_dev_ptr) { throw std::runtime_error(std::format("Output device {} doesn't exist in this sandbox!", msg.out_dev_id)); }
-	auto out_dev = *out_dev_ptr;
-	port_conn conn;
-	conn.other_device     = {msg.in_dev_id};
-	conn.other_port_index = msg.in_port;
-	conn.this_port_index  = msg.out_port;
-	auto pos = std::find(out_dev.output_conns.begin(), out_dev.output_conns.end(), conn);
-	if (pos == out_dev.output_conns.end()) {
-		throw std::runtime_error(std::format("Output device {} port {} is not connected to input device {} port {}!", msg.out_dev_id, msg.out_port, msg.in_dev_id, msg.in_port));
-	}
-	out_dev.output_conns      = out_dev.output_conns.erase(pos.index());
-	m.devices                 = m.devices.insert(out_dev);
-	m.device_processing_order = make_device_processing_order(m.devices);
-	app->model.overwrite(m);
-	app->model.publish(m);
+	app->model.update_publish([msg](model&& m){
+		const auto in_dev_ptr  = m.devices.find({msg.in_dev_id});
+		const auto out_dev_ptr = m.devices.find({msg.out_dev_id});
+		if (!in_dev_ptr)  { throw std::runtime_error(std::format("Input device {} doesn't exist in this sandbox!", msg.in_dev_id)); }
+		if (!out_dev_ptr) { throw std::runtime_error(std::format("Output device {} doesn't exist in this sandbox!", msg.out_dev_id)); }
+		auto out_dev = *out_dev_ptr;
+		port_conn conn;
+		conn.other_device     = {msg.in_dev_id};
+		conn.other_port_index = msg.in_port;
+		conn.this_port_index  = msg.out_port;
+		auto pos = std::find(out_dev.output_conns.begin(), out_dev.output_conns.end(), conn);
+		if (pos == out_dev.output_conns.end()) {
+			throw std::runtime_error(std::format("Output device {} port {} is not connected to input device {} port {}!", msg.out_dev_id, msg.out_port, msg.in_dev_id, msg.in_port));
+		}
+		out_dev.output_conns      = out_dev.output_conns.erase(pos.index());
+		m.devices                 = m.devices.insert(out_dev);
+		m.device_processing_order = make_device_processing_order(m.devices);
+		return m;
+	});
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg) -> void {
-	auto m             = app->model.read();
-	const auto dev_id  = id::device{msg.dev_id};
-	const auto devices = m.devices;
-	// Remove any internal connections to this device
-	for (auto dev : devices) {
-		for (auto pos = dev.output_conns.begin(); pos != dev.output_conns.end(); ++pos) {
-			if (pos->other_device == dev_id) {
-				dev.output_conns = dev.output_conns.erase(pos.index());
+	app->model.update_publish([msg](model&& m){
+		const auto dev_id  = id::device{msg.dev_id};
+		const auto devices = m.devices;
+		// Remove any internal connections to this device
+		for (auto dev : devices) {
+			for (auto pos = dev.output_conns.begin(); pos != dev.output_conns.end(); ++pos) {
+				if (pos->other_device == dev_id) {
+					dev.output_conns = dev.output_conns.erase(pos.index());
+				}
 			}
+			m.devices = m.devices.insert(dev);
 		}
-		m.devices = m.devices.insert(dev);
-	}
-	m.devices                 = m.devices.erase({msg.dev_id});
-	m.clap_devices            = m.clap_devices.erase({msg.dev_id});
-	m.device_processing_order = make_device_processing_order(m.devices);
-	app->model.overwrite(m);
-	app->model.publish(m);
+		m.devices                 = m.devices.erase({msg.dev_id});
+		m.clap_devices            = m.clap_devices.erase({msg.dev_id});
+		m.device_processing_order = make_device_processing_order(m.devices);
+		return m;
+	});
 }
 
 static

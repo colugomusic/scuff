@@ -135,27 +135,25 @@ auto do_sandbox_processing(const scuff::group& group, uint64_t epoch) -> bool {
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::return_created_device& msg) -> void {
-	auto m               = DATA_->model.read();
-	const auto return_fn = sbox.services->return_buffers.devices.take(msg.callback);
-	if (!msg.ports_shmid.empty()) {
-		// The sandbox succeeded in creating the remote device.
-		auto device             = m.devices.at({msg.dev_id});
-		const auto device_shmid = shm::device::make_id(DATA_->instance_id, {msg.dev_id});
-		device.services         = std::make_shared<device_services>();
-		device.services->shm    = shm::device{bip::open_only, shm::segment::remove_when_done, device_shmid};
-		m.devices = m.devices.insert(device);
-		return_fn({msg.dev_id}, true);
-		DATA_->model.overwrite(m);
-		DATA_->model.publish(m); // Device may not have been published yet.
-	}
-	else {
+	DATA_->model.update_publish([sbox, msg](model&& m){
+		const auto return_fn = sbox.services->return_buffers.devices.take(msg.callback);
+		if (!msg.ports_shmid.empty()) {
+			// The sandbox succeeded in creating the remote device.
+			auto device             = m.devices.at({msg.dev_id});
+			const auto device_shmid = shm::device::make_id(DATA_->instance_id, {msg.dev_id});
+			device.services         = std::make_shared<device_services>();
+			device.services->shm    = shm::device{bip::open_only, shm::segment::remove_when_done, device_shmid};
+			m.devices = m.devices.insert(device);
+			return_fn({msg.dev_id}, true);
+			return m;
+		}
 		// The sandbox failed to create the remote device.
 		const auto err = "Failed to create remote device.";
 		m = set_error(std::move(m), {msg.dev_id}, err);
 		return_fn({msg.dev_id}, false);
 		report::send(sbox, report::msg::device_error{{msg.dev_id}, err});
-		DATA_->model.overwrite(m);
-	}
+		return m;
+	});
 }
 
 static
@@ -334,27 +332,28 @@ auto close_all_editors() -> void {
 
 static
 auto connect(id::device dev_out_id, size_t port_out, id::device dev_in_id, size_t port_in) -> void {
-	auto m              = DATA_->model.lock();
-	const auto& dev_out = m->devices.at(dev_out_id);
-	const auto& dev_in  = m->devices.at(dev_in_id);
-	if (dev_out.sbox == dev_in.sbox) {
-		// Devices are in the same sandbox
-		const auto& sbox = m->sandboxes.at(dev_out.sbox);
-		sbox.services->enqueue(scuff::msg::in::device_connect{dev_out_id.value, port_out, dev_in_id.value, port_in});
-		return;
-	}
-	// Devices are in different sandboxes
-	const auto& sbox_out    = m->sandboxes.at(dev_out.sbox);
-	const auto& sbox_in     = m->sandboxes.at(dev_in.sbox);
-	const auto group_out_id = sbox_out.group;
-	const auto group_in_id  = sbox_in.group;
-	if (group_out_id != group_in_id) {
-		throw std::runtime_error("Cannot connect devices that exist in different sandbox groups.");
-	}
-	auto group = m->groups.at(group_out_id);
-	group.cross_sbox_conns = group.cross_sbox_conns.set(id::device{dev_out_id}, id::device{dev_in_id});
-	m->groups = m->groups.insert(group);
-	DATA_->model.commit_and_publish(std::move(m));
+	DATA_->model.update_publish([dev_out_id, port_out, dev_in_id, port_in](model&& m){
+		const auto& dev_out = m.devices.at(dev_out_id);
+		const auto& dev_in  = m.devices.at(dev_in_id);
+		if (dev_out.sbox == dev_in.sbox) {
+			// Devices are in the same sandbox
+			const auto& sbox = m.sandboxes.at(dev_out.sbox);
+			sbox.services->enqueue(scuff::msg::in::device_connect{dev_out_id.value, port_out, dev_in_id.value, port_in});
+			return m;
+		}
+		// Devices are in different sandboxes
+		const auto& sbox_out    = m.sandboxes.at(dev_out.sbox);
+		const auto& sbox_in     = m.sandboxes.at(dev_in.sbox);
+		const auto group_out_id = sbox_out.group;
+		const auto group_in_id  = sbox_in.group;
+		if (group_out_id != group_in_id) {
+			throw std::runtime_error("Cannot connect devices that exist in different sandbox groups.");
+		}
+		auto group = m.groups.at(group_out_id);
+		group.cross_sbox_conns = group.cross_sbox_conns.set(id::device{dev_out_id}, id::device{dev_in_id});
+		m.groups = m.groups.insert(group);
+		return m;
+	});
 }
 
 [[nodiscard]] static
@@ -397,57 +396,59 @@ auto create_device_async(model&& m, id::device dev_id, const sandbox& sbox, plug
 
 [[nodiscard]] static
 auto create_device_async(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id, return_device fn) -> id::device {
-	auto m               = DATA_->model.lock();
-	const auto& sbox     = m->sandboxes.at(sbox_id);
-	const auto plugin_id = id::plugin{find(plugin_ext_id)};
-	const auto dev_id    = id::device{scuff::id_gen_++};
-	*m = create_device_async(std::move(*m), dev_id, sbox, type, {plugin_ext_id}, plugin_id, fn);
-	DATA_->model.commit(std::move(m));
+	const auto dev_id = id::device{scuff::id_gen_++};
+	DATA_->model.update([dev_id, sbox_id, type, plugin_ext_id, fn](model&& m){
+		const auto sbox     = m.sandboxes.at(sbox_id);
+		const auto plugin_id = id::plugin{find(plugin_ext_id)};
+		m = create_device_async(std::move(m), dev_id, sbox, type, plugin_ext_id, plugin_id, fn);
+		return m;
+	});
 	return dev_id;
 }
 
 static
 auto device_disconnect(id::device dev_out_id, size_t port_out, id::device dev_in_id, size_t port_in) -> void {
-	auto m              = DATA_->model.lock();
-	const auto& dev_out = m->devices.at({dev_out_id});
-	const auto& dev_in  = m->devices.at({dev_in_id});
-	if (dev_out.sbox == dev_in.sbox) {
-		// Devices are in the same sandbox.
-		const auto& sbox = m->sandboxes.at(dev_out.sbox);
-		sbox.services->enqueue(scuff::msg::in::device_disconnect{dev_out_id.value, port_out, dev_in_id.value, port_in});
-		return;
-	}
-	// Devices are in different sandboxes.
-	const auto& sbox_out    = m->sandboxes.at(dev_out.sbox);
-	const auto& sbox_in     = m->sandboxes.at(dev_in.sbox);
-	const auto group_out_id = sbox_out.group;
-	const auto group_in_id  = sbox_in.group;
-	if (group_out_id != group_in_id) {
-		throw std::runtime_error("Connected devices somehow exist in different sandbox groups?!");
-	}
-	auto group             = m->groups.at(group_out_id);
-	group.cross_sbox_conns = group.cross_sbox_conns.erase(id::device{dev_out_id});
-	m->groups              = m->groups.insert(group);
-	DATA_->model.commit_and_publish(std::move(m));
+	DATA_->model.update_publish([dev_out_id, port_out, dev_in_id, port_in](model&& m){
+		const auto& dev_out = m.devices.at({dev_out_id});
+		const auto& dev_in  = m.devices.at({dev_in_id});
+		if (dev_out.sbox == dev_in.sbox) {
+			// Devices are in the same sandbox.
+			const auto& sbox = m.sandboxes.at(dev_out.sbox);
+			sbox.services->enqueue(scuff::msg::in::device_disconnect{dev_out_id.value, port_out, dev_in_id.value, port_in});
+			return m;
+		}
+		// Devices are in different sandboxes.
+		const auto& sbox_out    = m.sandboxes.at(dev_out.sbox);
+		const auto& sbox_in     = m.sandboxes.at(dev_in.sbox);
+		const auto group_out_id = sbox_out.group;
+		const auto group_in_id  = sbox_in.group;
+		if (group_out_id != group_in_id) {
+			throw std::runtime_error("Connected devices somehow exist in different sandbox groups?!");
+		}
+		auto group             = m.groups.at(group_out_id);
+		group.cross_sbox_conns = group.cross_sbox_conns.erase(id::device{dev_out_id});
+		m.groups              = m.groups.insert(group);
+		return m;
+	});
 }
 
 static
 auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_device fn) -> id::device {
-	auto m                   = DATA_->model.lock();
+	auto m                   = DATA_->model.read();
 	const auto new_dev_id    = id::device{scuff::id_gen_++};
-	const auto src_dev       = m->devices.at({src_dev_id});
-	const auto src_sbox      = m->sandboxes.at(src_dev.sbox);
-	const auto dst_sbox      = m->sandboxes.at({dst_sbox_id});
+	const auto src_dev       = m.devices.at({src_dev_id});
+	const auto src_sbox      = m.sandboxes.at(src_dev.sbox);
+	const auto dst_sbox      = m.sandboxes.at({dst_sbox_id});
 	const auto plugin_ext_id = src_dev.plugin_ext_id;
 	const auto plugin        = src_dev.plugin;
 	const auto type          = src_dev.type;
 	// We're going to send a message to the source sandbox to save the source device.
 	// When the saved state is returned, call this function with it:
-	const auto save_cb       = src_sbox.services->return_buffers.states.put([plugin_ext_id, plugin, type, dst_sbox, new_dev_id, fn](const std::vector<std::byte>& src_state) {
+	const auto save_cb = src_sbox.services->return_buffers.states.put([=](const std::vector<std::byte>& src_state) {
 		// Now we're going to send a message to the destination sandbox to actually create the new device,
 		// if the plugin is available.
 		// When the new device is created, call this function with it:
-		const auto return_fn = [dst_sbox, fn, src_state](id::device dev_id, bool success) {
+		const auto return_fn = [=](id::device dev_id, bool success) {
 			if (success) {
 				// Remote device was created successfully.
 				// Now send a message to the destination sandbox to load the saved state into the new device.
@@ -456,9 +457,9 @@ auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_devi
 			// Call user's callback
 			fn(dev_id, success);
 		};
-		auto m = DATA_->model.lock();
-		*m = create_device_async(std::move(*m), new_dev_id, dst_sbox, type, plugin_ext_id, plugin, return_fn);
-		DATA_->model.commit(std::move(m));
+		DATA_->model.update([=](model&& m){
+			return create_device_async(std::move(m), new_dev_id, dst_sbox, type, plugin_ext_id, plugin, return_fn);
+		});
 	});
 	src_sbox.services->enqueue(msg::in::device_save{src_dev_id.value, save_cb});
 	return new_dev_id;
@@ -472,17 +473,18 @@ auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id) -> id::device {
 
 static
 auto erase(id::device dev_id) -> void {
-	auto m            = DATA_->model.lock();
-	const auto& dev   = m->devices.at(dev_id);
-	const auto& sbox  = m->sandboxes.at(dev.sbox);
-	const auto& group = m->groups.at(sbox.group);
-	for (const auto sbox_id : group.sandboxes) {
-		const auto& sbox = m->sandboxes.at(sbox_id);
-		sbox.services->enqueue(msg::in::device_erase{dev_id.value});
-	}
-	*m = remove_device_from_sandbox(std::move(*m), dev.sbox, dev_id);
-	m->devices = m->devices.erase(dev_id);
-	DATA_->model.commit_and_publish(std::move(m));
+	DATA_->model.update_publish([=](model&& m){
+		const auto& dev   = m.devices.at(dev_id);
+		const auto& sbox  = m.sandboxes.at(dev.sbox);
+		const auto& group = m.groups.at(sbox.group);
+		for (const auto sbox_id : group.sandboxes) {
+			const auto& sbox = m.sandboxes.at(sbox_id);
+			sbox.services->enqueue(msg::in::device_erase{dev_id.value});
+		}
+		m = remove_device_from_sandbox(std::move(m), dev.sbox, dev_id);
+		m.devices = m.devices.erase(dev_id);
+		return m;
+	});
 }
 
 [[nodiscard]] static
@@ -626,35 +628,42 @@ auto was_loaded_successfully(id::device dev) -> bool {
 [[nodiscard]] static
 auto create_group(int flags) -> id::group {
 	// TODO: handle flags
-	scuff::group group;
-	auto m   = DATA_->model.lock();
-	group.id = id::group{id_gen_++};
-	try {
-		const auto shmid    = shm::group::make_id(DATA_->instance_id, group.id);
-		group.services      = std::make_shared<group_services>();
-		group.services->shm = shm::group{bip::create_only, shm::segment::remove_when_done, shmid};
-	} catch (const std::exception& err) {
-		report::send(report::msg::error{err.what()});
+	const auto group_id = id::group{id_gen_++};
+	DATA_->model.update([=](model&& m){
+		scuff::group group;
+		group.id = group_id;
+		try {
+			const auto shmid    = shm::group::make_id(DATA_->instance_id, group.id);
+			group.services      = std::make_shared<group_services>();
+			group.services->shm = shm::group{bip::create_only, shm::segment::remove_when_done, shmid};
+		} catch (const std::exception& err) {
+			report::send(report::msg::error{err.what()});
+			return m;
+		}
+		m.groups = m.groups.insert(group);
+		return m;
+	});
+	if (DATA_->model.read().groups.count(group_id) == 0) {
+		// Failed to create the group.
 		return {};
 	}
-	m->groups = m->groups.insert(group);
-	DATA_->model.commit(std::move(m));
-	return {group.id.value};
+	return group_id;
 }
 
 static
 auto erase(id::group group_id) -> void {
-	auto m            = DATA_->model.lock();
-	const auto& group = m->groups.at(group_id);
-	for (const auto sbox_id : group.sandboxes) {
-		const auto& sbox = m->sandboxes.at(sbox_id);
-		if (sbox.services->proc.running()) {
-			sbox.services->proc.terminate();
+	DATA_->model.update_publish([=](model&& m){
+		const auto& group = m.groups.at(group_id);
+		for (const auto sbox_id : group.sandboxes) {
+			const auto& sbox = m.sandboxes.at(sbox_id);
+			if (sbox.services->proc.running()) {
+				sbox.services->proc.terminate();
+			}
 		}
-	}
-	// TODO: also erase sandboxes in group ??
-	m->groups = m->groups.erase(group_id);
-	DATA_->model.commit_and_publish(std::move(m));
+		// TODO: also erase sandboxes in group ??
+		m.groups = m.groups.erase(group_id);
+		return m;
+	});
 }
 
 static
@@ -717,19 +726,57 @@ auto get_ext_id(id::plugin plugin) -> ext::id::plugin {
 }
 
 [[nodiscard]] static
+auto get_metadata(id::device dev_id, size_t column) -> std::any {
+	const auto m    = DATA_->model.read();
+	const auto& dev = m.devices.at(dev_id);
+	return dev.metadata.at(column);
+}
+
+auto set_metadata(id::device dev_id, size_t column, std::any data) -> void {
+	DATA_->model.update([=](model&& m){
+		auto dev = m.devices.at(dev_id);
+		while (dev.metadata.size() <= column) {
+			dev.metadata = dev.metadata.push_back({});
+		}
+		dev.metadata = dev.metadata.set(column, std::move(data));
+		return m;
+	});
+}
+
+[[nodiscard]] static
 auto get_name(id::plugin plugin) -> const char* {
 	return DATA_->model.read().plugins.at({plugin}).name->c_str();
 }
 
 [[nodiscard]] static
-auto get_value_text(id::device dev, idx::param param, double value) -> std::string {
-	// TODO: impl::get_value_text
-	return {};
+auto get_value_text(id::device dev_id, idx::param param, double value) -> std::string {
+	static constexpr auto MAX_WAIT = std::chrono::seconds(1);
+	std::condition_variable cv;
+	std::mutex mutex;
+	std::string result;
+	auto fn = [&cv, &mutex, &result](std::string_view text) -> void {
+		std::lock_guard lock{mutex};
+		result = text;
+		cv.notify_one();
+	};
+	auto ready = [&result] {
+		return !result.empty();
+	};
+	get_value_text_async(dev_id, param, value, fn);
+	auto lock = std::unique_lock{mutex};
+	if (!cv.wait_for(lock, MAX_WAIT, ready)) {
+		report::send(report::msg::error{"Timed out waiting for value text."});
+	}
+	return result;
 }
 
 static
-auto get_value_text_async(id::device dev, idx::param param, double value, return_string fn) -> void {
-	// TODO: impl::get_value_text_async
+auto get_value_text_async(id::device dev_id, idx::param param, double value, return_string fn) -> void {
+	const auto m     = DATA_->model.read();
+	const auto& dev  = m.devices.at(dev_id);
+	const auto& sbox = m.sandboxes.at(dev.sbox);
+	const auto callback = sbox.services->return_buffers.strings.put(fn);
+	sbox.services->enqueue(scuff::msg::in::get_param_value_text{dev_id.value, param.value, value, callback});
 }
 
 [[nodiscard]] static
@@ -753,7 +800,7 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 	const auto group_shmid   = group.services->shm.id();
 	const auto sandbox_shmid = sandbox.services->get_shmid();
 	const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid);
-	sandbox.services->proc   = bp::child{sbox_exe_path, exe_args};
+	sandbox.services->proc   = bp::child{std::string{sbox_exe_path}, exe_args};
 	// TODO: the rest of this
 }
 
@@ -770,42 +817,44 @@ auto do_scan(std::string_view scan_exe_path, int flags) -> void {
 
 [[nodiscard]] static
 auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::sandbox {
-	sandbox sbox;
-	sbox.id = id::sandbox{id_gen_++};
-	auto m  = DATA_->model.lock();
-	try {
-		const auto& group = m->groups.at({group_id});
+	const auto sbox_id = id::sandbox{id_gen_++};
+	DATA_->model.update_publish([=](model&& m){
+		sandbox sbox;
+		sbox.id = id::sandbox{id_gen_++};
 		try {
+			const auto& group        = m.groups.at({group_id});
 			const auto group_shmid   = group.services->shm.id();
 			const auto sandbox_shmid = shm::sandbox::make_id(DATA_->instance_id, sbox.id);
 			const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid);
-			auto proc                = bp::child{sbox_exe_path, exe_args};
+			auto proc                = bp::child{std::string{sbox_exe_path}, exe_args};
 			sbox.group               = {group_id};
 			sbox.services            = std::make_shared<sandbox_services>(std::move(proc), sandbox_shmid);
 			// Add sandbox to group
-			*m = add_sandbox_to_group(std::move(*m), {group_id}, sbox.id);
+			m = add_sandbox_to_group(std::move(m), {group_id}, sbox.id);
 		}
 		catch (const std::exception& err) {
 			sbox.error = err.what();
-			report::send(group, report::msg::sbox_error{sbox.id, err.what()});
+			report::send(report::msg::error{err.what()});
+			return m;
 		}
+		m.sandboxes = m.sandboxes.insert(sbox);
+		return m;
+	});
+	if (DATA_->model.read().sandboxes.count(sbox_id) == 0) {
+		// Failed to create the sandbox.
+		return {};
 	}
-	catch (const std::exception& err) {
-		sbox.error = err.what();
-		report::send(report::msg::error{err.what()});
-	}
-	m->sandboxes = m->sandboxes.insert(sbox);
-	DATA_->model.commit_and_publish(std::move(m));
-	return sbox.id;
+	return sbox_id;
 }
 
 static
 auto erase(id::sandbox sbox) -> void {
-	auto m              = DATA_->model.lock();
-	const auto& sandbox = m->sandboxes.at({sbox});
-	*m = remove_sandbox_from_group(std::move(*m), sandbox.group, {sbox});
-	m->sandboxes = m->sandboxes.erase({sbox});
-	DATA_->model.commit_and_publish(std::move(m));
+	DATA_->model.update_publish([=](model&& m){
+		const auto& sandbox = m.sandboxes.at({sbox});
+		m = remove_sandbox_from_group(std::move(m), sandbox.group, {sbox});
+		m.sandboxes = m.sandboxes.erase({sbox});
+		return m;
+	});
 }
 
 [[nodiscard]] static
@@ -1066,6 +1115,11 @@ auto get_info(id::device dev, idx::param param) -> param_info {
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {0}; }
 }
 
+auto get_metadata(id::device dev, size_t column) -> std::any {
+	try                               { return impl::get_metadata(dev, column); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
+}
+
 auto get_name(id::plugin plugin) -> const char* {
 	try                               { return impl::get_name(plugin); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return ""; }
@@ -1148,6 +1202,11 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 
 auto scan(std::string_view scan_exe_path, int flags) -> void {
 	try                               { impl::do_scan(scan_exe_path, flags); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto set_metadata(id::device dev, size_t column, std::any data) -> void {
+	try                               { impl::set_metadata(dev, column, data); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
