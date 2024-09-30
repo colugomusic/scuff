@@ -59,11 +59,12 @@ struct event_reader {
 
 using audio_writers  = std::vector<scuff::audio_writer>;
 using audio_readers  = std::vector<scuff::audio_reader>;
-using input_devices  = std::vector<scuff::input_device>;
-using output_devices = std::vector<scuff::output_device>;
 
 struct input_device  { id::device dev; scuff::audio_writers audio_writers; scuff::event_writer event_writer; };
 struct output_device { id::device dev; scuff::audio_readers audio_readers; scuff::event_reader event_reader; };
+
+using input_devices  = std::vector<scuff::input_device>;
+using output_devices = std::vector<scuff::output_device>;
 
 struct group_process {
 	id::group group;
@@ -274,6 +275,11 @@ auto get_version(id::plugin plugin) -> const char*;
 // If the device failed to load successfully, return the error string.
 auto get_error(id::device dev) -> const char*;
 
+// For CLAP plugins, return the list of feature strings.
+// Not sure how this will look for VST yet.
+// This might change.
+auto get_features(id::plugin plugin) -> std::vector<std::string>;
+
 // Return the device name.
 auto get_name(id::device dev) -> const char*;
 
@@ -282,6 +288,9 @@ auto get_param_count(id::device dev) -> size_t;
 
 // Return the plugin for the given device.
 auto get_plugin(id::device dev) -> id::plugin;
+
+// Returns the plugin ID string for the given device.
+auto get_plugin_ext_id(id::device dev) -> ext::id::plugin;
 
 // Return the plugin type.
 auto get_type(id::plugin plugin) -> plugin_type;
@@ -308,6 +317,14 @@ auto has_gui(id::device dev) -> bool;
 
 // Return true if the device has parameters.
 auto has_params(id::device dev) -> bool;
+
+// Return true if this plugin is suitable for use in a "rack", for example it is an audio
+// effect or analyzer of some kind.
+// For CLAP this is going to check the plugin features for "audio-effect" or "analyzer".
+// I don't know what we will do for VSTs yet.
+// I'm not sure I like this function so I might replace it with something else. Let me know
+// what you think.
+auto has_rack_features(id::plugin plugin) -> bool;
 
 // Check if the given sandbox is running.
 auto is_running(id::sandbox sbox) -> bool;

@@ -117,6 +117,7 @@ struct plugin {
 	id::plugfile plugfile;
 	plugin_type type;
 	ext::id::plugin ext_id;
+	immer::vector<std::string> clap_features;
 	immer::box<std::string> error;
 	immer::box<std::string> name;
 	immer::box<std::string> vendor;

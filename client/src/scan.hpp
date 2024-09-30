@@ -7,6 +7,9 @@
 #include <boost/process.hpp>
 #include <deque>
 #include <nlohmann/json.hpp>
+#pragma warning(push, 0)
+#include <immer/vector_transient.hpp>
+#pragma warning(pop)
 
 namespace bp   = boost::process;
 namespace bsys = boost::system;
@@ -155,31 +158,49 @@ auto read_plugfile(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 	basio::post(scanner->context, [scanner, path] { async_scan_clap_file(scanner, path); });
 }
 
+[[nodiscard]] static
+auto to_immer(const std::vector<std::string>& strings) -> immer::vector<std::string> {
+	auto t = immer::vector_transient<std::string>{};
+	for (const auto& str : strings) {
+		t.push_back(str);
+	}
+	return t.persistent();
+}
+
 static
 auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 	const std::string plugfile_type = j["plugfile-type"];
 	const std::string path          = j["path"];
 	const auto type = scuff::plugin_type_from_string(plugfile_type);
-	if (type == scuff::plugin_type::clap) {
-		const std::string name    = j["name"];
-		const std::string id      = j["id"];
-		const std::string url     = j["url"];
-		const std::string vendor  = j["vendor"];
-		const std::string version = j["version"];
-		scuff::plugin plugin;
-		plugin.id      = id::plugin{id_gen_++};
-		plugin.ext_id  = ext::id::plugin{id};
-		plugin.name    = name;
-		plugin.type    = type;
-		plugin.vendor  = vendor;
-		plugin.version = version;
-		DATA_->model.update([plugin](model&& m){
-			m.plugins = m.plugins.insert(plugin);
-			return m;
-		});
-		report::send(report::msg::plugin_scanned{plugin.id});
-		// TODO: if flags & scuff_scan_flag_reload_failed_devices,
-		//       reload any unloaded devices which use this plugin 
+	switch (type) {
+		case scuff::plugin_type::clap: {
+			const std::string name                  = j["name"];
+			const std::string id                    = j["id"];
+			const std::string url                   = j["url"];
+			const std::string vendor                = j["vendor"];
+			const std::string version               = j["version"];
+			const std::vector<std::string> features = j["features"];
+			scuff::plugin plugin;
+			plugin.id            = id::plugin{id_gen_++};
+			plugin.ext_id        = ext::id::plugin{id};
+			plugin.name          = name;
+			plugin.type          = type;
+			plugin.vendor        = vendor;
+			plugin.version       = version;
+			plugin.clap_features = to_immer(features);
+			DATA_->model.update([plugin](model&& m){
+				m.plugins = m.plugins.insert(plugin);
+				return m;
+			});
+			report::send(report::msg::plugin_scanned{plugin.id});
+			// TODO: if flags & scuff_scan_flag_reload_failed_devices,
+			//       reload any unloaded devices which use this plugin 
+			return;
+		}
+		case scuff::plugin_type::vst3: {
+			// Not implemented
+			return;
+		}
 	}
 }
 

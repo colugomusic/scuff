@@ -4,6 +4,7 @@
 #include "common/visit.hpp"
 #include "managed.hpp"
 #include "scan.hpp"
+#include <clap/plugin-features.h>
 #include <mutex>
 #include <readerwriterqueue.h>
 #include <string>
@@ -23,8 +24,8 @@ auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id) 
 
 static
 auto write_audio(const scuff::device& dev, const audio_writers& writers) -> void {
-	for (size_t j = 0; j < writers.count; j++) {
-		const auto& writer = writers.writers[j];
+	for (size_t j = 0; j < writers.size(); j++) {
+		const auto& writer = writers[j];
 		auto& buffer       = dev.services->shm.data->audio_in[writer.port_index];
 		writer.write(buffer.data());
 	}
@@ -41,8 +42,8 @@ auto write_events(const scuff::device& dev, const event_writer& writer) -> void 
 
 static
 auto write_entry_ports(const scuff::model& m, const input_devices& devices) -> void {
-	for (size_t i = 0; i < devices.count; i++) {
-		const auto& item  = devices.devices[i];
+	for (size_t i = 0; i < devices.size(); i++) {
+		const auto& item  = devices[i];
 		const auto dev_id = id::device{item.dev};
 		const auto& dev   = m.devices.at(dev_id);
 		write_audio(dev, item.audio_writers);
@@ -52,8 +53,8 @@ auto write_entry_ports(const scuff::model& m, const input_devices& devices) -> v
 
 static
 auto read_audio(const scuff::device& dev, const audio_readers& readers) -> void {
-	for (size_t j = 0; j < readers.count; j++) {
-		const auto& reader = readers.readers[j];
+	for (size_t j = 0; j < readers.size(); j++) {
+		const auto& reader = readers[j];
 		const auto& buffer = dev.services->shm.data->audio_out[reader.port_index];
 		reader.read(buffer.data());
 	}
@@ -62,8 +63,8 @@ auto read_audio(const scuff::device& dev, const audio_readers& readers) -> void 
 static
 auto read_zeros(const scuff::device& dev, const audio_readers& readers) -> void {
 	std::array<float, CHANNEL_COUNT * VECTOR_SIZE> zeros = {0.0f};
-	for (size_t j = 0; j < readers.count; j++) {
-		const auto& reader = readers.readers[j];
+	for (size_t j = 0; j < readers.size(); j++) {
+		const auto& reader = readers[j];
 		reader.read(zeros.data());
 	}
 }
@@ -80,8 +81,8 @@ auto read_events(const scuff::device& dev, const event_reader& reader) -> void {
 
 static
 auto read_exit_ports(const scuff::model& m, const output_devices& devices) -> void {
-	for (size_t i = 0; i < devices.count; i++) {
-		const auto& item  = devices.devices[i];
+	for (size_t i = 0; i < devices.size(); i++) {
+		const auto& item  = devices[i];
 		const auto dev_id = id::device{item.dev};
 		const auto& dev   = m.devices.at(dev_id);
 		read_audio(dev, item.audio_readers);
@@ -91,8 +92,8 @@ auto read_exit_ports(const scuff::model& m, const output_devices& devices) -> vo
 
 static
 auto read_zeros(const scuff::model& m, const output_devices& devices) -> void {
-	for (size_t i = 0; i < devices.count; i++) {
-		const auto& item  = devices.devices[i];
+	for (size_t i = 0; i < devices.size(); i++) {
+		const auto& item  = devices[i];
 		const auto dev_id = id::device{item.dev};
 		const auto& dev   = m.devices.at(dev_id);
 		read_zeros(dev, item.audio_readers);
@@ -513,6 +514,16 @@ auto get_error(id::device dev) -> const char* {
 }
 
 [[nodiscard]] static
+auto get_features(id::plugin plugin) -> std::vector<std::string> {
+	const auto list = DATA_->model.read().plugins.at(plugin).clap_features;
+	std::vector<std::string> out;
+	for (const auto& feature : list) {
+		out.push_back(feature);
+	}
+	return out;
+}
+
+[[nodiscard]] static
 auto get_name(id::device dev) -> const char* {
 	return DATA_->model.read().devices.at(dev).name->c_str();
 }
@@ -570,6 +581,33 @@ auto has_params(id::device dev) -> bool {
 	}
 	const auto flags   = device.services->shm.data->flags;
 	return flags.value & flags.has_params;
+}
+
+[[nodiscard]] static
+auto has_rack_features(const immer::vector<std::string>& features) -> bool {
+	for (const auto& feature : features) {
+		if (feature == CLAP_PLUGIN_FEATURE_ANALYZER)     { return true; }
+		if (feature == CLAP_PLUGIN_FEATURE_AUDIO_EFFECT) { return true; }
+	}
+	return false;
+}
+
+[[nodiscard]] static
+auto has_rack_features(id::plugin id) -> bool {
+	const auto m       = DATA_->model.read();
+	const auto& plugin = m.plugins.at(id);
+	switch (plugin.type) {
+		case plugin_type::clap: {
+			return has_rack_features(plugin.clap_features);
+		}
+		case plugin_type::vst3: {
+			// Not implemented yet
+			return false;
+		}
+		default: {
+			return false;
+		}
+	}
 }
 
 static
@@ -746,6 +784,11 @@ auto set_metadata(id::device dev_id, size_t column, std::any data) -> void {
 [[nodiscard]] static
 auto get_name(id::plugin plugin) -> const char* {
 	return DATA_->model.read().plugins.at({plugin}).name->c_str();
+}
+
+[[nodiscard]] static
+auto get_plugin_ext_id(id::device dev) -> ext::id::plugin {
+	return DATA_->model.read().devices.at(dev).plugin_ext_id;
 }
 
 [[nodiscard]] static
@@ -1110,6 +1153,11 @@ auto get_ext_id(id::plugin plugin) -> ext::id::plugin {
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
+auto get_features(id::plugin plugin) -> std::vector<std::string> {
+	try                               { return impl::get_features(plugin); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
+}
+
 auto get_info(id::device dev, idx::param param) -> param_info {
 	try                               { return impl::get_info({dev}, param); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {0}; }
@@ -1128,6 +1176,11 @@ auto get_name(id::plugin plugin) -> const char* {
 auto get_path(id::plugfile plugfile) -> const char* {
 	try                               { return impl::get_path(plugfile); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return ""; }
+}
+
+auto get_plugin_ext_id(id::device dev) -> ext::id::plugin {
+	try                               { return impl::get_plugin_ext_id(dev); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
 auto get_type(id::plugin plugin) -> plugin_type {
@@ -1177,6 +1230,11 @@ auto has_gui(id::device dev) -> bool {
 
 auto has_params(id::device dev) -> bool {
 	try                               { return impl::has_params(dev); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
+}
+
+auto has_rack_features(id::plugin plugin) -> bool {
+	try                               { return impl::has_rack_features(plugin); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
 }
 

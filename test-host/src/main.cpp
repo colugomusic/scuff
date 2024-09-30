@@ -12,28 +12,6 @@ namespace lg = libguarded;
 
 namespace host {
 
-//namespace to_main {
-//
-//struct plugfile_broken  { scuff::id::plugfile plugfile; };
-//struct plugfile_scanned { scuff::id::plugfile plugfile; };
-//struct plugin_broken    { scuff::id::plugin plugin; };
-//struct plugin_scanned   { scuff::id::plugin plugin; };
-//struct scan_error       { std::string error; };
-//struct scan_started     {};
-//struct scan_complete    {};
-//
-//using msg = std::variant<
-//	plugfile_broken,
-//	plugfile_scanned,
-//	plugin_broken,
-//	plugin_scanned,
-//	scan_complete,
-//	scan_error,
-//	scan_started
-//>;
-//
-//} // to_main
-
 namespace ui {
 
 static constexpr auto MARGIN       = 10.0f;
@@ -54,6 +32,7 @@ struct plugin_table : table {
 	uint32_t col_vendor;
 	uint32_t col_name;
 	uint32_t col_status;
+	uint32_t col_features;
 };
 
 struct path_edit {
@@ -99,6 +78,7 @@ struct plugin {
 	std::string vendor;
 	std::string name;
 	std::string status;
+	std::string features;
 	[[nodiscard]] auto operator <=>(const plugin&) const = default;
 };
 
@@ -147,8 +127,8 @@ auto on_table_plugfiles_data(host::app* app, Event *e) -> void {
 			const auto pos  = event_params(e, EvTbPos);
 			const auto cell = event_result(e, EvTbCell);
 			if (pos->row >= app->plugfiles.size()) { break; }
-			if (pos->col == app->ui.plugfile_table.col_path)   { cell->text = app->plugfiles[pos->row].path.c_str(); break; }
-			if (pos->col == app->ui.plugfile_table.col_status) { cell->text = app->plugfiles[pos->row].status.c_str(); break; }
+			if (pos->col == app->ui.plugfile_table.col_path)     { cell->text = app->plugfiles[pos->row].path.c_str(); break; }
+			if (pos->col == app->ui.plugfile_table.col_status)   { cell->text = app->plugfiles[pos->row].status.c_str(); break; }
 			break;
 		}
 	}
@@ -166,9 +146,10 @@ auto on_table_plugins_data(host::app* app, Event *e) -> void {
 			const auto pos  = event_params(e, EvTbPos);
 			const auto cell = event_result(e, EvTbCell);
 			if (pos->row >= app->plugins.size()) { break; }
-			if (pos->col == app->ui.plugin_table.col_vendor) { cell->text = app->plugins[pos->row].vendor.c_str(); break; }
-			if (pos->col == app->ui.plugin_table.col_name)   { cell->text = app->plugins[pos->row].name.c_str(); break; }
-			if (pos->col == app->ui.plugin_table.col_status) { cell->text = app->plugins[pos->row].status.c_str(); break; }
+			if (pos->col == app->ui.plugin_table.col_vendor)   { cell->text = app->plugins[pos->row].vendor.c_str(); break; }
+			if (pos->col == app->ui.plugin_table.col_name)     { cell->text = app->plugins[pos->row].name.c_str(); break; }
+			if (pos->col == app->ui.plugin_table.col_status)   { cell->text = app->plugins[pos->row].status.c_str(); break; }
+			if (pos->col == app->ui.plugin_table.col_features) { cell->text = app->plugins[pos->row].features.c_str(); break; }
 			break;
 		}
 	}
@@ -212,16 +193,18 @@ auto create_path_edit(ui::path_edit* pe, const char* title) -> void {
 
 static
 auto setup_tables(host::app* app) -> void {
-	app->ui.plugfile_table.col_path    = tableview_new_column_text(app->ui.plugfile_table.view);
-	app->ui.plugfile_table.col_status  = tableview_new_column_text(app->ui.plugfile_table.view);
-	app->ui.plugin_table.col_vendor    = tableview_new_column_text(app->ui.plugin_table.view);
-	app->ui.plugin_table.col_name      = tableview_new_column_text(app->ui.plugin_table.view);
-	app->ui.plugin_table.col_status    = tableview_new_column_text(app->ui.plugin_table.view);
+	app->ui.plugfile_table.col_path   = tableview_new_column_text(app->ui.plugfile_table.view);
+	app->ui.plugfile_table.col_status = tableview_new_column_text(app->ui.plugfile_table.view);
+	app->ui.plugin_table.col_vendor   = tableview_new_column_text(app->ui.plugin_table.view);
+	app->ui.plugin_table.col_name     = tableview_new_column_text(app->ui.plugin_table.view);
+	app->ui.plugin_table.col_status   = tableview_new_column_text(app->ui.plugin_table.view);
+	app->ui.plugin_table.col_features = tableview_new_column_text(app->ui.plugin_table.view);
 	tableview_header_title(app->ui.plugfile_table.view, app->ui.plugfile_table.col_path, "Path");
 	tableview_header_title(app->ui.plugfile_table.view, app->ui.plugfile_table.col_status, "Status");
 	tableview_header_title(app->ui.plugin_table.view, app->ui.plugin_table.col_vendor, "Vendor");
 	tableview_header_title(app->ui.plugin_table.view, app->ui.plugin_table.col_name, "Name");
 	tableview_header_title(app->ui.plugin_table.view, app->ui.plugin_table.col_status, "Status");
+	tableview_header_title(app->ui.plugin_table.view, app->ui.plugin_table.col_features, "Features");
 	tableview_column_resizable(app->ui.plugfile_table.view, app->ui.plugfile_table.col_path, true);
 	tableview_column_resizable(app->ui.plugin_table.view, app->ui.plugin_table.col_vendor, true);
 	tableview_column_width(app->ui.plugfile_table.view, app->ui.plugfile_table.col_path, 400);
@@ -322,12 +305,27 @@ auto on_scuff_plugfile_scanned(host::app* app, scuff::id::plugfile pf) -> void {
 	app->plugfiles.dirty = true;
 }
 
+[[nodiscard]] static
+auto as_comma_separated_list_string(const std::vector<std::string>& vec) -> std::string {
+	std::string out;
+	for (const auto& s : vec) {
+		out += s;
+		out += ", ";
+	}
+	if (!out.empty()) {
+		out.pop_back();
+		out.pop_back();
+	}
+	return out;
+}
+
 static
 auto on_scuff_plugin_broken(host::app* app, scuff::id::plugin p) -> void {
 	host::plugin plugin;
-	plugin.name   = scuff::get_name(p);
-	plugin.vendor = scuff::get_vendor(p);
-	plugin.status = scuff::get_error(p);
+	plugin.name     = scuff::get_name(p);
+	plugin.vendor   = scuff::get_vendor(p);
+	plugin.status   = scuff::get_error(p);
+	plugin.features = as_comma_separated_list_string(scuff::get_features(p));
 	app->plugins.push_back(plugin);
 	app->plugins.dirty = true;
 }
@@ -335,9 +333,10 @@ auto on_scuff_plugin_broken(host::app* app, scuff::id::plugin p) -> void {
 static
 auto on_scuff_plugin_scanned(host::app* app, scuff::id::plugin p) -> void {
 	host::plugin plugin;
-	plugin.name   = scuff::get_name(p);
-	plugin.vendor = scuff::get_vendor(p);
-	plugin.status = "Working";
+	plugin.name     = scuff::get_name(p);
+	plugin.vendor   = scuff::get_vendor(p);
+	plugin.features = as_comma_separated_list_string(scuff::get_features(p));
+	plugin.status   = "Working";
 	app->plugins.push_back(plugin);
 	app->plugins.dirty = true;
 }

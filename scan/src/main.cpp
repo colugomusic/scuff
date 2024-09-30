@@ -2,6 +2,7 @@
 #include "common/plugin_type.hpp"
 #include "common/util.hpp"
 #include <clap/factory/plugin-factory.h>
+#include <clap/string-sizes.h>
 #include <cxxopts.hpp>
 #include <flux.hpp>
 #include <iostream>
@@ -103,13 +104,38 @@ auto add(nlohmann::json* j, const plugfile& pf) -> void {
 	(*j)["path"]          = pf.path;
 }
 
+[[nodiscard]] static
+auto has_null_within_allowed_size(const char* str, size_t sz) -> bool {
+	for (int i = 0; i < sz; ++i) {
+		if (str[i] == 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+[[nodiscard]] static
+auto get_features(const clap_plugin_descriptor& desc) -> std::vector<std::string> {
+	std::vector<std::string> out;
+	auto f = desc.features;
+	while (*f) {
+		if (!has_null_within_allowed_size(*f, CLAP_NAME_SIZE)) {
+			break;
+		}
+		out.push_back(*f);
+		f++;
+	}
+	return out;
+}
+
 static
 auto add(nlohmann::json* j, const clap_plugin_descriptor& desc) -> void {
-	(*j)["name"]        = desc.name;
-	(*j)["id"]          = desc.id;
-	(*j)["url"]         = desc.url;
-	(*j)["vendor"]      = desc.vendor;
-	(*j)["version"]     = desc.version;
+	(*j)["name"]     = desc.name;
+	(*j)["id"]       = desc.id;
+	(*j)["url"]      = desc.url;
+	(*j)["vendor"]   = desc.vendor;
+	(*j)["version"]  = desc.version;
+	(*j)["features"] = get_features(desc);
 }
 
 static
