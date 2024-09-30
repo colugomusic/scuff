@@ -107,6 +107,7 @@ struct sandbox {
 
 struct group {
 	id::group id;
+	int flags = 0;
 	immer::set<id::sandbox> sandboxes;
 	immer::map<id::device, id::device> cross_sbox_conns;
 	std::shared_ptr<group_services> services;
@@ -161,7 +162,7 @@ auto add_device_to_sandbox(model&& m, id::sandbox sbox, id::device dev) -> model
 }
 
 [[nodiscard]] static
-auto add_sandbox_to_group(model&& m, id::group group, id::sandbox sbox) -> model {
+auto add_sandbox_to_group(model m, id::group group, id::sandbox sbox) -> model {
 	m.groups = m.groups.update_if_exists(group, [sbox](scuff::group g) {
 		g.sandboxes = g.sandboxes.insert(sbox);
 		return g;

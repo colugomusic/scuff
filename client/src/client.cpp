@@ -665,11 +665,11 @@ auto was_loaded_successfully(id::device dev) -> bool {
 
 [[nodiscard]] static
 auto create_group(int flags) -> id::group {
-	// TODO: handle flags
 	const auto group_id = id::group{id_gen_++};
 	DATA_->model.update([=](model&& m){
 		scuff::group group;
-		group.id = group_id;
+		group.id    = group_id;
+		group.flags = flags;
 		try {
 			const auto shmid    = shm::group::make_id(DATA_->instance_id, group.id);
 			group.services      = std::make_shared<group_services>();
@@ -873,7 +873,7 @@ auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::s
 			sbox.group               = {group_id};
 			sbox.services            = std::make_shared<sandbox_services>(std::move(proc), sandbox_shmid);
 			// Add sandbox to group
-			m = add_sandbox_to_group(std::move(m), {group_id}, sbox.id);
+			m = add_sandbox_to_group(m, {group_id}, sbox.id);
 		}
 		catch (const std::exception& err) {
 			sbox.error = err.what();

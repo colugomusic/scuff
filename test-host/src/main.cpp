@@ -343,12 +343,12 @@ auto on_scuff_plugin_scanned(host::app* app, scuff::id::plugin p) -> void {
 
 static
 auto on_scuff_sbox_crashed(host::app* app, scuff::id::sandbox sbox, const char* error) -> void {
-	// TODO: on_scuff_sbox_crashed
+	textview_writef(app->ui.log.view, "Sandbox crashed\n");
 }
 
 static
 auto on_scuff_sbox_started(host::app* app, scuff::id::sandbox sbox) -> void {
-	// TODO: on_scuff_sbox_started
+	textview_writef(app->ui.log.view, "Sandbox started\n");
 }
 
 static

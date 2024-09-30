@@ -2,28 +2,16 @@
 
 #include "common/constants.hpp"
 #include "common/events.hpp"
-#include "common/inplace_function.hpp"
 #include "common/param_info.hpp"
 #include "common/plugin_type.hpp"
 #include "common/render_mode.hpp"
 #include "common/types.hpp"
 #include <any>
+#include <functional>
 #include <string_view>
 #include <vector>
 
 namespace scuff {
-
-//namespace fn_sig {
-//
-//using write_floats = auto (float* floats) -> void;
-//using read_floats  = auto (const float* floats) -> void;
-//using get_count    = auto (void) -> size_t;
-//using get_event    = auto (size_t index) -> scuff::event;
-//using push_event   = auto (const scuff::event& event) -> void;
-//
-//} // fn_sig
-//
-//template <typename Signature> using stack_fn = stdext::inplace_function<Signature, STACK_FN_CAPACITY>;
 
 enum group_flags {
 	group_flag_no_reporting = 1 << 0, // Set this if you intend to ignore all reports from this group.
