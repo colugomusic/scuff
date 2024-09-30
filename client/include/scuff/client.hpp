@@ -13,17 +13,17 @@
 
 namespace scuff {
 
-namespace fn_sig {
-
-using write_floats = auto (float* floats) -> void;
-using read_floats  = auto (const float* floats) -> void;
-using get_count    = auto (void) -> size_t;
-using get_event    = auto (size_t index) -> scuff::event;
-using push_event   = auto (const scuff::event& event) -> void;
-
-} // fn_sig
-
-template <typename Signature> using stack_fn = stdext::inplace_function<Signature, STACK_FN_CAPACITY>;
+//namespace fn_sig {
+//
+//using write_floats = auto (float* floats) -> void;
+//using read_floats  = auto (const float* floats) -> void;
+//using get_count    = auto (void) -> size_t;
+//using get_event    = auto (size_t index) -> scuff::event;
+//using push_event   = auto (const scuff::event& event) -> void;
+//
+//} // fn_sig
+//
+//template <typename Signature> using stack_fn = stdext::inplace_function<Signature, STACK_FN_CAPACITY>;
 
 enum group_flags {
 	group_flag_no_reporting = 1 << 0, // Set this if you intend to ignore all reports from this group.
@@ -38,31 +38,32 @@ enum scan_flags {
 
 struct audio_writer {
 	size_t port_index;
-	stack_fn<fn_sig::write_floats> write;
+	std::function<void(float* floats)> write;
 };
 
 struct audio_reader {
 	size_t port_index;
-	stack_fn<fn_sig::read_floats> read;
+	std::function<void(const float* floats)> read;
 };
 
 struct event_writer {
-	stack_fn<fn_sig::get_count> count;
-	stack_fn<fn_sig::get_event> get;
+	std::function<size_t()> count;
+	std::function<scuff::event(size_t index)> get;
 };
 
 struct event_reader {
 	// Must be able to push at least scuff::EVENT_PORT_SIZE events.
 	// Otherwise events will be dropped.
-	stack_fn<fn_sig::push_event> push;
+	std::function<void(const scuff::event& event)> push;
 };
 
-struct audio_writers  { size_t count; const scuff::audio_writer* writers; };
-struct audio_readers  { size_t count; const scuff::audio_reader* readers; };
-struct input_device   { id::device dev; scuff::audio_writers audio_writers; scuff::event_writer event_writer; };
-struct output_device  { id::device dev; scuff::audio_readers audio_readers; scuff::event_reader event_reader; };
-struct input_devices  { size_t count; const scuff::input_device* devices; };
-struct output_devices { size_t count; const scuff::output_device* devices; };
+using audio_writers  = std::vector<scuff::audio_writer>;
+using audio_readers  = std::vector<scuff::audio_reader>;
+using input_devices  = std::vector<scuff::input_device>;
+using output_devices = std::vector<scuff::output_device>;
+
+struct input_device  { id::device dev; scuff::audio_writers audio_writers; scuff::event_writer event_writer; };
+struct output_device { id::device dev; scuff::audio_readers audio_readers; scuff::event_reader event_reader; };
 
 struct group_process {
 	id::group group;
@@ -118,7 +119,7 @@ struct group_reporter {
 /////////////////////////////////////////////////////////////////////////////////////////
 
 // Process the sandbox group. This is safe to call in a realtime thread.
-auto audio_process(group_process process) -> void;
+auto audio_process(const group_process& process) -> void;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // The rest of these functions are thread-safe, but NOT necessarily realtime-safe.

@@ -934,7 +934,7 @@ auto unref(id::sandbox id) -> void {
 
 namespace scuff {
 
-auto audio_process(group_process process) -> void {
+auto audio_process(const group_process& process) -> void {
 	const auto audio     = scuff::DATA_->model.rt_read();
 	const auto& group    = audio->groups.at({process.group});
 	const auto epoch     = ++group.services->epoch;
