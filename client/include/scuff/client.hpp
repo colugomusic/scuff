@@ -53,6 +53,7 @@ struct output_device { id::device dev; scuff::audio_readers audio_readers; scuff
 
 using input_devices  = std::vector<scuff::input_device>;
 using output_devices = std::vector<scuff::output_device>;
+using bytes          = std::vector<std::byte>;
 
 struct group_process {
 	id::group group;
@@ -75,7 +76,7 @@ using on_sbox_warning          = std::function<void(id::sandbox sbox, std::strin
 using on_scan_complete         = std::function<void()>;
 using on_scan_error            = std::function<void(std::string_view error)>;
 using on_scan_started          = std::function<void()>;
-using return_bytes             = std::function<void(const std::vector<std::byte>& bytes)>;
+using return_bytes             = std::function<void(const scuff::bytes& bytes)>;
 using return_device            = std::function<void(id::device dev, bool success)>;
 using return_double            = std::function<void(double value)>;
 using return_string            = std::function<void(std::string_view text)>;
@@ -320,9 +321,12 @@ auto is_running(id::sandbox sbox) -> bool;
 // Return true if the plugin scanner process is currently running.
 auto is_scanning(void) -> bool;
 
+// Load the device state and block until the operation is complete.
+auto load(id::device dev, const scuff::bytes& bytes) -> void;
+
 // Load the device state, asynchronously.
 //  - When the operation is complete, call the given function.
-auto load_async(id::device dev, const void* bytes, size_t count, return_void fn) -> void;
+auto load_async(id::device dev, const scuff::bytes& bytes, return_void fn) -> void;
 
 // Push a device event
 auto push_event(id::device dev, const scuff::event& event) -> void;
@@ -331,7 +335,7 @@ auto push_event(id::device dev, const scuff::event& event) -> void;
 auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void;
 
 // Save the device state.
-auto save(id::device dev) -> std::vector<std::byte>;
+auto save(id::device dev) -> scuff::bytes;
 
 // Save the device state, asynchronously.
 //  - When the operation is complete, call the given function with the result.

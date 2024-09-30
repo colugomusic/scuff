@@ -873,8 +873,24 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 }
 
 static
+auto load_async(id::device dev, const scuff::bytes& state, return_void fn) -> void {
+	// TODO: impl::load_async
+}
+
+static
+auto load(id::device dev, const scuff::bytes& bytes) -> void {
+	// TODO: impl::load
+}
+
+static
 auto save_async(id::device dev, return_bytes fn) -> void {
 	// TODO: impl::save_async
+}
+
+[[nodiscard]] static
+auto save(id::device dev) -> scuff::bytes {
+	// TODO: impl::save
+	return {};
 }
 
 static
@@ -1278,23 +1294,18 @@ auto is_scanning() -> bool {
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return false; }
 }
 
+auto load(id::device dev, const scuff::bytes& bytes) -> void {
+	try                               { impl::load(dev, bytes); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto load_async(id::device dev, const scuff::bytes& bytes, return_void fn) -> void {
+	try                               { impl::load_async(dev, bytes, fn); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
 auto push_event(id::device dev, const scuff::event& event) -> void {
 	try                               { impl::push_event(dev, event); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
-}
-
-auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
-	try                               { impl::restart(sbox, sbox_exe_path); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
-}
-
-auto scan(std::string_view scan_exe_path, int flags) -> void {
-	try                               { impl::do_scan(scan_exe_path, flags); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
-}
-
-auto set_metadata(id::device dev, size_t column, std::any data) -> void {
-	try                               { impl::set_metadata(dev, column, data); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
@@ -1308,8 +1319,28 @@ auto receive_report(id::group group_id, const group_reporter& reporter) -> void 
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
+auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
+	try                               { impl::restart(sbox, sbox_exe_path); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto save(id::device dev) -> scuff::bytes {
+	try                               { return impl::save(dev); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
+}
+
 auto save_async(id::device dev, return_bytes fn) -> void {
 	try                               { impl::save_async(dev, fn); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto scan(std::string_view scan_exe_path, int flags) -> void {
+	try                               { impl::do_scan(scan_exe_path, flags); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto set_metadata(id::device dev, size_t column, std::any data) -> void {
+	try                               { impl::set_metadata(dev, column, data); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
