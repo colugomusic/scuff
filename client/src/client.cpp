@@ -407,6 +407,31 @@ auto create_device_async(id::sandbox sbox_id, plugin_type type, ext::id::plugin 
 	return dev_id;
 }
 
+[[nodiscard]] static
+auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id) -> id::device {
+	static constexpr auto MAX_WAIT = std::chrono::seconds(1);
+	std::condition_variable cv;
+	std::mutex mutex;
+	bool done = false;
+	auto fn = [&cv, &mutex, &done](id::device dev_id, bool load_success) -> void {
+		std::lock_guard lock{mutex};
+		done = true;
+		cv.notify_one();
+	};
+	auto ready = [&done] {
+		return !done;
+	};
+	const auto dev_id = impl::create_device_async(sbox_id, type, plugin_ext_id, fn);
+	auto lock = std::unique_lock{mutex};
+	if (!cv.wait_for(lock, MAX_WAIT, ready)) {
+		report::send(report::msg::error{"Timed out waiting for device creation"});
+	}
+	if (!done) {
+		return {};
+	}
+	return dev_id;
+}
+
 static
 auto device_disconnect(id::device dev_out_id, size_t port_out, id::device dev_in_id, size_t port_in) -> void {
 	DATA_->model.update_publish([dev_out_id, port_out, dev_in_id, port_in](model&& m){
@@ -1026,6 +1051,11 @@ auto close_all_editors() -> void {
 auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void {
 	try                               { impl::connect(dev_out, port_out, dev_in, port_in); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
+}
+
+auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id) -> id::device {
+	try                               { return impl::create_device(sbox, type, plugin_id); }
+	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
 auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_device fn) -> id::device {
