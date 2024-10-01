@@ -55,12 +55,7 @@ auto do_processing(sbox::app* app) -> void {
 		const auto dev = app->audio_model->devices.at(dev_id);
 		do_processing(*app, dev);
 	}
-	const auto shm_group  = app->shm_group.data;
-	const auto prev_value = shm_group->sandboxes_processing.fetch_sub(1, std::memory_order_release);
-	if (prev_value == 1) {
-		// Notify the client that all sandboxes have finished their work.
-		shm_group->cv.notify_one();
-	}
+	signaling::notify_sandbox_finished_processing(&app->shm_group.data->signaling);
 	app->audio_model.reset();
 }
 
@@ -68,18 +63,9 @@ static
 auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 	try {
 		uint64_t local_epoch = 0;
-		uint64_t shm_epoch   = 0;
-		const auto shm_group = app->shm_group.data;
-		auto wait_condition = [shm_group, &local_epoch, &shm_epoch, &stop_token]{
-			shm_epoch = shm_group->epoch;
-			return shm_epoch > local_epoch || stop_token.stop_requested();
-		};
 		for (;;) {
-			auto lock = std::unique_lock{shm_group->mut};
-			shm_group->cv.wait(lock, wait_condition);
-			if (shm_epoch > local_epoch) {
+			if (signaling::wait_for_signaled(&app->shm_group.data->signaling, stop_token, &local_epoch)) {
 				do_processing(app);
-				local_epoch = shm_epoch;
 			}
 			if (stop_token.stop_requested()) {
 				return;

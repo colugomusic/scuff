@@ -11,13 +11,11 @@ list (APPEND scuff-sbox_SRCFILES
 	src/data.hpp
 	src/main.cpp
 	src/msg-proc.hpp
+	src/sbox-signaling.hpp
 	src/options.hpp
 )
-set(BOOST_LIBS_OPTIONAL
-	header
-	CACHE STRING "Boost libraries to be compiled"
-	FORCE
-)
+set(SCUFF_SIGNALING_MODE "boost-ipc" CACHE STRING "Signalling mode")
+set(BOOST_LIBS_OPTIONAL header CACHE STRING "Boost libraries to be compiled" FORCE)
 CPMAddPackage(NAME boost-cmake GITHUB_REPOSITORY colugomusic/boost-cmake      GIT_TAG master                                               )
 CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES                           )
 CPMAddPackage(NAME ent         GITHUB_REPOSITORY colugomusic/ent              GIT_TAG main                                                 )
@@ -43,4 +41,7 @@ target_link_libraries(scuff-sbox
 target_compile_options(scuff-sbox PRIVATE
 	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror>
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
+)
+target_compile_definitions(scuff-sbox PRIVATE
+	$<$<STREQUAL:${SCUFF_SIGNALING_MODE},boost-ipc>:SCUFF_SIGNALING_MODE_BOOST_IPC>
 )

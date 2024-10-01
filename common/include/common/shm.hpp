@@ -2,6 +2,7 @@
 
 #include "common/event_buffer.hpp"
 #include "common/param_info.hpp"
+#include "common/signaling.hpp"
 #include "messages.hpp"
 #include <array>
 #include <boost/container/static_vector.hpp>
@@ -9,9 +10,6 @@
 #include <boost/interprocess/containers/vector.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/interprocess/segment_manager.hpp>
-#include <boost/interprocess/sync/interprocess_condition.hpp>
-#include <boost/interprocess/sync/interprocess_mutex.hpp>
-#include <boost/interprocess/sync/interprocess_semaphore.hpp>
 #include <boost/interprocess/ipc/message_queue.hpp>
 #include <boost/static_string.hpp>
 #include <deque>
@@ -128,14 +126,7 @@ struct sandbox_data {
 };
 
 struct group_data {
-	// This is incremented before signaling the
-	// sandboxes in the group to process.
-	std::atomic<uint64_t> epoch = 0;
-	// Each sandbox process decrements this
-	// counter when it is finished processing.
-	std::atomic<uint64_t> sandboxes_processing;
-	bip::interprocess_mutex mut;
-	bip::interprocess_condition cv;
+	signaling::group_data signaling;
 };
 
 template <typename T> static

@@ -1,4 +1,5 @@
 #include "client.hpp"
+#include "common/signaling.hpp"
 #include "common/speen.hpp"
 #include "common/types.hpp"
 #include "common/visit.hpp"
@@ -100,38 +101,10 @@ auto read_zeros(const scuff::model& m, const output_devices& devices) -> void {
 	}
 }
 
-static
-auto signal_sandbox_processing(const scuff::group& group, uint64_t epoch) -> void {
-	auto& data = *group.services->shm.data;
-	// Set the sandbox counter
-	data.sandboxes_processing.store(group.sandboxes.size());
-	auto lock = std::unique_lock{data.mut};
-	// Set the epoch.
-	data.epoch.store(epoch, std::memory_order_release);
-	// Signal sandboxes to start processing.
-	data.cv.notify_all();
-}
-
-[[nodiscard]] static
-auto wait_for_all_sandboxes_done(const scuff::group& group) -> bool {
-	 // the sandboxes not completing their work within 1 second is a
-	 // catastrophic failure.
-	static constexpr auto MAX_WAIT_TIME = std::chrono::seconds{1};
-	auto& data = *group.services->shm.data;
-	auto done = [&data]() -> bool {
-		return data.sandboxes_processing.load(std::memory_order_acquire) < 1;
-	};
-	if (done()) {
-		return true;
-	}
-	auto lock = std::unique_lock{data.mut};
-	return group.services->shm.data->cv.wait_for(lock, MAX_WAIT_TIME, done);
-}
-
 [[nodiscard]] static
 auto do_sandbox_processing(const scuff::group& group, uint64_t epoch) -> bool {
-	signal_sandbox_processing(group, epoch);
-	return wait_for_all_sandboxes_done(group);
+	signaling::signal_sandbox_processing(&group.services->shm.data->signaling, group.sandboxes.size(), epoch);
+	return signaling::wait_for_all_sandboxes_done(&group.services->shm.data->signaling);
 }
 
 static

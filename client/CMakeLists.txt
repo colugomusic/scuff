@@ -6,13 +6,15 @@ endif()
 include(../CPM.cmake)
 list (APPEND src
 	include/scuff/client.hpp
+	include/scuff/device-state.hpp
 	include/scuff/managed.hpp
 	src/client.cpp
 	src/data.hpp
 	src/report.hpp
-	src/report_types.hpp
+	src/report-types.hpp
 	src/scan.hpp
 )
+set(SCUFF_SIGNALING_MODE "boost-ipc" CACHE STRING "Signalling mode")
 set(BOOST_LIBS_OPTIONAL header filesystem system regex CACHE STRING "Boost libraries to be compiled" FORCE)
 set(immer_BUILD_TESTS OFF)
 set(immer_BUILD_EXAMPLES OFF)
@@ -51,4 +53,7 @@ target_compile_features(scuff-client PUBLIC
 target_compile_options(scuff-client PRIVATE
 	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror>
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
+)
+target_compile_definitions(scuff-client PRIVATE
+	$<$<STREQUAL:${SCUFF_SIGNALING_MODE},boost-ipc>:SCUFF_SIGNALING_MODE_BOOST_IPC>
 )

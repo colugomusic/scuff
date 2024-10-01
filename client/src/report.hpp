@@ -1,7 +1,7 @@
 #pragma once
 
 #include "data.hpp"
-#include "report_types.hpp"
+#include "report-types.hpp"
 
 namespace scuff {
 namespace report {
