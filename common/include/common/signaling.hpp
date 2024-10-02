@@ -3,6 +3,9 @@
 #include <atomic>
 #include <boost/interprocess/sync/interprocess_condition.hpp>
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
+#include <mutex>
+
+namespace bip = boost::interprocess;
 
 namespace scuff {
 namespace signaling {

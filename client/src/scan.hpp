@@ -180,6 +180,8 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 			const std::string vendor                = j["vendor"];
 			const std::string version               = j["version"];
 			const std::vector<std::string> features = j["features"];
+			const bool has_gui                      = j["has-gui"];
+			const bool has_params                   = j["has-params"];
 			scuff::plugin plugin;
 			plugin.id            = id::plugin{id_gen_++};
 			plugin.ext_id        = ext::id::plugin{id};

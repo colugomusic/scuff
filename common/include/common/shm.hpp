@@ -13,12 +13,10 @@
 #include <boost/interprocess/ipc/message_queue.hpp>
 #include <boost/static_string.hpp>
 #include <deque>
-#include <mutex>
 #include <numeric>
 #include <string>
 
 namespace bc  = boost::container;
-namespace bip = boost::interprocess;
 
 namespace scuff::shm {
 
@@ -103,9 +101,8 @@ using audio_buffer = std::array<float, VECTOR_SIZE * CHANNEL_COUNT>;
 
 struct device_flags {
 	enum e {
-		has_gui          = 1 << 0,
-		has_params       = 1 << 1,
-		supports_offline = 1 << 2, // TODO: initialize these flags when device is created
+		has_gui    = 1 << 0,
+		has_params = 1 << 1,
 	};
 	int value = 0;
 };

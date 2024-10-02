@@ -1,4 +1,4 @@
-#include "common/os.hpp"
+#include "common/clap.hpp"
 #include "common/plugin_type.hpp"
 #include "common/util.hpp"
 #include <clap/factory/plugin-factory.h>
@@ -166,9 +166,11 @@ auto report_plugfile(const plugfile& pf) -> void {
 }
 
 static
-auto report_plugin(const plugfile& pf, const clap_plugin_descriptor& desc) -> void {
+auto report_plugin(const plugfile& pf, const clap_plugin_descriptor& desc, bool has_gui, bool has_params) -> void {
 	nlohmann::json j;
-	j["type"] = "plugin";
+	j["type"]       = "plugin";
+	j["has-gui"]    = has_gui;
+	j["has-params"] = has_params;
 	add(&j, desc);
 	add(&j, pf);
 	fprintf(stdout, "%s\n", j.dump().c_str());
@@ -225,7 +227,9 @@ auto scan_clap_plugin(const plugfile& pf, const clap_plugin_factory_t& factory, 
 		device->destroy(device);
 		return;
 	}
-	report_plugin(pf, *desc);
+	const auto has_gui    = scuff::has_gui(*device);
+	const auto has_params = scuff::has_params(*device);
+	report_plugin(pf, *desc, has_gui, has_params);
 	device->deactivate(device);
 	device->destroy(device);
 }	

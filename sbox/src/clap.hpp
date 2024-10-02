@@ -1,6 +1,7 @@
 #pragma once
 
 #include "data.hpp"
+#include "common/clap.hpp"
 #include "common/shm.hpp"
 #include "common/visit.hpp"
 #include <optional>
@@ -722,45 +723,34 @@ auto make_host_for_instance(device_host_data* host_data) -> iface_host {
 	return iface;
 }
 
-template <typename T> [[nodiscard]] static
-auto get_plugin_ext(const clap::iface_plugin& iface, const char* id, const char* fallback_id = nullptr) -> const T* {
-	auto ptr = static_cast<const T*>(iface.plugin->get_extension(iface.plugin, id));
-	if (!ptr && fallback_id) {
-		ptr = static_cast<const T*>(iface.plugin->get_extension(iface.plugin, fallback_id));
-	}
-	return ptr;
-}
-
 static
 auto get_extensions(clap::iface_plugin* iface) -> void {
-	iface->audio_ports  = get_plugin_ext<clap_plugin_audio_ports_t>(*iface, CLAP_EXT_AUDIO_PORTS);
-	iface->context_menu = get_plugin_ext<clap_plugin_context_menu_t>(*iface, CLAP_EXT_CONTEXT_MENU, CLAP_EXT_CONTEXT_MENU_COMPAT);
-	iface->gui          = get_plugin_ext<clap_plugin_gui_t>(*iface, CLAP_EXT_GUI);
-	iface->params       = get_plugin_ext<clap_plugin_params_t>(*iface, CLAP_EXT_PARAMS);
-	iface->render       = get_plugin_ext<clap_plugin_render_t>(*iface, CLAP_EXT_RENDER);
-	iface->state        = get_plugin_ext<clap_plugin_state_t>(*iface, CLAP_EXT_STATE);
-	iface->tail         = get_plugin_ext<clap_plugin_tail_t>(*iface, CLAP_EXT_TAIL);
+	iface->audio_ports  = scuff::get_plugin_ext<clap_plugin_audio_ports_t>(*iface->plugin, CLAP_EXT_AUDIO_PORTS);
+	iface->context_menu = scuff::get_plugin_ext<clap_plugin_context_menu_t>(*iface->plugin, CLAP_EXT_CONTEXT_MENU, CLAP_EXT_CONTEXT_MENU_COMPAT);
+	iface->gui          = scuff::get_plugin_ext<clap_plugin_gui_t>(*iface->plugin, CLAP_EXT_GUI);
+	iface->params       = scuff::get_plugin_ext<clap_plugin_params_t>(*iface->plugin, CLAP_EXT_PARAMS);
+	iface->render       = scuff::get_plugin_ext<clap_plugin_render_t>(*iface->plugin, CLAP_EXT_RENDER);
+	iface->state        = scuff::get_plugin_ext<clap_plugin_state_t>(*iface->plugin, CLAP_EXT_STATE);
+	iface->tail         = scuff::get_plugin_ext<clap_plugin_tail_t>(*iface->plugin, CLAP_EXT_TAIL);
 }
 
 [[nodiscard]] static
-auto get_window_api() -> const char* {
-#if _WIN32
-	return CLAP_WINDOW_API_WIN32;
-#elif __APPLE__
-	return CLAP_WINDOW_API_COCOA;
-#else
-	return CLAP_WINDOW_API_X11;
-#endif
-}
-
-[[nodiscard]] static
-auto init_gui(clap::device&& dev) -> clap::device {
-	const auto& iface = dev.iface->plugin;
+auto init_gui(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
+	const auto& iface = clap_dev.iface->plugin;
 	if (iface.gui) {
-		if (iface.gui->is_api_supported(iface.plugin, get_window_api(), false)) {
-			dev.flags.value |= device_flags::has_gui;
+		if (iface.gui->is_api_supported(iface.plugin, os::get_clap_window_api(), false)) {
+			dev.service.shm->data->flags.value |= shm::device_flags::has_gui;
 			return dev;
 		}
+	}
+	return dev;
+}
+
+[[nodiscard]] static
+auto init_params(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
+	const auto& iface = clap_dev.iface->plugin;
+	if (iface.params) {
+		dev.service.shm->data->flags.value |= shm::device_flags::has_params;
 	}
 	return dev;
 }
@@ -778,7 +768,6 @@ auto init_params(clap::device&& dev) -> clap::device {
 				dev.params = dev.params.push_back(p);
 			}
 		}
-		dev.flags.value |= device_flags::has_params;
 	}
 	return dev;
 }
@@ -835,7 +824,8 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	clap_dev.iface        = std::move(iface);
 	clap_dev.name         = clap_dev.iface->plugin.plugin->desc->name;
 	clap_dev.service.data = std::move(ext_data);
-	clap_dev              = init_gui(std::move(clap_dev));
+	dev                   = init_gui(std::move(dev), clap_dev);
+	dev                   = init_params(std::move(dev), clap_dev);
 	clap_dev              = init_audio(std::move(clap_dev), dev);
 	clap_dev              = init_params(std::move(clap_dev));
 	for (size_t i = 0; i < clap_dev.params.size(); i++) {

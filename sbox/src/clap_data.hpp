@@ -81,14 +81,6 @@ struct device_atomic_flags {
 	std::atomic<int> value = 0;
 };
 
-struct device_flags {
-	enum e {
-		has_gui    = 1 << 0,
-		has_params = 1 << 1,
-	};
-	int value = 0;
-};
-
 struct audio_port_info {
 	std::vector<clap_audio_port_info_t> inputs;
 	std::vector<clap_audio_port_info_t> outputs;
@@ -175,7 +167,6 @@ struct device {
 	immer::box<clap::iface> iface;
 	immer::box<std::string> name;
 	immer::vector<param> params;
-	device_flags flags;
 	device_service service;
 };
 

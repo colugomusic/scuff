@@ -1,6 +1,7 @@
 #pragma once
 
 #include <clap/entry.h>
+#include <clap/ext/gui.h>
 #include <cstdio>
 #include <filesystem>
 #include <thread>
@@ -37,6 +38,11 @@ auto get_process_id() -> int {
 	return int(GetCurrentProcessId());
 }
 
+[[nodiscard]] static
+auto get_clap_window_api() -> const char* {
+	return CLAP_WINDOW_API_WIN32;
+}
+
 template<typename... BoostArgs> [[nodiscard]] static
 auto start_child_process(const std::string& exe, const std::vector<std::string>& args, BoostArgs&&... boost_args) -> bp::child {
 	return bp::child{exe, args, bp::windows::hide, std::forward<BoostArgs>(boost_args)...};
@@ -61,6 +67,11 @@ auto start_child_process(const std::filesystem::path& exe, const std::vector<std
 	return bp::child{exe, args, std::forward<BoostArgs>(boost_args)...};
 }
 
+[[nodiscard]] static
+auto get_clap_window_api() -> const char* {
+	return CLAP_WINDOW_API_COCOA;
+}
+
 } // scuff::os
 
 #elif defined(__linux__)
@@ -78,6 +89,11 @@ auto get_process_id() -> int {
 template<typename... BoostArgs> [[nodiscard]] static
 auto start_child_process(const std::filesystem::path& exe, const std::vector<std::string>& args, BoostArgs&&... boost_args) -> bp::child {
 	return bp::child{exe, args, std::forward<BoostArgs>(boost_args)...};
+}
+
+[[nodiscard]] static
+auto get_clap_window_api() -> const char* {
+	return CLAP_WINDOW_API_X11;
 }
 
 } // scuff::os
