@@ -18,6 +18,7 @@ namespace scuff::msg::in {
 
 struct clean_shutdown         {};
 struct close_all_editors      {};
+struct crash                  {}; // Tell the sandbox process to crash. Important for testing.
 struct device_create          { id::device::type dev_id; plugin_type type; std::string plugfile_path; std::string plugin_id; size_t callback; };
 struct device_connect         { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
 struct device_disconnect      { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
@@ -35,6 +36,7 @@ struct set_sample_rate        { double sr; };
 using msg = std::variant<
 	clean_shutdown,
 	close_all_editors,
+	crash,
 	device_create,
 	device_connect,
 	device_disconnect,

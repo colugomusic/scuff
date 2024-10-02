@@ -102,8 +102,37 @@ auto read_zeros(const scuff::model& m, const output_devices& devices) -> void {
 }
 
 [[nodiscard]] static
-auto do_sandbox_processing(const scuff::group& group, uint64_t epoch) -> bool {
-	signaling::signal_sandbox_processing(&group.services->shm.data->signaling, group.sandboxes.size(), epoch);
+auto get_active_sandbox_count(const std::shared_ptr<const model>& audio, const scuff::group& group) -> int {
+	int total = 0;
+	for (const auto sbox_id : group.sandboxes) {
+		const auto& sbox = audio->sandboxes.at(sbox_id);
+		if (sbox.services->proc.running()) {
+			total++;
+		}
+	}
+	return total;
+}
+
+static
+auto zero_inactive_device_outputs(const std::shared_ptr<const model>& audio, const scuff::group& group) -> void {
+	for (const auto sbox_id : group.sandboxes) {
+		const auto& sbox = audio->sandboxes.at(sbox_id);
+		for (const auto dev_id : sbox.devices) {
+			const auto& dev = audio->devices.at(dev_id);
+			if (dev.services->shm.data->atomic_flags.value & shm::device_atomic_flags::is_active) {
+				continue;
+			}
+			for (auto& buffer : dev.services->shm.data->audio_out) {
+				buffer.fill(0.0f);
+			}
+		}
+	}
+}
+
+[[nodiscard]] static
+auto do_sandbox_processing(const std::shared_ptr<const model>& audio, const scuff::group& group, uint64_t epoch) -> bool {
+	signaling::signal_sandbox_processing(&group.services->shm.data->signaling, group.services->total_active_sandboxes, epoch);
+	zero_inactive_device_outputs(audio, group);
 	return signaling::wait_for_all_sandboxes_done(&group.services->shm.data->signaling);
 }
 
@@ -145,7 +174,9 @@ auto process_message_(const sandbox& sbox, const msg::out::report_fatal_error& m
 	// This message could be received if the sandbox process
 	// manages to prematurely terminate itself in a "clean" way.
 	report::send(sbox, report::msg::sbox_crashed{sbox.id, msg.text});
-	// TODO: terminate the sandbox process if it is still running and figure out what else needs to be done here.
+	if (sbox.services->proc.running()) {
+		sbox.services->proc.terminate();
+	}
 }
 
 static
@@ -186,8 +217,7 @@ auto process_message(const sandbox& sbox, const msg::out::msg& msg) -> void {
 static
 auto process_sandbox_messages(const sandbox& sbox) -> void {
 	if (!sbox.services->proc.running()) {
-		// The sandbox process has stopped unexpectedly.
-		// TODO: Handle this situation
+		report::send(sbox, report::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
 		return;
 	}
 	sbox.services->send_msgs();
@@ -996,7 +1026,7 @@ auto audio_process(const group_process& process) -> void {
 	const auto& group    = audio->groups.at({process.group});
 	const auto epoch     = ++group.services->epoch;
 	impl::write_entry_ports(*audio, process.input_devices);
-	if (impl::do_sandbox_processing(group, epoch)) {
+	if (impl::do_sandbox_processing(audio, group, epoch)) {
 		impl::read_exit_ports(*audio, process.output_devices);
 	}
 	else {

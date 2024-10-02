@@ -31,13 +31,6 @@ struct return_buffers {
 	return_string_fns strings;
 };
 
-struct sbox_flags {
-	enum e {
-		running = 1 << 0,
-	};
-	int value = 0;
-};
-
 struct sandbox_services {
 	bp::child proc;
 	return_buffers return_buffers;
@@ -77,6 +70,7 @@ struct group_services {
 	shm::group shm;
 	uint64_t epoch = 0;
 	std::atomic_int ref_count = 0;
+	std::atomic_bool total_active_sandboxes = 0; // TODO: set this
 };
 
 struct device_services {
@@ -101,7 +95,6 @@ struct sandbox {
 	id::group group;
 	immer::box<std::string> error;
 	immer::set<id::device> devices;
-	sbox_flags flags;
 	std::shared_ptr<sandbox_services> services;
 };
 

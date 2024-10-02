@@ -75,6 +75,14 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors&
 }
 
 static
+auto process_input_msg_(sbox::app* app, const scuff::msg::in::crash& msg) -> void {
+	// Crash the process. This is used for testing the
+	// way the client responds to sandbox crashes.
+	double* x{}; 
+	*x = 0;
+}
+
+static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
 	try {
 		if (msg.type == plugin_type::clap) {

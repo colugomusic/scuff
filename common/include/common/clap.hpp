@@ -21,7 +21,7 @@ auto has_gui(const clap_plugin_t& iface) -> bool {
 	if (!gui) {
 		return false;
 	}
-	return gui->is_api_supported(&iface, scuff::os::get_window_api(), false);
+	return gui->is_api_supported(&iface, scuff::os::get_clap_window_api(), false);
 }
 
 [[nodiscard]] static
