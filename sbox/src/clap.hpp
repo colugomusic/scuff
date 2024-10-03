@@ -919,11 +919,39 @@ auto save(sbox::app* app, id::device dev_id) -> std::vector<std::byte> {
 }
 
 [[nodiscard]] static
-auto set_sample_rate(const sbox::app& app, id::device dev_id, double sr) -> bool {
-	const auto m   = app.model.read();
-	const auto dev = m.clap_devices.at(dev_id);
-	dev.iface->plugin.plugin->deactivate(dev.iface->plugin.plugin);
-	return dev.iface->plugin.plugin->activate(dev.iface->plugin.plugin, sr, VECTOR_SIZE, VECTOR_SIZE);
+auto activate(sbox::app* app, id::device dev_id, double sr) -> bool {
+	const auto m              = app->model.read();
+	const auto dev            = m.devices.at(dev_id);
+	const auto clap_dev       = m.clap_devices.at(dev_id);
+	const auto already_active = clap_dev.service.data->atomic_flags.value & device_atomic_flags::active;
+	const auto current_sr     = dev.sample_rate;
+	if (already_active && current_sr == sr) {
+		return true;
+	}
+	clap_dev.iface->plugin.plugin->deactivate(clap_dev.iface->plugin.plugin);
+	auto result = clap_dev.iface->plugin.plugin->activate(clap_dev.iface->plugin.plugin, sr, VECTOR_SIZE, VECTOR_SIZE);
+	if (!result) {
+		return false;
+	}
+	app->model.update_publish([dev_id, sr](model&& m) {
+		auto dev = m.devices.at(dev_id);
+		dev.sample_rate = sr;
+		m.devices = m.devices.insert(dev);
+		return m;
+	});
+	clap_dev.service.data->atomic_flags.value |= device_atomic_flags::active;
+	return true;
+}
+
+static
+auto deactivate(const sbox::app& app, id::device dev_id) -> void {
+	const auto m         = app.model.read();
+	const auto clap_dev  = m.clap_devices.at(dev_id);
+	const auto is_active = clap_dev.service.data->atomic_flags.value & device_atomic_flags::active;
+	if (!is_active) {
+		return;
+	}
+	clap_dev.iface->plugin.plugin->deactivate(clap_dev.iface->plugin.plugin);
 }
 
 } // scuff::sbox::clap::main

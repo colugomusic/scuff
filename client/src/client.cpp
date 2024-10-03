@@ -128,10 +128,17 @@ auto zero_inactive_device_outputs(const std::shared_ptr<const model>& audio, con
 		const auto& sbox = audio->sandboxes.at(sbox_id);
 		for (const auto dev_id : sbox.devices) {
 			const auto& dev = audio->devices.at(dev_id);
-			if (dev.services->shm.data->atomic_flags.value & shm::device_atomic_flags::is_active) {
+			const auto& shm = dev.services->shm;
+			if (!shm.is_valid()) {
+				// Device may not have finished being created yet.
 				continue;
 			}
-			for (auto& buffer : dev.services->shm.data->audio_out) {
+			if (shm.data->atomic_flags.value & shm::device_atomic_flags::is_active) {
+				// Device is active so it should be outputting audio.
+				continue;
+			}
+			// Device is not active so zero its output buffers.
+			for (auto& buffer : shm.data->audio_out) {
 				buffer.fill(0.0f);
 			}
 		}
@@ -363,13 +370,31 @@ auto is_running(id::sandbox sbox) -> bool {
 }
 
 static
-auto activate(id::group group, double sr) -> void {
-	// TODO: impl::activate
+auto activate(id::group group_id, double sr) -> void {
+	DATA_->model.update([group_id, sr](model&& m){
+		auto group = m.groups.at(group_id);
+		group.flags.value |= group_flags::is_active;
+		group.sample_rate = sr;
+		for (const auto sbox_id : group.sandboxes) {
+			const auto& sbox = m.sandboxes.at(sbox_id);
+			m.sandboxes.at(sbox_id).services->enqueue(scuff::msg::in::activate{sr});
+		}
+		m.groups = m.groups.insert(group);
+		return m;
+	});
 }
 
 static
-auto deactivate(id::group group) -> void {
-	// TODO: impl::deactivate
+auto deactivate(id::group group_id) -> void {
+	DATA_->model.update([group_id](model&& m){
+		auto group = m.groups.at(group_id);
+		group.flags.value &= ~group_flags::is_active;
+		m.groups = m.groups.insert(group);
+		for (const auto sbox_id : group.sandboxes) {
+			m.sandboxes.at(sbox_id).services->enqueue(scuff::msg::in::deactivate{});
+		}
+		return m;
+	});
 }
 
 static
@@ -757,12 +782,11 @@ auto was_loaded_successfully(id::device dev) -> bool {
 }
 
 [[nodiscard]] static
-auto create_group(double sample_rate, int flags) -> id::group {
+auto create_group(double sample_rate) -> id::group {
 	const auto group_id = id::group{id_gen_++};
 	DATA_->model.update([=](model&& m){
 		scuff::group group;
 		group.id          = group_id;
-		group.flags       = flags;
 		group.sample_rate = sample_rate;
 		try {
 			const auto shmid    = shm::group::make_id(DATA_->instance_id, group.id);
@@ -1011,7 +1035,7 @@ auto save(id::device dev_id) -> scuff::bytes {
 }
 
 static
-auto do_scan(std::string_view scan_exe_path, int flags) -> void {
+auto do_scan(std::string_view scan_exe_path, scan_flags flags) -> void {
 	scan_::stop_if_it_is_already_running();
 	scan_::start(scan_exe_path, flags);
 }
@@ -1072,22 +1096,6 @@ auto get_working_plugins() -> std::vector<id::plugin> {
 		}
 	}
 	return out;
-}
-
-static
-auto set_sample_rate(id::group group_id, double value) -> void {
-	DATA_->model.update([group_id, value](model&& m){
-		auto group = m.groups.at(group_id);
-		group.sample_rate = value;
-		m.groups = m.groups.insert(group);
-		for (const auto sbox_id : group.sandboxes) {
-			const auto& sbox = m.sandboxes.at(sbox_id);
-			if (sbox.services->proc.running()) {
-				sbox.services->enqueue(msg::in::set_sample_rate{value});
-			}
-		}
-		return m;
-	});
 }
 
 auto managed(id::device id) -> managed_device {
@@ -1280,8 +1288,8 @@ auto gui_show(id::device dev) -> void {
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
-auto create_group(double sample_rate, int flags) -> id::group {
-	try                               { return impl::create_group(sample_rate, flags); }
+auto create_group(double sample_rate) -> id::group {
+	try                               { return impl::create_group(sample_rate); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
@@ -1455,7 +1463,7 @@ auto save_async(id::device dev, return_bytes fn) -> void {
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
-auto scan(std::string_view scan_exe_path, int flags) -> void {
+auto scan(std::string_view scan_exe_path, scan_flags flags) -> void {
 	try                               { impl::do_scan(scan_exe_path, flags); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
@@ -1467,11 +1475,6 @@ auto set_metadata(id::device dev, size_t column, std::any data) -> void {
 
 auto set_render_mode(id::device dev, render_mode mode) -> void {
 	try                               { impl::set_render_mode(dev, mode); }
-	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
-}
-
-auto set_sample_rate(id::group group_id, double value) -> void {
-	try                               { impl::set_sample_rate(group_id, value); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 

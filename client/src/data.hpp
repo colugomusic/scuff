@@ -59,12 +59,19 @@ struct sandbox_services {
 		auto fn = [&shm = shm_](const std::byte* bytes, size_t count) -> size_t {
 			return shm.send_bytes(bytes, count);
 		};
-		return msg_sender_.send(fn);
+		msg_sender_.send(fn);
 	}
 private:
 	shm::sandbox shm_;
 	msg::sender<msg::in::msg> msg_sender_;
 	msg::receiver<msg::out::msg> msg_receiver_;
+};
+
+struct group_flags {
+	enum e {
+		is_active = 1 << 0,
+	};
+	int value = 0;
 };
 
 struct group_services {
@@ -108,7 +115,7 @@ struct sandbox {
 
 struct group {
 	id::group id;
-	int flags = 0;
+	group_flags flags;
 	double sample_rate = 0.0f;
 	immer::set<id::sandbox> sandboxes;
 	immer::map<id::device, id::device> cross_sbox_conns;

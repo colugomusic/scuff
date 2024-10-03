@@ -31,12 +31,15 @@ struct device_set_render_mode { id::device::type dev_id; render_mode mode; };
 struct event                  { id::device::type dev_id; scuff::event event; };
 struct get_param_value        { id::device::type dev_id; size_t param_idx; size_t callback; };
 struct get_param_value_text   { id::device::type dev_id; size_t param_idx; double value; size_t callback; };
-struct set_sample_rate        { double sr; };
+struct activate               { double sr; };
+struct deactivate             {};
 
 using msg = std::variant<
+	activate,
 	clean_shutdown,
 	close_all_editors,
 	crash,
+	deactivate,
 	device_create,
 	device_connect,
 	device_disconnect,
@@ -48,8 +51,7 @@ using msg = std::variant<
 	device_set_render_mode,
 	event,
 	get_param_value,
-	get_param_value_text,
-	set_sample_rate
+	get_param_value_text
 >;
 
 } // scuff::msg::in

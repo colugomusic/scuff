@@ -23,7 +23,7 @@ struct scanner {
 	std::deque<basio::streambuf> buffers;
 	std::deque<bp::async_pipe> pipes;
 	std::deque<bp::child> procs;
-	int flags = 0;
+	scan_flags flags;
 };
 
 struct reader {
@@ -266,7 +266,7 @@ auto scan_system_for_installed_plugins(scan_::scanner* scanner) -> void {
 }
 
 static
-auto thread(std::stop_token token, std::string scan_exe_path, int flags) -> void {
+auto thread(std::stop_token token, std::string scan_exe_path, scan_flags flags) -> void {
 	scan_::scanner scanner;
 	scanner.exe_path = scan_exe_path;
 	scanner.flags    = flags;
@@ -284,7 +284,7 @@ auto is_running() -> bool {
 }
 
 static
-auto start(std::string_view scan_exe_path, int flags) -> void {
+auto start(std::string_view scan_exe_path, scan_flags flags) -> void {
 	DATA_->scan_thread = std::jthread{scan_::thread, std::string{scan_exe_path}, flags};
 }
 

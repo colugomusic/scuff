@@ -13,9 +13,6 @@ auto send(const report::msg::general& msg) -> void {
 
 static
 auto send(const scuff::group& group, const report::msg::group& msg) -> void {
-	if (group.flags & scuff::group_flag_no_reporting) {
-		return;
-	}
 	group.services->reporter.lock()->push_back(msg);
 }
 

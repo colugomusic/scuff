@@ -13,15 +13,14 @@
 
 namespace scuff {
 
-enum group_flags {
-	group_flag_no_reporting = 1 << 0, // Set this if you intend to ignore all reports from this group.
-};
-
-enum scan_flags {
-	scan_flag_reload_failed_devices = 1 << 0, // If a plugin is scanned which wasn't previously known,
-	                                          // and the user already tried to create a device with that
-	                                          // plugin ID, try to create the device again now that the
-	                                          // plugin is known.
+struct scan_flags {
+	enum e {
+		reload_failed_devices = 1 << 0, // If a plugin is scanned which wasn't previously known,
+		                                // and the user already tried to create a device with that
+		                                // plugin ID, try to create the device again now that the
+		                                // plugin is known.
+	};
+	int value = 0;
 };
 
 struct audio_writer {
@@ -139,8 +138,7 @@ auto receive_report(const general_reporter& reporter) -> void;
 // this in your UI message loop.
 // If you are doing offline processing in a background thread then maybe you could call
 // this once per audio buffer.
-// If you don't call this then report messages will pile up unless you set the
-// group_flag_no_reporting flag when creating the group.
+// If you don't call this then report messages will pile up and consume memory.
 auto receive_report(scuff::id::group group, const group_reporter& reporter) -> void;
 
 // Activate audio processing for the sandbox group.
@@ -173,7 +171,7 @@ auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plu
 // - Every sandbox has to belong to a group.
 // - This is what allows data to travel between sandboxes.
 // - On failure, returns an invalid id
-auto create_group(double sample_rate, int flags) -> id::group;
+auto create_group(double sample_rate) -> id::group;
 
 // Create a new sandbox.
 // - Every sandbox has to belong to a group.
@@ -343,16 +341,13 @@ auto save_async(id::device dev, return_bytes fn) -> void;
 
 // Scan the system for plugins. If the scanner process is already
 // running, it is restarted.
-auto scan(std::string_view scan_exe_path, int flags) -> void;
+auto scan(std::string_view scan_exe_path, scan_flags flags) -> void;
 
 // Set device metadata at column.
 auto set_metadata(id::device dev, size_t column, std::any data) -> void;
 
 // Set the render mode for the given group.
 auto set_render_mode(id::group group, render_mode mode) -> void;
-
-// Set the sample rate for the given group.
-auto set_sample_rate(id::group group, double value) -> void;
 
 // Return true if the device loaded successfully.
 auto was_loaded_successfully(id::device dev) -> bool;

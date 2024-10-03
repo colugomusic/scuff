@@ -50,6 +50,7 @@ struct device {
 	device_flags flags;
 	device_ui ui;
 	plugin_type type;
+	double sample_rate = 0.0;
 	immer::box<std::string> name;
 	immer::flex_vector<port_conn> output_conns;
 	device_service service;

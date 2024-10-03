@@ -50,12 +50,19 @@ auto make_device_processing_order(immer::table<device> devices) -> immer::vector
 }
 
 static
-auto set_sample_rate(sbox::app* app, const sbox::device& dev, double sr) -> void {
+auto activate(sbox::app* app, const sbox::device& dev, double sr) -> void {
 	if (dev.type == plugin_type::clap) {
-		if (!clap::main::set_sample_rate(*app, dev.id, sr)) {
-			app->msg_sender.enqueue(scuff::msg::out::report_error{std::format("Failed to set sample rate for device {}", dev.id.value)});
+		if (!clap::main::activate(app, dev.id, sr)) {
+			app->msg_sender.enqueue(scuff::msg::out::report_error{std::format("Failed to activate device {}", dev.id.value)});
 		}
 		return;
+	}
+}
+
+static
+auto deactivate(sbox::app* app, const sbox::device& dev) -> void {
+	if (dev.type == plugin_type::clap) {
+		clap::main::deactivate(*app, dev.id);
 	}
 }
 
@@ -245,10 +252,18 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value_te
 }
 
 static
-auto process_input_msg_(sbox::app* app, const scuff::msg::in::set_sample_rate& msg) -> void {
+auto process_input_msg_(sbox::app* app, const scuff::msg::in::activate& msg) -> void {
 	const auto m = app->model.read();
 	for (const auto& dev : m.devices) {
-		set_sample_rate(app, dev, msg.sr);
+		activate(app, dev, msg.sr);
+	}
+}
+
+static
+auto process_input_msg_(sbox::app* app, const scuff::msg::in::deactivate& msg) -> void {
+	const auto m = app->model.read();
+	for (const auto& dev : m.devices) {
+		deactivate(app, dev);
 	}
 }
 
