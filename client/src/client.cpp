@@ -586,7 +586,7 @@ auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_devi
 
 static
 auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id) -> id::device {
-	// TODO: blocking duplicate
+	// TOODOO: blocking duplicate
 	return {};
 }
 
@@ -608,7 +608,7 @@ auto erase(id::device dev_id) -> void {
 
 [[nodiscard]] static
 auto find(id::device dev, ext::id::param param_id) -> idx::param {
-	// TODO: impl::find
+	// TOODOO: impl::find
 	return {};
 }
 
@@ -810,13 +810,18 @@ static
 auto erase(id::group group_id) -> void {
 	DATA_->model.update_publish([=](model&& m){
 		const auto& group = m.groups.at(group_id);
-		for (const auto sbox_id : group.sandboxes) {
+		const auto sandbox_ids = group.sandboxes;
+		for (const auto sbox_id : sandbox_ids) {
 			const auto& sbox = m.sandboxes.at(sbox_id);
 			if (sbox.services->proc.running()) {
 				sbox.services->proc.terminate();
 			}
+			const auto dev_ids = sbox.devices;
+			for (const auto dev_id : dev_ids) {
+				m.devices = m.devices.erase(dev_id);
+			}
+			m.sandboxes = m.sandboxes.erase(sbox_id);
 		}
-		// TODO: also erase sandboxes in group ??
 		m.groups = m.groups.erase(group_id);
 		return m;
 	});
@@ -838,7 +843,7 @@ auto get_value_async(id::device dev, idx::param param, return_double fn) -> void
 
 static
 auto get_value(id::device dev, idx::param param) -> double {
-	// TODO: impl::get_value
+	// TOODOO: impl::get_value
 	return {};
 }
 
@@ -957,7 +962,7 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 	const auto sandbox_shmid = sandbox.services->get_shmid();
 	const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, group.sample_rate);
 	sandbox.services->proc   = bp::child{std::string{sbox_exe_path}, exe_args};
-	// TODO: the rest of this
+	// TOODOO: the rest of this
 }
 
 static

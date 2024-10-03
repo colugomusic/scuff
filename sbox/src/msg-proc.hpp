@@ -68,7 +68,7 @@ auto deactivate(sbox::app* app, const sbox::device& dev) -> void {
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::clean_shutdown& msg) -> void {
-	// TODO: msg::in::clean_shutdown
+	// TOODOO: msg::in::clean_shutdown
 }
 
 static
@@ -217,7 +217,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_save& msg) 
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_set_render_mode& msg) -> void {
-	// TODO: msg::in::device_set_render_mode
+	// TOODOO: msg::in::device_set_render_mode
 }
 
 static

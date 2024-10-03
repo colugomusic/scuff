@@ -517,27 +517,27 @@ auto rescan_audio_ports(sbox::app* app, id::device dev_id, uint32_t flags) -> vo
 
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_closed& msg) -> void {
-	// TODO: process msg
+	// TOODOO: process msg
 }
 
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_request_hide& msg) -> void {
-	// TODO: process msg
+	// TOODOO: process msg
 }
 
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_request_resize& msg) -> void {
-	// TODO: process msg
+	// TOODOO: process msg
 }
 
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_request_show& msg) -> void {
-	// TODO: process msg
+	// TOODOO: process msg
 }
 
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_resize_hints_changed& msg) -> void {
-	// TODO: process msg
+	// TOODOO: process msg
 }
 
 static
@@ -692,7 +692,7 @@ auto make_host_for_instance(device_host_data* host_data) -> iface_host {
 	};
 	iface.params.rescan = [](const clap_host* host, clap_param_rescan_flags flags) -> void {
 		const auto& hd = get_host_data(host);
-		// TODO: params.rescan: Figure out what we do here
+		// TOODOO: params.rescan: Figure out what we do here
 	};
 	// PRESET LOAD ______________________________________________________________
 	iface.preset_load.loaded = [](const clap_host* host, uint32_t location_kind, const char* location, const char* load_key) -> void {
@@ -717,7 +717,7 @@ auto make_host_for_instance(device_host_data* host_data) -> iface_host {
 	// TRACK INFO _______________________________________________________________
 	iface.track_info.get = [](const clap_host* host, clap_track_info_t* info) -> bool {
 		const auto& hd = get_host_data(host);
-		// TODO: track_info.get: sort this out
+		// TOODOO: track_info.get: sort this out
 		return true;
 	};
 	return iface;

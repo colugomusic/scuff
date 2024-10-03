@@ -79,7 +79,7 @@ struct group_services {
 	shm::group shm;
 	uint64_t epoch = 0;
 	std::atomic_int ref_count = 0;
-	std::atomic_bool total_active_sandboxes = 0; // TODO: set this
+	std::atomic_bool total_active_sandboxes = 0; // TOODOO: set this
 };
 
 struct device_services {

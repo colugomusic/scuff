@@ -195,7 +195,7 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 				return m;
 			});
 			report::send(report::msg::plugin_scanned{plugin.id});
-			// TODO: if flags & scuff_scan_flag_reload_failed_devices,
+			// TOODOO: if flags & scuff_scan_flag_reload_failed_devices,
 			//       reload any unloaded devices which use this plugin 
 			return;
 		}
