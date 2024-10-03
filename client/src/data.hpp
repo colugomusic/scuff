@@ -23,12 +23,14 @@ using return_device_fns = slot_buffer<return_device>;
 using return_double_fns = slot_buffer<return_double>;
 using return_state_fns  = slot_buffer<return_bytes>;
 using return_string_fns = slot_buffer<return_string>;
+using return_void_fns   = slot_buffer<return_void>;
 
 struct return_buffers {
 	return_device_fns devices;
 	return_double_fns doubles;
 	return_state_fns states;
 	return_string_fns strings;
+	return_void_fns voids;
 };
 
 struct sandbox_services {
@@ -74,6 +76,11 @@ struct group_services {
 };
 
 struct device_services {
+	// Increment this any time a parameter change output
+	// event is received, to signal that the last saved
+	// state is now dirty.
+	std::atomic_int dirty_marker = 0;
+	std::atomic_int saved_marker = 0;
 	std::atomic_int ref_count = 0;
 	shm::device shm;
 };
@@ -86,6 +93,7 @@ struct device {
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
 	immer::box<std::string> name;
+	immer::box<scuff::bytes> last_saved_state;
 	immer::vector<std::any> metadata;
 	std::shared_ptr<device_services> services;
 };
@@ -101,6 +109,7 @@ struct sandbox {
 struct group {
 	id::group id;
 	int flags = 0;
+	double sample_rate = 0.0f;
 	immer::set<id::sandbox> sandboxes;
 	immer::map<id::device, id::device> cross_sbox_conns;
 	std::shared_ptr<group_services> services;

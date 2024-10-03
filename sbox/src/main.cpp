@@ -101,6 +101,11 @@ auto create() -> sbox::app* {
 		osapp_finish();
 		return app;
 	}
+	if (app->options.sample_rate < 1) {
+		log_printf("Missing required option --sr");
+		osapp_finish();
+		return app;
+	}
 	const auto shmid_sbox  = shm::sandbox::make_id(app->options.instance_id, app->options.sbox_id);
 	const auto shmid_group = shm::group::make_id(app->options.instance_id, app->options.group_id);
 	app->shm_group      = shm::group{bip::open_only, shmid_group.c_str()};

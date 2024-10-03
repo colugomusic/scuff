@@ -188,6 +188,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_load& msg) 
 		if (!clap::main::load(app, dev_id, msg.state)) {
 			app->msg_sender.enqueue(scuff::msg::out::report_error{"Failed to load device state"});
 		}
+		app->msg_sender.enqueue(scuff::msg::out::return_void{msg.callback});
 		return;
 	}
 }
@@ -202,7 +203,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_save& msg) 
 			app->msg_sender.enqueue(scuff::msg::out::report_error{"Failed to save device state"});
 			return;
 		}
-		app->msg_sender.enqueue(scuff::msg::out::return_state{msg.dev_id, state, msg.callback});
+		app->msg_sender.enqueue(scuff::msg::out::return_state{state, msg.callback});
 		return;
 	}
 }

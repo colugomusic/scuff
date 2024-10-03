@@ -16,10 +16,11 @@ namespace bip = boost::interprocess;
 namespace scuff::impl {
 
 [[nodiscard]] static
-auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id) -> std::vector<std::string> {
+auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id, double sample_rate) -> std::vector<std::string> {
 	std::vector<std::string> args;
-	args.push_back(std::string("--group ") + group_id.data());
-	args.push_back(std::string("--sandbox ") + sandbox_id.data());
+	args.push_back(std::format("--group {}", group_id));
+	args.push_back(std::format("--sandbox {}", sandbox_id));
+	args.push_back(std::format("--sr {}", sample_rate));
 	return args;
 }
 
@@ -71,10 +72,18 @@ auto read_zeros(const scuff::device& dev, const audio_readers& readers) -> void 
 }
 
 static
+auto intercept_output_event(const scuff::device& dev, const scuff::event& event) -> void {
+	if (std::holds_alternative<scuff::events::param_value>(event)) {
+		dev.services->dirty_marker++;
+	}
+}
+
+static
 auto read_events(const scuff::device& dev, const event_reader& reader) -> void {
 	auto& buffer           = dev.services->shm.data->events_out;
 	const auto event_count = buffer.size();
 	for (size_t j = 0; j < event_count; j++) {
+		intercept_output_event(dev, buffer[j]);
 		reader.push(buffer[j]);
 	}
 	buffer.clear();
@@ -208,6 +217,12 @@ auto process_message_(const sandbox& sbox, const msg::out::return_state& msg) ->
 }
 
 static
+auto process_message_(const sandbox& sbox, const msg::out::return_void& msg) -> void {
+	const auto return_fn = sbox.services->return_buffers.voids.take(msg.callback);
+	return_fn();
+}
+
+static
 auto process_message(const sandbox& sbox, const msg::out::msg& msg) -> void {
 	 const auto proc = [sbox](const auto& msg) -> void { process_message_(sbox, msg); };
 	 try                               { fast_visit(proc, msg); }
@@ -290,6 +305,38 @@ auto receive_report(scuff::id::group group_id, const group_reporter& reporter) -
 }
 
 static
+auto save_dirty_device_state(const scuff::device& dev) -> void {
+	const auto dirty_marker = dev.services->dirty_marker.load();
+	const auto saved_marker = dev.services->saved_marker.load();
+	if (dirty_marker > saved_marker) {
+		auto with_bytes = [dev_id = dev.id, dirty_marker](const scuff::bytes& bytes){
+			DATA_->model.update([dev_id, dirty_marker, &bytes](model&& m){
+				if (const auto ptr = m.devices.find(dev_id)) {
+					if (ptr->services->dirty_marker.load() > dirty_marker) {
+						// These bytes are already out of date
+						return m;
+					}
+					auto dev = *ptr;
+					dev.last_saved_state = bytes;
+					dev.services->saved_marker = dirty_marker;
+					m.devices = m.devices.insert(dev);
+				}
+				return m;
+			});
+		};
+		save_async(dev.id, with_bytes);
+	}
+}
+
+static
+auto save_dirty_device_states() -> void {
+	const auto m = DATA_->model.read();
+	for (const auto& dev : m.devices) {
+		save_dirty_device_state(dev);
+	}
+}
+
+static
 auto poll_thread(std::stop_token stop_token) -> void {
 	auto now     = std::chrono::steady_clock::now();
 	auto next_gc = now + std::chrono::milliseconds{GC_INTERVAL_MS};
@@ -300,6 +347,7 @@ auto poll_thread(std::stop_token stop_token) -> void {
 			next_gc = now + std::chrono::milliseconds{GC_INTERVAL_MS};
 		}
 		process_sandbox_messages();
+		save_dirty_device_states();
 		std::this_thread::sleep_for(std::chrono::milliseconds{POLL_SLEEP_MS});
 	}
 }
@@ -410,23 +458,40 @@ auto create_device_async(id::sandbox sbox_id, plugin_type type, ext::id::plugin 
 	return dev_id;
 }
 
+struct blocking_sandbox_operation {
+	static constexpr auto MAX_WAIT = std::chrono::seconds(1);
+	template <typename Fn> [[nodiscard]] auto make_fn(Fn fn) {
+		return [this, fn](auto... args) {
+			std::lock_guard lock{mutex_};
+			fn(args...);
+			cv_.notify_one();
+		};
+	}
+	template <typename Pred>
+	auto wait_for(Pred pred) -> bool {
+		if (pred()) {
+			return true;
+		}
+		auto lock = std::unique_lock{mutex_};
+		return cv_.wait_for(lock, MAX_WAIT, pred);
+	}
+private:
+	std::condition_variable cv_;
+	std::mutex mutex_;
+};
+
 [[nodiscard]] static
 auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id) -> id::device {
-	static constexpr auto MAX_WAIT = std::chrono::seconds(1);
-	std::condition_variable cv;
-	std::mutex mutex;
 	bool done = false;
-	auto fn = [&cv, &mutex, &done](id::device dev_id, bool load_success) -> void {
-		std::lock_guard lock{mutex};
+	blocking_sandbox_operation bso;
+	auto fn = bso.make_fn([&done](id::device dev_id, bool load_success) -> void {
 		done = true;
-		cv.notify_one();
-	};
+	});
 	auto ready = [&done] {
-		return !done;
+		return done;
 	};
 	const auto dev_id = impl::create_device_async(sbox_id, type, plugin_ext_id, fn);
-	auto lock = std::unique_lock{mutex};
-	if (!cv.wait_for(lock, MAX_WAIT, ready)) {
+	if (!bso.wait_for(ready)) {
 		report::send(report::msg::error{"Timed out waiting for device creation"});
 	}
 	if (!done) {
@@ -692,12 +757,13 @@ auto was_loaded_successfully(id::device dev) -> bool {
 }
 
 [[nodiscard]] static
-auto create_group(int flags) -> id::group {
+auto create_group(double sample_rate, int flags) -> id::group {
 	const auto group_id = id::group{id_gen_++};
 	DATA_->model.update([=](model&& m){
 		scuff::group group;
-		group.id    = group_id;
-		group.flags = flags;
+		group.id          = group_id;
+		group.flags       = flags;
+		group.sample_rate = sample_rate;
 		try {
 			const auto shmid    = shm::group::make_id(DATA_->instance_id, group.id);
 			group.services      = std::make_shared<group_services>();
@@ -821,21 +887,16 @@ auto get_plugin_ext_id(id::device dev) -> ext::id::plugin {
 
 [[nodiscard]] static
 auto get_value_text(id::device dev_id, idx::param param, double value) -> std::string {
-	static constexpr auto MAX_WAIT = std::chrono::seconds(1);
-	std::condition_variable cv;
-	std::mutex mutex;
 	std::string result;
-	auto fn = [&cv, &mutex, &result](std::string_view text) -> void {
-		std::lock_guard lock{mutex};
+	blocking_sandbox_operation bso;
+	auto fn = bso.make_fn([&result](std::string_view text) -> void {
 		result = text;
-		cv.notify_one();
-	};
+	});
 	auto ready = [&result] {
 		return !result.empty();
 	};
 	get_value_text_async(dev_id, param, value, fn);
-	auto lock = std::unique_lock{mutex};
-	if (!cv.wait_for(lock, MAX_WAIT, ready)) {
+	if (!bso.wait_for(ready)) {
 		report::send(report::msg::error{"Timed out waiting for value text."});
 	}
 	return result;
@@ -870,30 +931,83 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 	}
 	const auto group_shmid   = group.services->shm.id();
 	const auto sandbox_shmid = sandbox.services->get_shmid();
-	const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid);
+	const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, group.sample_rate);
 	sandbox.services->proc   = bp::child{std::string{sbox_exe_path}, exe_args};
 	// TODO: the rest of this
 }
 
 static
-auto load_async(id::device dev, const scuff::bytes& state, return_void fn) -> void {
-	// TODO: impl::load_async
+auto load_async(id::device dev_id, const scuff::bytes& state, return_void fn) -> void {
+	const auto m    = DATA_->model.read();
+	const auto dev  = m.devices.at(dev_id);
+	const auto sbox = m.sandboxes.at(dev.sbox);
+	sbox.services->enqueue(msg::in::device_load{dev_id.value, state, sbox.services->return_buffers.voids.put(fn)});
 }
 
 static
 auto load(id::device dev, const scuff::bytes& bytes) -> void {
-	// TODO: impl::load
+	bool done = false;
+	blocking_sandbox_operation bso;
+	auto fn = bso.make_fn([&done](void) -> void {
+		done = true;
+	});
+	auto ready = [&done] {
+		return done;
+	};
+	load_async(dev, bytes, fn);
+	if (!bso.wait_for(ready)) {
+		report::send(report::msg::error{"Timed out waiting for device load."});
+	}
 }
 
 static
-auto save_async(id::device dev, return_bytes fn) -> void {
-	// TODO: impl::save_async
+auto update_saved_state_with_returned_bytes(id::device dev_id, const scuff::bytes& bytes) -> void {
+	DATA_->model.update([dev_id, &bytes](model&& m){
+		if (auto ptr = m.devices.find(dev_id)) {
+			auto dev = *ptr;
+			dev.last_saved_state = bytes;
+			m.devices = m.devices.insert(dev);
+		}
+		return m;
+	});
+}
+
+static
+auto save_async(const scuff::device& dev, return_bytes fn) -> void {
+	auto wrapper_fn = [dev_id = dev.id, fn](const scuff::bytes& bytes){
+		update_saved_state_with_returned_bytes(dev_id, bytes);
+		fn(bytes);
+	};
+	const auto m = DATA_->model.read();
+	const auto sbox = m.sandboxes.at(dev.sbox);
+	sbox.services->enqueue(msg::in::device_save{dev.id.value, sbox.services->return_buffers.states.put(wrapper_fn)});
+}
+
+static
+auto save_async(id::device dev_id, return_bytes fn) -> void {
+	const auto m = DATA_->model.read();
+	save_async(m.devices.at(dev_id), fn);
 }
 
 [[nodiscard]] static
-auto save(id::device dev) -> scuff::bytes {
-	// TODO: impl::save
-	return {};
+auto save(id::device dev_id) -> scuff::bytes {
+	scuff::bytes bytes;
+	bool done = false;
+	blocking_sandbox_operation bso;
+	auto fn = bso.make_fn([&bytes, &done](const scuff::bytes& b) -> void {
+		bytes = b;
+		done  = true;
+	});
+	auto ready = [&done] {
+		return done;
+	};
+	const auto m    = DATA_->model.read();
+	const auto& dev = m.devices.at(dev_id);
+	save_async(dev, fn);
+	if (!bso.wait_for(ready)) {
+		report::send(report::msg::error{"Timed out waiting for device save."});
+	}
+	return bytes;
 }
 
 static
@@ -912,11 +1026,10 @@ auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::s
 			const auto& group        = m.groups.at({group_id});
 			const auto group_shmid   = group.services->shm.id();
 			const auto sandbox_shmid = shm::sandbox::make_id(DATA_->instance_id, sbox.id);
-			const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid);
+			const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, group.sample_rate);
 			auto proc                = bp::child{std::string{sbox_exe_path}, exe_args};
 			sbox.group               = {group_id};
 			sbox.services            = std::make_shared<sandbox_services>(std::move(proc), sandbox_shmid);
-			// Add sandbox to group
 			m = add_sandbox_to_group(m, {group_id}, sbox.id);
 		}
 		catch (const std::exception& err) {
@@ -962,14 +1075,19 @@ auto get_working_plugins() -> std::vector<id::plugin> {
 }
 
 static
-// TODO: this should be per-group
-auto set_sample_rate(double sr) -> void {
-	const auto m = DATA_->model.read();
-	for (const auto& sbox : m.sandboxes) {
-		if (sbox.services->proc.running()) {
-			sbox.services->enqueue(msg::in::set_sample_rate{sr});
+auto set_sample_rate(id::group group_id, double value) -> void {
+	DATA_->model.update([group_id, value](model&& m){
+		auto group = m.groups.at(group_id);
+		group.sample_rate = value;
+		m.groups = m.groups.insert(group);
+		for (const auto sbox_id : group.sandboxes) {
+			const auto& sbox = m.sandboxes.at(sbox_id);
+			if (sbox.services->proc.running()) {
+				sbox.services->enqueue(msg::in::set_sample_rate{value});
+			}
 		}
-	}
+		return m;
+	});
 }
 
 auto managed(id::device id) -> managed_device {
@@ -1162,8 +1280,8 @@ auto gui_show(id::device dev) -> void {
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
-auto create_group(int flags) -> id::group {
-	try                               { return impl::create_group(flags); }
+auto create_group(double sample_rate, int flags) -> id::group {
+	try                               { return impl::create_group(sample_rate, flags); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); return {}; }
 }
 
@@ -1352,8 +1470,8 @@ auto set_render_mode(id::device dev, render_mode mode) -> void {
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 
-auto set_sample_rate(double sr) -> void {
-	try                               { impl::set_sample_rate(sr); }
+auto set_sample_rate(id::group group_id, double value) -> void {
+	try                               { impl::set_sample_rate(group_id, value); }
 	catch (const std::exception& err) { report::send(report::msg::error{err.what()}); }
 }
 

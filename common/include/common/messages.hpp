@@ -25,7 +25,7 @@ struct device_disconnect      { int64_t out_dev_id; size_t out_port; int64_t in_
 struct device_erase           { id::device::type dev_id; };
 struct device_gui_hide        { id::device::type dev_id; };
 struct device_gui_show        { id::device::type dev_id; };
-struct device_load            { id::device::type dev_id; std::vector<std::byte> state; };
+struct device_load            { id::device::type dev_id; std::vector<std::byte> state; size_t callback; };
 struct device_save            { id::device::type dev_id; size_t callback; };
 struct device_set_render_mode { id::device::type dev_id; render_mode mode; };
 struct event                  { id::device::type dev_id; scuff::event event; };
@@ -66,7 +66,8 @@ struct report_warning            { std::string text; };
 struct return_created_device     { id::device::type dev_id; std::string ports_shmid; size_t callback; };
 struct return_param_value        { double value; size_t callback; };
 struct return_param_value_text   { std::string text; size_t callback; };
-struct return_state              { id::device::type dev_id; std::vector<std::byte> bytes; size_t callback; };
+struct return_state              { std::vector<std::byte> bytes; size_t callback; };
+struct return_void               { size_t callback; };
 
 using msg = std::variant<
 	device_param_info_changed,
@@ -77,7 +78,8 @@ using msg = std::variant<
 	return_created_device,
 	return_param_value,
 	return_param_value_text,
-	return_state
+	return_state,
+	return_void
 >;
 
 } // scuff::msg::out
@@ -144,7 +146,6 @@ auto deserialize<scuff::msg::out::return_param_value_text>(std::span<const std::
 
 template <> inline
 auto deserialize<scuff::msg::out::return_state>(std::span<const std::byte>* bytes, scuff::msg::out::return_state* msg) -> void {
-	deserialize(bytes, &msg->dev_id);
 	deserialize(bytes, &msg->bytes);
 	deserialize(bytes, &msg->callback);
 }
@@ -221,7 +222,6 @@ auto serialize<scuff::msg::out::return_param_value_text>(const scuff::msg::out::
 
 template <> inline
 auto serialize<scuff::msg::out::return_state>(const scuff::msg::out::return_state& msg, std::vector<std::byte>* bytes) -> void {
-	serialize(msg.dev_id, bytes);
 	serialize(msg.bytes, bytes);
 	serialize(msg.callback, bytes);
 }

@@ -48,6 +48,10 @@ auto get_options() -> sbox::options {
 			options.sbox_id.value = std::stoi(value);
 			continue;
 		}
+		if (get_option("--sr", &i, value)) {
+			options.sample_rate = std::stod(value);
+			continue;
+		}
 	}
 	return options;
 }

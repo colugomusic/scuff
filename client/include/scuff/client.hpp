@@ -173,7 +173,7 @@ auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plu
 // - Every sandbox has to belong to a group.
 // - This is what allows data to travel between sandboxes.
 // - On failure, returns an invalid id
-auto create_group(int flags) -> id::group;
+auto create_group(double sample_rate, int flags) -> id::group;
 
 // Create a new sandbox.
 // - Every sandbox has to belong to a group.
@@ -350,6 +350,9 @@ auto set_metadata(id::device dev, size_t column, std::any data) -> void;
 
 // Set the render mode for the given group.
 auto set_render_mode(id::group group, render_mode mode) -> void;
+
+// Set the sample rate for the given group.
+auto set_sample_rate(id::group group, double value) -> void;
 
 // Return true if the device loaded successfully.
 auto was_loaded_successfully(id::device dev) -> bool;
