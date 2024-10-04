@@ -10,10 +10,8 @@ nap_generate_tools()
 nap_desktop_app(scuff-test-host osapp NRC_NONE)
 nap_target_cxx_standard(scuff-test-host 20)
 target_include_directories(scuff-test-host PRIVATE
-	${CMAKE_CURRENT_LIST_DIR}/..
-)
-target_include_directories(scuff-test-host BEFORE PRIVATE
 	/usr/include
+	${CMAKE_CURRENT_LIST_DIR}/..
 )
 target_link_libraries(scuff-test-host
 	${NAPPGUI_LIBRARIES}
