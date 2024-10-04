@@ -4,7 +4,6 @@ include(../CPM.cmake)
 list (APPEND scuff-test-host_SRCFILES
 	src/main.cpp
 )
-add_compile_options(-include /usr/include/strings.h)
 CPMAddPackage(NAME nappgui GITHUB_REPOSITORY frang75/nappgui_src GIT_TAG b65fc31  OPTIONS "NAPPGUI_DEMO OFF" "NAPPGUI_WEB OFF" "CMAKE_DISABLE_CRTDBG ON")
 set(NAPPGUI_ROOT_PATH ${nappgui_SOURCE_DIR})
 nap_generate_tools()
@@ -18,6 +17,9 @@ target_link_libraries(scuff-test-host
 	scuff::client
 )
 target_compile_options(scuff-test-host PRIVATE
-	$<$<CXX_COMPILER_ID:GNU>:-include /usr/include/strings.h>
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+	set(CMAKE_C_FLAGS "-I/usr/include ${CMAKE_C_FLAGS}")
+	set(CMAKE_CXX_FLAGS "-I/usr/include ${CMAKE_CXX_FLAGS}")
+endif()
