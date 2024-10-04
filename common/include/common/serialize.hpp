@@ -8,7 +8,7 @@
 
 namespace concepts {
 
-template <typename T> concept is_pod     = std::is_pod_v<T>;
+template <typename T> concept is_pod     = std::is_trivial_v<T>;
 template <typename T> concept is_variant = requires { typename std::variant_size<T>::type; };
 
 } // concepts
