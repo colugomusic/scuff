@@ -9,6 +9,10 @@ set(NAPPGUI_ROOT_PATH ${nappgui_SOURCE_DIR})
 nap_generate_tools()
 nap_desktop_app(scuff-test-host osapp NRC_NONE)
 nap_target_cxx_standard(scuff-test-host 20)
+include_directories(
+	$<$<CXX_COMPILER_ID:GNU>:/usr/include>
+)
+set(CMAKE_INCLUDE_DIRECTORIES_BEFORE ON)
 target_include_directories(scuff-test-host PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/..
 )
