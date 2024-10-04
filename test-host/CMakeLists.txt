@@ -17,6 +17,6 @@ target_link_libraries(scuff-test-host
 	scuff::client
 )
 target_compile_options(scuff-test-host PRIVATE
-	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror>
+	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror -Wno-unused-function>
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
