@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(scuff-test-host)
 include(../CPM.cmake)
+include_directories(BEFORE /usr/include)
 list (APPEND scuff-test-host_SRCFILES
 	src/main.cpp
 )
@@ -19,7 +20,4 @@ target_link_libraries(scuff-test-host
 )
 target_compile_options(scuff-test-host BEFORE PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
-)
-set_target_properties(scuff-test-host PROPERTIES
-	COMPILE_FLAGS "-I/usr/include"
 )
