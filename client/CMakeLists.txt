@@ -15,12 +15,11 @@ list (APPEND src
 	src/scan.hpp
 )
 set(SCUFF_SIGNALING_MODE "boost-ipc" CACHE STRING "Signalling mode")
-set(BOOST_LIBS_OPTIONAL header filesystem system regex CACHE STRING "Boost libraries to be compiled" FORCE)
 set(immer_BUILD_TESTS OFF)
 set(immer_BUILD_EXAMPLES OFF)
 set(immer_BUILD_DOCS OFF)
 set(immer_BUILD_EXTRAS OFF)
-CPMAddPackage(NAME boost-cmake       GITHUB_REPOSITORY colugomusic/boost-cmake      GIT_TAG master                            )
+find_package(Boost REQUIRED COMPONENTS filesystem headers)
 CPMAddPackage(NAME clap              GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea          DOWNLOAD_ONLY YES)
 CPMAddPackage(NAME ent               GITHUB_REPOSITORY colugomusic/ent              GIT_TAG main                              )
 CPMAddPackage(NAME immer             GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                            )
@@ -38,9 +37,8 @@ target_include_directories(scuff-client PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/../common
 )
 target_link_libraries(scuff-client PUBLIC
-	Boost::boost
 	Boost::filesystem
-	Boost::regex
+	Boost::headers
 	ent
 	immer
 	nlohmann_json::nlohmann_json

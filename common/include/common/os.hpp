@@ -27,7 +27,7 @@ auto set_realtime_priority(std::jthread* thread) -> void;
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <boost/process.hpp>
-#include <boost/process/windows.hpp>
+#include <boost/process/v1/windows.hpp>
 
 namespace bp = boost::process;
 

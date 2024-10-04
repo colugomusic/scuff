@@ -15,8 +15,7 @@ list (APPEND scuff-sbox_SRCFILES
 	src/options.hpp
 )
 set(SCUFF_SIGNALING_MODE "boost-ipc" CACHE STRING "Signalling mode")
-set(BOOST_LIBS_OPTIONAL header CACHE STRING "Boost libraries to be compiled" FORCE)
-CPMAddPackage(NAME boost-cmake GITHUB_REPOSITORY colugomusic/boost-cmake      GIT_TAG master                                               )
+find_package(Boost REQUIRED COMPONENTS filesystem headers)
 CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES                           )
 CPMAddPackage(NAME ent         GITHUB_REPOSITORY colugomusic/ent              GIT_TAG main                                                 )
 CPMAddPackage(NAME immer       GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                                               )
@@ -31,7 +30,8 @@ target_include_directories(scuff-sbox PRIVATE
 	${clap_SOURCE_DIR}/include
 )
 target_link_libraries(scuff-sbox
-	Boost::boost
+	Boost::filesystem
+	Boost::headers
 	ent
 	immer
 	readerwriterqueue
