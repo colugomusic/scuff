@@ -1,5 +1,6 @@
 #include "common/os.hpp"
 #include <dlfcn.h>
+#include <flux.hpp>
 #include <pthread.h>
 #include <sched.h>
 #include <unistd.h>
