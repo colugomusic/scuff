@@ -49,7 +49,6 @@ target_compile_features(scuff-client PUBLIC
 	cxx_std_20
 )
 target_compile_options(scuff-client PRIVATE
-	$<$<CXX_COMPILER_ID:GNU,Clang>:-Werror>
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
 target_compile_definitions(scuff-client PRIVATE

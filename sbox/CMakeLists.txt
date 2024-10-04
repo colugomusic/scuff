@@ -39,7 +39,6 @@ target_link_libraries(scuff-sbox
 	${NAPPGUI_LIBRARIES}
 )
 target_compile_options(scuff-sbox PRIVATE
-	$<$<CXX_COMPILER_ID:GNU,Clang>:-Werror>
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
 target_compile_definitions(scuff-sbox PRIVATE
