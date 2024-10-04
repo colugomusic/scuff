@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(scuff-test-host)
 include(../CPM.cmake)
-include_directories(BEFORE /usr/include)
 list (APPEND scuff-test-host_SRCFILES
 	src/main.cpp
 )
