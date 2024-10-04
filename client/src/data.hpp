@@ -35,7 +35,7 @@ struct return_buffers {
 
 struct sandbox_services {
 	bp::child proc;
-	return_buffers return_buffers;
+	scuff::return_buffers return_buffers;
 	std::atomic_int ref_count = 0;
 	sandbox_services(bp::child&& proc, std::string_view shmid)
 		: proc{std::move(proc)}
