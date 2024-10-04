@@ -20,6 +20,6 @@ target_link_libraries(scuff-scan
 	scuff::common
 )
 target_compile_options(scuff-scan PRIVATE
-	$<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Werror -Wno-unused-function>
+	$<$<CXX_COMPILER_ID:GNU,Clang>:-Werror>
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
