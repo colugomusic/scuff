@@ -17,8 +17,7 @@ target_link_libraries(scuff-test-host
 	${NAPPGUI_LIBRARIES}
 	scuff::client
 )
-target_compile_options(scuff-test-host PRIVATE
+target_compile_options(scuff-test-host BEFORE PRIVATE
+	$<$<CXX_COMPILER_ID:GNU>:-I/usr/include>
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
-set(CMAKE_C_FLAGS "-I/usr/include ${CMAKE_C_FLAGS}")
-set(CMAKE_CXX_FLAGS "-I/usr/include ${CMAKE_CXX_FLAGS}")
