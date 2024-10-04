@@ -18,6 +18,8 @@ target_link_libraries(scuff-test-host
 	scuff::client
 )
 target_compile_options(scuff-test-host BEFORE PRIVATE
-	$<$<CXX_COMPILER_ID:GNU>:-I/usr/include>
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
+)
+set_target_properties(scuff-test-host PROPERTIES
+	COMPILE_FLAGS "-I/usr/include"
 )
