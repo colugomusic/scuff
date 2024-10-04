@@ -12,6 +12,9 @@ nap_target_cxx_standard(scuff-test-host 20)
 target_include_directories(scuff-test-host PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/..
 )
+target_include_directories(scuff-test-host BEFORE PRIVATE
+	/usr/include
+)
 target_link_libraries(scuff-test-host
 	${NAPPGUI_LIBRARIES}
 	scuff::client
@@ -19,4 +22,3 @@ target_link_libraries(scuff-test-host
 target_compile_options(scuff-test-host PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
-include_directories(BEFORE /usr/include)
