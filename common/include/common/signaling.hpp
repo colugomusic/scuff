@@ -4,6 +4,7 @@
 #include <boost/interprocess/sync/interprocess_condition.hpp>
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
 #include <mutex>
+#include <stop_token>
 
 namespace bip = boost::interprocess;
 
