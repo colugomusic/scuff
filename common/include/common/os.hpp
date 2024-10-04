@@ -65,7 +65,7 @@ auto get_process_id() -> int {
 }
 
 template<typename... BoostArgs> [[nodiscard]] static
-auto start_child_process(const std::filesystem::path& exe, const std::vector<std::string>& args, BoostArgs&&... boost_args) -> bp::child {
+auto start_child_process(const std::string& exe, const std::vector<std::string>& args, BoostArgs&&... boost_args) -> bp::child {
 	return bp::child{exe, args, std::forward<BoostArgs>(boost_args)...};
 }
 
@@ -91,7 +91,7 @@ auto get_process_id() -> int {
 }
 
 template<typename... BoostArgs> [[nodiscard]] static
-auto start_child_process(const std::filesystem::path& exe, const std::vector<std::string>& args, BoostArgs&&... boost_args) -> bp::child {
+auto start_child_process(const std::string& exe, const std::vector<std::string>& args, BoostArgs&&... boost_args) -> bp::child {
 	return bp::child{exe, args, std::forward<BoostArgs>(boost_args)...};
 }
 
