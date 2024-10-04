@@ -9,10 +9,6 @@ set(NAPPGUI_ROOT_PATH ${nappgui_SOURCE_DIR})
 nap_generate_tools()
 nap_desktop_app(scuff-test-host osapp NRC_NONE)
 nap_target_cxx_standard(scuff-test-host 20)
-include_directories(
-	$<$<CXX_COMPILER_ID:GNU>:/usr/include>
-)
-set(CMAKE_INCLUDE_DIRECTORIES_BEFORE ON)
 target_include_directories(scuff-test-host PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/..
 )
@@ -21,6 +17,6 @@ target_link_libraries(scuff-test-host
 	scuff::client
 )
 target_compile_options(scuff-test-host PRIVATE
-	$<$<CXX_COMPILER_ID:GNU>:-isystem ${nappgui_SOURCE_DIR}/src/core>
+	$<$<CXX_COMPILER_ID:GNU>:-include /usr/include/strings.h>
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
