@@ -81,7 +81,7 @@ auto get_clap_window_api() -> const char* {
 
 namespace scuff::os {
 
-j[[nodiscard]] static
+[[nodiscard]] static
 auto get_process_id() -> int {
 	return getpid();
 }
