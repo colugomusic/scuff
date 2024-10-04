@@ -20,3 +20,5 @@ target_link_libraries(scuff-test-host
 target_compile_options(scuff-test-host PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
+set(CMAKE_C_FLAGS "-I/usr/include ${CMAKE_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "-I/usr/include ${CMAKE_CXX_FLAGS}")
