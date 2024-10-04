@@ -1,3 +1,4 @@
+#include "common/constants.hpp"
 #include "common/os.hpp"
 #include "common/util.hpp"
 #include <dlfcn.h>
