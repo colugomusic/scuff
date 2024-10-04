@@ -154,7 +154,7 @@ struct data {
 	std::jthread           poll_thread;
 	std::jthread           scan_thread;
 	report::msg::general_q reporter;
-	audio_sync<model>      model;
+	audio_sync<scuff::model> model;
 };
 
 static std::atomic_bool      initialized_ = false;

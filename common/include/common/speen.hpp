@@ -85,7 +85,7 @@ auto spin_wait_for_a_bit_with_backoff(PredFn pred) noexcept -> bool {
 	return false;
 }
 
-template <int ShortPauseCount, typename PredFn> [[nodiscard]]
+template <int ShortPauseCount, typename PredFn>
 auto spin_wait_forever_with_backoff(PredFn pred) noexcept -> void {
 	if (pred()) { return; }
 	for (int i = 0; i < ShortPauseCount; i++) {
