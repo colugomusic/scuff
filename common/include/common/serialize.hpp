@@ -16,7 +16,7 @@ template <typename T> concept is_variant = requires { typename std::variant_size
 template <typename T> auto deserialize(std::span<const std::byte>* bytes, T*) -> void;
 template <typename T> auto serialize(const T& value, std::vector<std::byte>* bytes) -> void;
 
-template <typename T> requires std::is_pod_v<T> static
+template <typename T> requires std::is_trivial_v<T> static
 auto deserialize(std::span<const std::byte>* bytes, T* out) -> void {
 	std::memcpy(out, bytes->data(), sizeof(T));
 	*bytes = bytes->subspan(sizeof(T));
