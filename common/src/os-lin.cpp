@@ -12,7 +12,7 @@ auto could_be_a_vst2_file(const std::filesystem::path& path) -> bool {
 }
 
 auto find_clap_entry(const std::filesystem::path& path) -> const clap_plugin_entry_t* {
-	if (auto handle = dlopen(path.u8string().c_str(), RTLD_LOCAL | RTLD_LAZY)) {
+	if (auto handle = dlopen((const char*)(path.u8string().c_str()), RTLD_LOCAL | RTLD_LAZY)) {
 		return reinterpret_cast<clap_plugin_entry_t*>(dlsym(handle, "clap_entry"));
 	}
 	return nullptr;
