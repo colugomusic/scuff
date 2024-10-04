@@ -17,5 +17,6 @@ target_link_libraries(scuff-test-host
 	scuff::client
 )
 target_compile_options(scuff-test-host PRIVATE
+	$<$<CXX_COMPILER_ID:GNU>:-isystem ${nappgui_SOURCE_DIR}/src/core>
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
