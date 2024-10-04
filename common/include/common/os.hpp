@@ -55,6 +55,8 @@ auto start_child_process(const std::string& exe, const std::vector<std::string>&
 #include <unistd.h>
 #include <boost/process.hpp>
 
+namespace bp = boost::process;
+
 namespace scuff::os {
 
 [[nodiscard]] static
@@ -78,6 +80,8 @@ auto get_clap_window_api() -> const char* {
 
 #include <unistd.h>
 #include <boost/process.hpp>
+
+namespace bp = boost::process;
 
 namespace scuff::os {
 
