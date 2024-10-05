@@ -24,7 +24,7 @@ CPMAddPackage(NAME nappgui     GITHUB_REPOSITORY colugomusic/nappgui_src      GI
 CPMAddPackage(Name rwq         GITHUB_REPOSITORY cameron314/readerwriterqueue GIT_TAG v1.0.6                                               )
 set(NAPPGUI_ROOT_PATH ${nappgui_SOURCE_DIR})
 nap_generate_tools()
-nap_desktop_app(scuff-sbox osapp NRC_EMBEDDED)
+nap_desktop_app(scuff-sbox "osapp" NRC_EMBEDDED)
 nap_target_cxx_standard(scuff-sbox 20)
 target_include_directories(scuff-sbox PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/..
