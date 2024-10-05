@@ -39,6 +39,9 @@ target_link_libraries(scuff-sbox
 	scuff::common
 	${NAPPGUI_LIBRARIES}
 )
+message("-----------------------")
+message(${NAPPGUI_LIBRARIES})
+message("-----------------------")
 target_compile_options(scuff-sbox PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
