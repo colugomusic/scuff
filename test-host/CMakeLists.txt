@@ -15,7 +15,6 @@ target_include_directories(scuff-test-host PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/..
 )
 target_link_libraries(scuff-test-host
-	${NAPPGUI_LIBRARIES}
 	scuff::client
 )
 target_compile_options(scuff-test-host PRIVATE
