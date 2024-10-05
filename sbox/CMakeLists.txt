@@ -14,7 +14,7 @@ list (APPEND scuff-sbox_SRCFILES
 	src/sbox-signaling.hpp
 	src/options.hpp
 )
-set(CPM_nappgui_SOURCE "Z:/dv/nappgui_src")
+#set(CPM_nappgui_SOURCE "Z:/dv/nappgui_src")
 set(SCUFF_SIGNALING_MODE "boost-ipc" CACHE STRING "Signalling mode")
 find_package(Boost REQUIRED COMPONENTS filesystem headers)
 CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES                           )
