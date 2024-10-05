@@ -18,6 +18,6 @@ target_link_libraries(scuff-test-host
 	${NAPPGUI_LIBRARIES}
 	scuff::client
 )
-target_compile_options(scuff-test-host BEFORE PRIVATE
+target_compile_options(scuff-test-host PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
