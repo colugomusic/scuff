@@ -79,7 +79,6 @@ struct group_services {
 	shm::group shm;
 	uint64_t epoch = 0;
 	std::atomic_int ref_count = 0;
-	std::atomic_bool total_active_sandboxes = 0; // TOODOO: set this
 };
 
 struct device_services {
@@ -117,6 +116,7 @@ struct group {
 	id::group id;
 	group_flags flags;
 	double sample_rate = 0.0f;
+	int total_active_sandboxes = 0;
 	immer::set<id::sandbox> sandboxes;
 	immer::map<id::device, id::device> cross_sbox_conns;
 	std::shared_ptr<group_services> services;
@@ -171,28 +171,10 @@ auto add_device_to_sandbox(model&& m, id::sandbox sbox, id::device dev) -> model
 }
 
 [[nodiscard]] static
-auto add_sandbox_to_group(model m, id::group group, id::sandbox sbox) -> model {
-	m.groups = m.groups.update_if_exists(group, [sbox](scuff::group g) {
-		g.sandboxes = g.sandboxes.insert(sbox);
-		return g;
-	});
-	return m;
-}
-
-[[nodiscard]] static
 auto remove_device_from_sandbox(model&& m, id::sandbox sbox, id::device dev) -> model {
 	m.sandboxes = m.sandboxes.update_if_exists(sbox, [dev](scuff::sandbox s) {
 		s.devices = s.devices.erase(dev);
 		return s;
-	});
-	return m;
-}
-
-[[nodiscard]] static
-auto remove_sandbox_from_group(model&& m, id::group group, id::sandbox sbox) -> model {
-	m.groups = m.groups.update_if_exists(group, [sbox](scuff::group g) {
-		g.sandboxes = g.sandboxes.erase(sbox);
-		return g;
 	});
 	return m;
 }

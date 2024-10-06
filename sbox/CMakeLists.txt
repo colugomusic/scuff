@@ -26,6 +26,7 @@ set(NAPPGUI_ROOT_PATH ${nappgui_SOURCE_DIR})
 nap_generate_tools()
 nap_desktop_app(scuff-sbox "osapp" NRC_EMBEDDED)
 nap_target_cxx_standard(scuff-sbox 20)
+add_executable(scuff::sbox ALIAS scuff-sbox)
 target_include_directories(scuff-sbox PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/..
 	${clap_SOURCE_DIR}/include

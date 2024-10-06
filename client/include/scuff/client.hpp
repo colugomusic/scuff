@@ -76,7 +76,7 @@ using on_scan_complete         = std::function<void()>;
 using on_scan_error            = std::function<void(std::string_view error)>;
 using on_scan_started          = std::function<void()>;
 using return_bytes             = std::function<void(const scuff::bytes& bytes)>;
-using return_device            = std::function<void(id::device dev, bool success)>;
+using return_device            = std::function<void(id::device dev, bool load_success)>;
 using return_double            = std::function<void(double value)>;
 using return_string            = std::function<void(std::string_view text)>;
 using return_void              = std::function<void(void)>;
@@ -237,6 +237,7 @@ auto get_ext_id(id::plugin plugin) -> ext::id::plugin;
 // Return the parameter info.
 auto get_info(id::device dev, idx::param param) -> param_info;
 
+// TOODOO: get rid of this
 // Get device metadata at column.
 auto get_metadata(id::device dev, size_t column) -> std::any;
 

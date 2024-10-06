@@ -288,12 +288,14 @@ struct receiver {
 				msg_size_ = 0;
 				bytes_remaining_ = sizeof(size_t);
 				buffer_.resize(bytes_remaining_);
+				continue;
 			}
-			else {
-				msg_size_ = *reinterpret_cast<size_t*>(buffer_.data());
-				bytes_remaining_ = msg_size_;
-				buffer_.resize(bytes_remaining_);
+			if (buffer_.empty()) {
+				return msgs;
 			}
+			msg_size_ = *reinterpret_cast<size_t*>(buffer_.data());
+			bytes_remaining_ = msg_size_;
+			buffer_.resize(bytes_remaining_);
 		}
 	}
 private:

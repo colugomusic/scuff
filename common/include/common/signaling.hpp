@@ -19,13 +19,13 @@ struct group_data {
 	std::atomic<uint64_t> epoch = 0;
 	// Each sandbox process decrements this
 	// counter when it is finished processing.
-	std::atomic<uint64_t> sandboxes_processing;
+	std::atomic<int> sandboxes_processing;
 	bip::interprocess_mutex mut;
 	bip::interprocess_condition cv;
 };
 
 static
-auto signal_sandbox_processing(signaling::group_data* data, size_t sandbox_count, uint64_t epoch) -> void {
+auto signal_sandbox_processing(signaling::group_data* data, int sandbox_count, uint64_t epoch) -> void {
 	// Set the sandbox counter
 	data->sandboxes_processing.store(sandbox_count);
 	auto lock = std::unique_lock{data->mut};
@@ -41,7 +41,7 @@ auto wait_for_all_sandboxes_done(signaling::group_data* data) -> bool {
 	 // catastrophic failure.
 	static constexpr auto MAX_WAIT_TIME = std::chrono::seconds{1};
 	auto done = [data]() -> bool {
-		return data->sandboxes_processing.load(std::memory_order_acquire) < 1;
+		return data->sandboxes_processing.load(std::memory_order_acquire) <= 0;
 	};
 	if (done()) {
 		return true;

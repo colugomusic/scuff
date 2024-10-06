@@ -111,10 +111,10 @@ auto read_zeros(const scuff::model& m, const output_devices& devices) -> void {
 }
 
 [[nodiscard]] static
-auto get_active_sandbox_count(const std::shared_ptr<const model>& audio, const scuff::group& group) -> int {
+auto get_active_sandbox_count(const model& m, const scuff::group& group) -> int {
 	int total = 0;
 	for (const auto sbox_id : group.sandboxes) {
-		const auto& sbox = audio->sandboxes.at(sbox_id);
+		const auto& sbox = m.sandboxes.at(sbox_id);
 		if (sbox.services->proc.running()) {
 			total++;
 		}
@@ -147,7 +147,7 @@ auto zero_inactive_device_outputs(const std::shared_ptr<const model>& audio, con
 
 [[nodiscard]] static
 auto do_sandbox_processing(const std::shared_ptr<const model>& audio, const scuff::group& group, uint64_t epoch) -> bool {
-	signaling::signal_sandbox_processing(&group.services->shm.data->signaling, group.services->total_active_sandboxes, epoch);
+	signaling::signal_sandbox_processing(&group.services->shm.data->signaling, group.total_active_sandboxes, epoch);
 	zero_inactive_device_outputs(audio, group);
 	return signaling::wait_for_all_sandboxes_done(&group.services->shm.data->signaling);
 }
@@ -239,6 +239,12 @@ auto process_message(const sandbox& sbox, const msg::out::msg& msg) -> void {
 static
 auto process_sandbox_messages(const sandbox& sbox) -> void {
 	if (!sbox.services->proc.running()) {
+		DATA_->model.update_publish([group_id = sbox.group](model&& m){
+			auto group = m.groups.at(group_id);
+			group.total_active_sandboxes = get_active_sandbox_count(m, group);
+			m.groups = m.groups.insert(group);
+			return m;
+		});
 		report::send(sbox, report::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
 		return;
 	}
@@ -1046,6 +1052,26 @@ auto do_scan(std::string_view scan_exe_path, scan_flags flags) -> void {
 }
 
 [[nodiscard]] static
+auto add_sandbox_to_group(model m, id::group group, id::sandbox sbox) -> model {
+	m.groups = m.groups.update_if_exists(group, [m, sbox](scuff::group g) {
+		g.sandboxes              = g.sandboxes.insert(sbox);
+		g.total_active_sandboxes = get_active_sandbox_count(m, g);
+		return g;
+	});
+	return m;
+}
+
+[[nodiscard]] static
+auto remove_sandbox_from_group(model&& m, id::group group, id::sandbox sbox) -> model {
+	m.groups = m.groups.update_if_exists(group, [m, sbox](scuff::group g) {
+		g.sandboxes              = g.sandboxes.erase(sbox);
+		g.total_active_sandboxes = get_active_sandbox_count(m, g);
+		return g;
+	});
+	return m;
+}
+
+[[nodiscard]] static
 auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::sandbox {
 	const auto sbox_id = id::sandbox{id_gen_++};
 	DATA_->model.update_publish([=](model&& m){
@@ -1059,14 +1085,15 @@ auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::s
 			auto proc                = bp::child{std::string{sbox_exe_path}, exe_args};
 			sbox.group               = {group_id};
 			sbox.services            = std::make_shared<sandbox_services>(std::move(proc), sandbox_shmid);
+			m.sandboxes              = m.sandboxes.insert(sbox);
 			m = add_sandbox_to_group(m, {group_id}, sbox.id);
 		}
 		catch (const std::exception& err) {
 			sbox.error = err.what();
+			m.sandboxes = m.sandboxes.insert(sbox);
 			report::send(report::msg::error{err.what()});
 			return m;
 		}
-		m.sandboxes = m.sandboxes.insert(sbox);
 		return m;
 	});
 	if (DATA_->model.read().sandboxes.count(sbox_id) == 0) {
