@@ -86,17 +86,12 @@ namespace scuff::sbox::main {
 auto create() -> sbox::app* {
 	const auto app = new sbox::app;
 	app->options = cmdline::get_options();
-	if (app->options.instance_id.empty()) {
-		log_printf("Missing required option --instance-id");
-		osapp_finish();
-		return app;
-	}
-	if (!app->options.group_id) {
+	if (app->options.group_shmid.empty()) {
 		log_printf("Missing required option --group");
 		osapp_finish();
 		return app;
 	}
-	if (!app->options.sbox_id) {
+	if (app->options.sbox_shmid.empty()) {
 		log_printf("Missing required option --sandbox");
 		osapp_finish();
 		return app;
@@ -106,10 +101,10 @@ auto create() -> sbox::app* {
 		osapp_finish();
 		return app;
 	}
-	const auto shmid_sbox  = shm::sandbox::make_id(app->options.instance_id, app->options.sbox_id);
-	const auto shmid_group = shm::group::make_id(app->options.instance_id, app->options.group_id);
-	app->shm_group      = shm::group{bip::open_only, shmid_group.c_str()};
-	app->shm_sbox       = shm::sandbox{bip::open_only, shmid_sbox.c_str()};
+	while (!IsDebuggerPresent()) { Sleep(0); }
+	__debugbreak();
+	app->shm_group      = shm::group{bip::open_only, app->options.group_shmid};
+	app->shm_sbox       = shm::sandbox{bip::open_only, app->options.sbox_shmid};
 	app->audio_thread   = std::jthread{audio::thread_proc, app};
 	app->main_thread_id = std::this_thread::get_id();
 	scuff::os::set_realtime_priority(&app->audio_thread);

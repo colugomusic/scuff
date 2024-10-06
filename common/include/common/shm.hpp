@@ -81,6 +81,9 @@ struct msg_buffer {
 	auto read(std::byte* bytes, size_t count) -> size_t {
 		const auto lock = std::unique_lock{mutex_};
 		count = std::min(count, bytes_.size());
+		if (count <= 0) {
+			return 0;
+		}
 		std::copy(bytes_.begin(), bytes_.begin() + count, bytes);
 		bytes_.erase(bytes_.begin(), bytes_.begin() + count);
 		return count;
@@ -181,8 +184,12 @@ struct sandbox : segment {
 	sandbox() = default;
 	sandbox(bip::create_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id, SEGMENT_SIZE} { create(); }
 	sandbox(bip::open_only_t, std::string_view id) : segment{id} { open(); }
-	[[nodiscard]] auto send_bytes(const std::byte* bytes, size_t count) const -> size_t { return data->msgs_out.write(bytes, count); }
-	[[nodiscard]] auto receive_bytes(std::byte* bytes, size_t count) const -> size_t { return data->msgs_in.read(bytes, count); }
+	[[nodiscard]] auto send_bytes(const std::byte* bytes, size_t count) const -> size_t {
+		return data->msgs_out.write(bytes, count);
+	}
+	[[nodiscard]] auto receive_bytes(std::byte* bytes, size_t count) const -> size_t {
+		return data->msgs_in.read(bytes, count);
+	}
 	[[nodiscard]] static
 	auto make_id(std::string_view instance_id, id::sandbox sbox_id) -> std::string {
 		return std::format("{}+sbox+{}", instance_id, sbox_id.value);

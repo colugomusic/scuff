@@ -36,16 +36,12 @@ auto get_options() -> sbox::options {
 	const auto argc = osapp_argc();
 	for (uint32_t i = 0; i < argc; i++) {
 		char value[ARGV_BUFFER_SIZE];
-		if (get_option("--instance-id", &i, value)) {
-			options.instance_id = value;
-			continue;
-		}
 		if (get_option("--group", &i, value)) {
-			options.group_id.value = std::stoi(value);
+			options.group_shmid = value;
 			continue;
 		}
 		if (get_option("--sandbox", &i, value)) {
-			options.sbox_id.value = std::stoi(value);
+			options.sbox_shmid = value;
 			continue;
 		}
 		if (get_option("--sr", &i, value)) {

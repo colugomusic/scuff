@@ -107,6 +107,7 @@ struct device {
 struct sandbox {
 	id::sandbox id;
 	id::group group;
+	bool is_active = false;
 	immer::box<std::string> error;
 	immer::set<id::device> devices;
 	std::shared_ptr<sandbox_services> services;
@@ -153,6 +154,7 @@ struct data {
 	std::string            instance_id;
 	std::jthread           poll_thread;
 	std::jthread           scan_thread;
+	std::atomic_bool       scanning = false;
 	report::msg::general_q reporter;
 	audio_sync<scuff::model> model;
 };

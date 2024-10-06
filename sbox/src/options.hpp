@@ -6,9 +6,8 @@
 namespace scuff::sbox {
 
 struct options {
-	std::string instance_id;
-	id::group group_id;
-	id::sandbox sbox_id;
+	std::string group_shmid;
+	std::string sbox_shmid;
 	double sample_rate = 0.0;
 };
 

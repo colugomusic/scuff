@@ -285,15 +285,16 @@ struct receiver {
 				MsgT msg;
 				deserialize(buffer_, &msg);
 				msgs.push_back(msg);
-				msg_size_ = 0;
+				msg_size_        = 0;
 				bytes_remaining_ = sizeof(size_t);
 				buffer_.resize(bytes_remaining_);
 				continue;
 			}
-			if (buffer_.empty()) {
+			buffer_.resize(sizeof(size_t));
+			if (receive(buffer_.data(), sizeof(size_t)) < sizeof(size_t)) {
 				return msgs;
 			}
-			msg_size_ = *reinterpret_cast<size_t*>(buffer_.data());
+			msg_size_        = *reinterpret_cast<size_t*>(buffer_.data());
 			bytes_remaining_ = msg_size_;
 			buffer_.resize(bytes_remaining_);
 		}

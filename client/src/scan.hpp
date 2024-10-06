@@ -107,6 +107,17 @@ auto read_broken_plugfile(const nlohmann::json& j) -> void {
 	report::send(report::msg::plugfile_broken{pf.id});
 }
 
+[[nodiscard]] static
+auto find_plugfile_from_path(std::string_view path) -> id::plugfile {
+	const auto m         = DATA_->model.read();
+	for (const auto& pf : m.plugfiles) {
+		if (pf.path == path) {
+			return pf.id;
+		}
+	}
+	return id::plugfile{};
+}
+
 static
 auto read_broken_plugin(const nlohmann::json& j) -> void {
 	const std::string plugfile_type = j["plugfile-type"];
@@ -119,13 +130,15 @@ auto read_broken_plugin(const nlohmann::json& j) -> void {
 		const std::string url     = j["url"];
 		const std::string vendor  = j["vendor"];
 		const std::string version = j["version"];
+		const std::string path    = j["path"];
 		scuff::plugin plugin;
-		plugin.id      = id::plugin{id_gen_++};
-		plugin.ext_id  = ext::id::plugin{id};
-		plugin.name    = name;
-		plugin.type    = type;
-		plugin.vendor  = vendor;
-		plugin.version = version;
+		plugin.id       = id::plugin{id_gen_++};
+		plugin.ext_id   = ext::id::plugin{id};
+		plugin.name     = name;
+		plugin.type     = type;
+		plugin.vendor   = vendor;
+		plugin.version  = version;
+		plugin.plugfile = find_plugfile_from_path(path);
 		DATA_->model.update([plugin](model&& m){
 			m.plugins = m.plugins.insert(plugin);
 			return m;
@@ -179,6 +192,7 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 			const std::string url                   = j["url"];
 			const std::string vendor                = j["vendor"];
 			const std::string version               = j["version"];
+			const std::string path                  = j["path"];
 			const std::vector<std::string> features = j["features"];
 			const bool has_gui                      = j["has-gui"];
 			const bool has_params                   = j["has-params"];
@@ -190,6 +204,7 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 			plugin.vendor        = vendor;
 			plugin.version       = version;
 			plugin.clap_features = to_immer(features);
+			plugin.plugfile      = find_plugfile_from_path(path);
 			DATA_->model.update([plugin](model&& m){
 				m.plugins = m.plugins.insert(plugin);
 				return m;
@@ -267,6 +282,7 @@ auto scan_system_for_installed_plugins(scan_::scanner* scanner) -> void {
 
 static
 auto thread(std::stop_token token, std::string scan_exe_path, scan_flags flags) -> void {
+	struct scope_exit_t { ~scope_exit_t() { DATA_->scanning = false; } } scope_exit;
 	scan_::scanner scanner;
 	scanner.exe_path = scan_exe_path;
 	scanner.flags    = flags;
@@ -278,13 +294,9 @@ auto thread(std::stop_token token, std::string scan_exe_path, scan_flags flags) 
 	report::send(report::msg::scan_complete{});
 }
 
-[[nodiscard]] static
-auto is_running() -> bool {
-	return DATA_->scan_thread.joinable();
-}
-
 static
 auto start(std::string_view scan_exe_path, scan_flags flags) -> void {
+	DATA_->scanning    = true;
 	DATA_->scan_thread = std::jthread{scan_::thread, std::string{scan_exe_path}, flags};
 }
 
