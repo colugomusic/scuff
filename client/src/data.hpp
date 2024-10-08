@@ -49,15 +49,15 @@ struct sandbox_services {
 		return shm_.id();
 	}
 	[[nodiscard]]
-	auto receive_msgs() -> std::vector<msg::out::msg> {
+	auto receive_msgs_from_sandbox() -> std::vector<msg::out::msg> {
 		auto fn = [&shm = shm_](std::byte* bytes, size_t count) -> size_t {
-			return shm.receive_bytes(bytes, count);
+			return shm.receive_bytes_from_sandbox(bytes, count);
 		};
 		return msg_receiver_.receive(fn);
 	}
-	auto send_msgs() -> void {
+	auto send_msgs_to_sandbox() -> void {
 		auto fn = [&shm = shm_](const std::byte* bytes, size_t count) -> size_t {
-			return shm.send_bytes(bytes, count);
+			return shm.send_bytes_to_sandbox(bytes, count);
 		};
 		msg_sender_.send(fn);
 	}

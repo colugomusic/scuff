@@ -68,11 +68,13 @@ auto deactivate(sbox::app* app, const sbox::device& dev) -> void {
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::clean_shutdown& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::clean_shutdown:\n");
 	// TOODOO: msg::in::clean_shutdown
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::close_all_editors:\n");
 	const auto devices = app->model.read().devices;
 	for (const auto& dev : devices) {
 		if (dev.ui.window) {
@@ -83,6 +85,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors&
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::crash& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::device_crash:\n");
 	// Crash the process. This is used for testing the
 	// way the client responds to sandbox crashes.
 	double* x{}; 
@@ -91,6 +94,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::crash& msg) -> voi
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::device_create:\n");
 	try {
 		if (msg.type == plugin_type::clap) {
 			clap::main::create_device(app, {msg.dev_id}, msg.plugfile_path, msg.plugin_id, msg.callback);
@@ -112,6 +116,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::device_connect:\n");
 	app->model.update_publish([msg](model&& m){
 		auto in_dev_ptr  = m.devices.find({msg.in_dev_id});
 		auto out_dev_ptr = m.devices.find({msg.out_dev_id});
@@ -131,6 +136,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& ms
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::device_disconnect:\n");
 	app->model.update_publish([msg](model&& m){
 		const auto in_dev_ptr  = m.devices.find({msg.in_dev_id});
 		const auto out_dev_ptr = m.devices.find({msg.out_dev_id});
@@ -154,6 +160,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect&
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::device_erase:\n");
 	app->model.update_publish([msg](model&& m){
 		const auto dev_id  = id::device{msg.dev_id};
 		const auto devices = m.devices;
@@ -175,6 +182,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg)
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_hide& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::device_gui_hide:\n");
 	const auto devices = app->model.read().devices;
 	const auto device  = devices.at({msg.dev_id});
 	window_hide(device.ui.window);
@@ -182,6 +190,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_hide& m
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::device_gui_show:\n");
 	const auto devices = app->model.read().devices;
 	const auto device  = devices.at({msg.dev_id});
 	window_show(device.ui.window);
@@ -189,6 +198,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& m
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_load& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::device_load:\n");
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
@@ -202,6 +212,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_load& msg) 
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_save& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::device_save:\n");
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
@@ -217,11 +228,13 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_save& msg) 
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_set_render_mode& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::device_set_render_mode:\n");
 	// TOODOO: msg::in::device_set_render_mode
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::event& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::event:\n");
 	const auto dev_id  = id::device{msg.dev_id};
 	const auto devices = app->model.read().devices;
 	const auto dev     = devices.at(dev_id);
@@ -230,6 +243,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::event& msg) -> voi
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::get_param_value:\n");
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
@@ -242,6 +256,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value& m
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value_text& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::get_param_value_text:\n");
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
@@ -253,6 +268,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value_te
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::activate& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::activate: %f\n", msg.sr);
 	const auto m = app->model.read();
 	for (const auto& dev : m.devices) {
 		activate(app, dev, msg.sr);
@@ -261,6 +277,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::activate& msg) -> 
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::deactivate& msg) -> void {
+	debug_ui::log(&app->debug_ui, "msg::in::deactivate:\n");
 	const auto m = app->model.read();
 	for (const auto& dev : m.devices) {
 		deactivate(app, dev);
@@ -276,13 +293,14 @@ static
 auto process_messages(sbox::app* app) -> void {
 	try {
 		const auto receive = [app](std::byte* bytes, size_t count) -> size_t {
-			return app->shm_sbox.receive_bytes(bytes, count);
+			return app->shm_sbox.receive_bytes_from_client(bytes, count);
 		};
 		const auto send = [app](const std::byte* bytes, size_t count) -> size_t {
-			return app->shm_sbox.send_bytes(bytes, count);
+			return app->shm_sbox.send_bytes_to_client(bytes, count);
 		};
 		const auto input_msgs = app->msg_receiver.receive(receive);
 		for (const auto& msg : input_msgs) {
+			log_printf("got here\n");
 			process_input_msg(app, msg);
 		}
 		app->msg_sender.send(send);

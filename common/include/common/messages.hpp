@@ -273,6 +273,10 @@ struct receiver {
 		std::vector<MsgT> msgs;
 		for (;;) {
 			if (bytes_remaining_ > 0) {
+				while (!IsDebuggerPresent()) {
+					Sleep(1);
+				}
+				__debugbreak();
 				const auto bytes_to_get = bytes_remaining_;
 				const auto offset       = buffer_.size() - bytes_remaining_;
 				const auto bytes_got    = receive(buffer_.data() + offset, bytes_to_get);
@@ -282,6 +286,10 @@ struct receiver {
 				}
 			}
 			if (msg_size_ > 0) {
+				while (!IsDebuggerPresent()) {
+					Sleep(1);
+				}
+				__debugbreak();
 				MsgT msg;
 				deserialize(buffer_, &msg);
 				msgs.push_back(msg);
@@ -294,6 +302,10 @@ struct receiver {
 			if (receive(buffer_.data(), sizeof(size_t)) < sizeof(size_t)) {
 				return msgs;
 			}
+			while (!IsDebuggerPresent()) {
+				Sleep(1);
+			}
+			__debugbreak();
 			msg_size_        = *reinterpret_cast<size_t*>(buffer_.data());
 			bytes_remaining_ = msg_size_;
 			buffer_.resize(bytes_remaining_);

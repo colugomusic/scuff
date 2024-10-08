@@ -253,8 +253,8 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 		report::send(sbox, report::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
 		return;
 	}
-	sbox.services->send_msgs();
-	const auto msgs = sbox.services->receive_msgs();
+	sbox.services->send_msgs_to_sandbox();
+	const auto msgs = sbox.services->receive_msgs_from_sandbox();
 	for (const auto& msg : msgs) {
 		process_message(sbox, msg);
 	}
@@ -1226,6 +1226,8 @@ auto shutdown() -> void {
 	if (!scuff::initialized_) { return; }
 	scuff::DATA_->poll_thread.request_stop();
 	scuff::DATA_->poll_thread.join();
+	scuff::DATA_->scan_thread.request_stop();
+	scuff::DATA_->scan_thread.join();
 	scuff::DATA_.reset();
 	scuff::initialized_ = false;
 }

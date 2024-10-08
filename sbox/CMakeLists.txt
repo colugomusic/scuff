@@ -9,6 +9,7 @@ list (APPEND scuff-sbox_SRCFILES
 	src/clap_data.hpp
 	src/cmdline.hpp
 	src/data.hpp
+	src/debug_ui.hpp
 	src/main.cpp
 	src/msg-proc.hpp
 	src/sbox-signaling.hpp

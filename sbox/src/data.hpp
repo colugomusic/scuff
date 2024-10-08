@@ -5,6 +5,7 @@
 #include "common/plugin_type.hpp"
 #include "common/events.hpp"
 #include "common/slot_buffer.hpp"
+#include "debug_ui.hpp"
 #include "options.hpp"
 #include <boost/static_string.hpp>
 #include <cs_plain_guarded.h>
@@ -75,6 +76,7 @@ struct app {
 	std::shared_ptr<const sbox::model> audio_model;
 	std::atomic<uint64_t>              uid = 0;
 	std::atomic_bool                   schedule_terminate = false;
+	sbox::debug_ui::model              debug_ui;
 };
 
 } // scuff::sbox

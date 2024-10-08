@@ -184,11 +184,17 @@ struct sandbox : segment {
 	sandbox() = default;
 	sandbox(bip::create_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id, SEGMENT_SIZE} { create(); }
 	sandbox(bip::open_only_t, std::string_view id) : segment{id} { open(); }
-	[[nodiscard]] auto send_bytes(const std::byte* bytes, size_t count) const -> size_t {
+	[[nodiscard]] auto send_bytes_to_client(const std::byte* bytes, size_t count) const -> size_t {
 		return data->msgs_out.write(bytes, count);
 	}
-	[[nodiscard]] auto receive_bytes(std::byte* bytes, size_t count) const -> size_t {
+	[[nodiscard]] auto send_bytes_to_sandbox(const std::byte* bytes, size_t count) const -> size_t {
+		return data->msgs_in.write(bytes, count);
+	}
+	[[nodiscard]] auto receive_bytes_from_client(std::byte* bytes, size_t count) const -> size_t {
 		return data->msgs_in.read(bytes, count);
+	}
+	[[nodiscard]] auto receive_bytes_from_sandbox(std::byte* bytes, size_t count) const -> size_t {
+		return data->msgs_out.read(bytes, count);
 	}
 	[[nodiscard]] static
 	auto make_id(std::string_view instance_id, id::sandbox sbox_id) -> std::string {

@@ -101,18 +101,27 @@ auto create() -> sbox::app* {
 		osapp_finish();
 		return app;
 	}
-	while (!IsDebuggerPresent()) { Sleep(0); }
-	__debugbreak();
-	app->shm_group      = shm::group{bip::open_only, app->options.group_shmid};
-	app->shm_sbox       = shm::sandbox{bip::open_only, app->options.sbox_shmid};
-	app->audio_thread   = std::jthread{audio::thread_proc, app};
-	app->main_thread_id = std::this_thread::get_id();
-	scuff::os::set_realtime_priority(&app->audio_thread);
+	try {
+		debug_ui::create(&app->debug_ui);
+		debug_ui::log(&app->debug_ui, "group: %s\n", app->options.group_shmid.c_str());
+		debug_ui::log(&app->debug_ui, "sandbox: %s\n", app->options.sbox_shmid.c_str());
+		debug_ui::log(&app->debug_ui, "sample rate: %f\n", app->options.sample_rate);
+		app->shm_group      = shm::group{bip::open_only, app->options.group_shmid};
+		app->shm_sbox       = shm::sandbox{bip::open_only, app->options.sbox_shmid};
+		app->audio_thread   = std::jthread{audio::thread_proc, app};
+		app->main_thread_id = std::this_thread::get_id();
+		scuff::os::set_realtime_priority(&app->audio_thread);
+	}
+	catch (const std::exception& err) {
+		log_printf("Error: %s", err.what());
+		osapp_finish();
+	}
 	return app;
 }
 
 static
 auto destroy(sbox::app** app) -> void {
+	debug_ui::destroy(&(*app)->debug_ui);
 	if ((*app)->audio_thread.joinable()) {
 		(*app)->audio_thread.request_stop();
 		(*app)->audio_thread.join();
@@ -122,10 +131,12 @@ auto destroy(sbox::app** app) -> void {
 
 static
 auto update(sbox::app* app, const real64_t prtime, const real64_t ctime) -> void {
-	main::process_messages(app);
-	clap::main::update(app);
-	if (app->schedule_terminate) {
-		osapp_finish();
+	if (app) {
+		main::process_messages(app);
+		clap::main::update(app);
+		if (app->schedule_terminate) {
+			osapp_finish();
+		}
 	}
 }
 
