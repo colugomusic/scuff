@@ -157,6 +157,11 @@ auto do_sandbox_processing(const std::shared_ptr<const model>& audio, const scuf
 }
 
 static
+auto process_message_(const sandbox& sbox, const msg::out::confirm_activated& msg) -> void {
+	// TOODOO:
+}
+
+static
 auto process_message_(const sandbox& sbox, const msg::out::return_created_device& msg) -> void {
 	DATA_->model.update_publish([sbox, msg](model&& m){
 		const auto return_fn = sbox.services->return_buffers.devices.take(msg.callback);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "clap.hpp"
+#include "audio.hpp"
 #include <format>
 #include <immer/vector_transient.hpp>
 
@@ -57,6 +57,8 @@ auto activate(sbox::app* app, const sbox::device& dev, double sr) -> void {
 		}
 		return;
 	}
+	audio::start(app);
+	app->msg_sender.enqueue(msg::out::confirm_activated{});
 }
 
 static

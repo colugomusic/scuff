@@ -50,20 +50,29 @@ auto wait_for_all_sandboxes_done(signaling::group_data* data) -> bool {
 	return data->cv.wait_for(lock, MAX_WAIT_TIME, done);
 }
 
+enum class wait_for_signaled_result {
+	signaled,
+	stop_requested,
+	timeout
+};
+
 [[nodiscard]] static
-auto wait_for_signaled(signaling::group_data* data, std::stop_token stop_token, uint64_t* local_epoch) -> bool {
+auto wait_for_signaled(signaling::group_data* data, std::stop_token stop_token, uint64_t* local_epoch) -> wait_for_signaled_result {
+	static constexpr auto TIMEOUT = std::chrono::seconds(1);
 	uint64_t epoch = 0;
 	auto wait_condition = [data, &epoch, local_epoch, &stop_token]{
 		epoch = data->epoch;
 		return epoch > *local_epoch || stop_token.stop_requested();
 	};
 	auto lock = std::unique_lock{data->mut};
-	data->cv.wait(lock, wait_condition);
+	if (!data->cv.wait_for(lock, TIMEOUT, wait_condition)) {
+		return wait_for_signaled_result::timeout;
+	}
 	if (epoch > *local_epoch) {
 		*local_epoch = epoch;
-		return true;
+		return wait_for_signaled_result::signaled;
 	}
-	return false;
+	return wait_for_signaled_result::stop_requested;;
 }
 
 static

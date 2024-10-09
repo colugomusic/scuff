@@ -4,6 +4,7 @@
 #include "common/audio_sync.hpp"
 #include "common/plugin_type.hpp"
 #include "common/events.hpp"
+#include "common/shm.hpp"
 #include "common/slot_buffer.hpp"
 #include "debug_ui.hpp"
 #include "options.hpp"

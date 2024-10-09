@@ -1,7 +1,10 @@
 #pragma once
 
 #include "common/events.hpp"
+#include <boost/container/static_vector.hpp>
 #include <clap/events.h>
+
+namespace bc = boost::container;
 
 namespace scuff::events::clap {
 
