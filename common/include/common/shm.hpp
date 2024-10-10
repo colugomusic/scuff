@@ -17,6 +17,7 @@
 #include <string>
 
 namespace bc  = boost::container;
+namespace bip = boost::interprocess;
 
 namespace scuff::shm {
 

@@ -30,6 +30,10 @@ auto create() -> sbox::app* {
 		return app;
 	}
 	try {
+		//while (!IsDebuggerPresent()) {
+		//	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		//}
+		//__debugbreak();
 		debug_ui::create(&app->debug_ui);
 		log(app, "group: %s", app->options.group_shmid.c_str());
 		log(app, "sandbox: %s", app->options.sbox_shmid.c_str());
