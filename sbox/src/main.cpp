@@ -2,6 +2,7 @@
 #include "common/os.hpp"
 #include "common/visit.hpp"
 #include "cmdline.hpp"
+#include "log.hpp"
 #include "msg-proc.hpp"
 #include <iostream>
 #include <optional>
@@ -14,31 +15,31 @@ auto create() -> sbox::app* {
 	const auto app = new sbox::app;
 	app->options = cmdline::get_options();
 	if (app->options.group_shmid.empty()) {
-		log_printf("Missing required option --group");
+		log(app, "Missing required option --group");
 		osapp_finish();
 		return app;
 	}
 	if (app->options.sbox_shmid.empty()) {
-		log_printf("Missing required option --sandbox");
+		log(app, "Missing required option --sandbox");
 		osapp_finish();
 		return app;
 	}
 	if (app->options.sample_rate < 1) {
-		log_printf("Missing required option --sr");
+		log(app, "Missing required option --sr");
 		osapp_finish();
 		return app;
 	}
 	try {
 		debug_ui::create(&app->debug_ui);
-		debug_ui::log(&app->debug_ui, "group: %s\n", app->options.group_shmid.c_str());
-		debug_ui::log(&app->debug_ui, "sandbox: %s\n", app->options.sbox_shmid.c_str());
-		debug_ui::log(&app->debug_ui, "sample rate: %f\n", app->options.sample_rate);
+		log(app, "group: %s", app->options.group_shmid.c_str());
+		log(app, "sandbox: %s", app->options.sbox_shmid.c_str());
+		log(app, "sample rate: %f", app->options.sample_rate);
 		app->shm_group      = shm::group{bip::open_only, app->options.group_shmid};
 		app->shm_sbox       = shm::sandbox{bip::open_only, app->options.sbox_shmid};
 		app->main_thread_id = std::this_thread::get_id();
 	}
 	catch (const std::exception& err) {
-		log_printf("Error: %s", err.what());
+		log(app, "Error: %s", err.what());
 		osapp_finish();
 	}
 	return app;

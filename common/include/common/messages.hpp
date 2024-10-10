@@ -286,8 +286,7 @@ struct receiver {
 				deserialize(buffer_, &msg);
 				msgs.push_back(msg);
 				msg_size_        = 0;
-				bytes_remaining_ = sizeof(size_t);
-				buffer_.resize(bytes_remaining_);
+				bytes_remaining_ = 0;
 				continue;
 			}
 			buffer_.resize(sizeof(size_t));

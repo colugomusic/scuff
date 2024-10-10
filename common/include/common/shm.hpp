@@ -216,8 +216,8 @@ struct device : segment {
 	device(bip::create_only_t, std::string_view id) : segment{id, SEGMENT_SIZE} { create(); }
 	device(bip::open_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id} { open(); }
 	[[nodiscard]] static
-	auto make_id(std::string_view instance_id, id::device dev_id) -> std::string {
-		return std::format("{}+dev+{}", instance_id, dev_id.value);
+	auto make_id(std::string_view sbox_shmid, id::device dev_id) -> std::string {
+		return std::format("{}+dev+{}", sbox_shmid, dev_id.value);
 	}
 private:
 	auto create() -> void {

@@ -104,10 +104,18 @@ struct device {
 	std::shared_ptr<device_services> services;
 };
 
+struct sandbox_flags {
+	enum e {
+		launched         = 1 << 0,
+		confirmed_active = 1 << 1,
+	};
+	int value = 0;
+};
+
 struct sandbox {
 	id::sandbox id;
 	id::group group;
-	bool is_active = false;
+	sandbox_flags flags;
 	immer::box<std::string> error;
 	immer::set<id::device> devices;
 	std::shared_ptr<sandbox_services> services;

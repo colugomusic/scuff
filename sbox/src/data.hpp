@@ -65,7 +65,6 @@ struct model {
 };
 
 struct app {
-	std::string                        instance_id;
 	sbox::options                      options;
 	shm::group                         shm_group;
 	shm::sandbox                       shm_sbox;
@@ -77,6 +76,7 @@ struct app {
 	std::shared_ptr<const sbox::model> audio_model;
 	std::atomic<uint64_t>              uid = 0;
 	std::atomic_bool                   schedule_terminate = false;
+	std::mutex                         log_mutex;
 	sbox::debug_ui::model              debug_ui;
 };
 

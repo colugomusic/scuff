@@ -14,7 +14,7 @@ list (APPEND src
 	src/report-types.hpp
 	src/scan.hpp
 )
-set(SCUFF_SIGNALING_MODE "boost-ipc" CACHE STRING "Signalling mode")
+set(SCUFF_SIGNALING_MODE "speen" CACHE STRING "Signalling mode")
 set(immer_BUILD_TESTS OFF)
 set(immer_BUILD_EXAMPLES OFF)
 set(immer_BUILD_DOCS OFF)
@@ -53,4 +53,5 @@ target_compile_options(scuff-client PRIVATE
 )
 target_compile_definitions(scuff-client PRIVATE
 	$<$<STREQUAL:${SCUFF_SIGNALING_MODE},boost-ipc>:SCUFF_SIGNALING_MODE_BOOST_IPC>
+	$<$<STREQUAL:${SCUFF_SIGNALING_MODE},speen>:SCUFF_SIGNALING_MODE_SPEEN>
 )

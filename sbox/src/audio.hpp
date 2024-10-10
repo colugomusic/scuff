@@ -3,6 +3,7 @@
 #include "clap.hpp"
 #include "common/shm.hpp"
 #include "data.hpp"
+#include "log.hpp"
 
 namespace scuff::sbox::audio {
 
@@ -58,13 +59,16 @@ auto do_processing(sbox::app* app) -> void {
 static
 auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 	try {
+		debug_log(app, "Audio thread has started.");
 		uint64_t local_epoch = 0;
 		for (;;) {
 			auto result = signaling::wait_for_signaled(&app->shm_group.data->signaling, stop_token, &local_epoch);
 			if (result == signaling::wait_for_signaled_result::stop_requested) {
+				debug_log(app, "Audio thread is stopping because it was requested to.");
 				return;
 			}
 			if (result == signaling::wait_for_signaled_result::timeout) {
+				debug_log(app, "Audio thread is stopping because the client took too long to signal it.");
 				app->schedule_terminate = true;
 				return;
 			}
@@ -74,6 +78,7 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 		}
 	}
 	catch (const std::exception& err) {
+		debug_log(app, "Audio thread is stopping because there was a fatal error: %s", err.what());
 		app->msg_sender.enqueue(msg::out::report_fatal_error{err.what()});
 		app->schedule_terminate = true;
 	}
@@ -81,8 +86,19 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 
 static
 auto start(sbox::app* app) -> void {
+	if (app->audio_thread.joinable()) {
+		return;
+	}
 	app->audio_thread = std::jthread{audio::thread_proc, app};
 	scuff::os::set_realtime_priority(&app->audio_thread);
+}
+
+static
+auto stop(sbox::app* app) -> void {
+	if (app->audio_thread.joinable()) {
+		app->audio_thread.request_stop();
+		app->audio_thread.join();
+	}
 }
 
 } // scuff::sbox::audio

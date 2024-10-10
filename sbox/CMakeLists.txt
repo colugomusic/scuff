@@ -11,13 +11,13 @@ list (APPEND scuff-sbox_SRCFILES
 	src/cmdline.hpp
 	src/data.hpp
 	src/debug_ui.hpp
+	src/log.hpp
 	src/main.cpp
 	src/msg-proc.hpp
 	src/sbox-signaling.hpp
 	src/options.hpp
 )
-#set(CPM_nappgui_SOURCE "Z:/dv/nappgui_src")
-set(SCUFF_SIGNALING_MODE "boost-ipc" CACHE STRING "Signalling mode")
+set(SCUFF_SIGNALING_MODE "speen" CACHE STRING "Signalling mode")
 find_package(Boost REQUIRED COMPONENTS filesystem headers)
 CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES                           )
 CPMAddPackage(NAME ent         GITHUB_REPOSITORY colugomusic/ent              GIT_TAG main                                                 )
@@ -46,4 +46,5 @@ target_compile_options(scuff-sbox PRIVATE
 )
 target_compile_definitions(scuff-sbox PRIVATE
 	$<$<STREQUAL:${SCUFF_SIGNALING_MODE},boost-ipc>:SCUFF_SIGNALING_MODE_BOOST_IPC>
+	$<$<STREQUAL:${SCUFF_SIGNALING_MODE},speen>:SCUFF_SIGNALING_MODE_SPEEN>
 )

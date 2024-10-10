@@ -115,11 +115,21 @@ auto read_zeros(const scuff::model& m, const output_devices& devices) -> void {
 }
 
 [[nodiscard]] static
+auto confirmed_active(const sandbox& sbox) -> bool {
+	return sbox.flags.value & sandbox_flags::confirmed_active;
+}
+
+[[nodiscard]] static
+auto launched(const sandbox& sbox) -> bool {
+	return sbox.flags.value & sandbox_flags::launched;
+}
+
+[[nodiscard]] static
 auto get_active_sandbox_count(const model& m, const scuff::group& group) -> int {
 	int total = 0;
 	for (const auto sbox_id : group.sandboxes) {
 		const auto& sbox = m.sandboxes.at(sbox_id);
-		if (sbox.services->proc.running()) {
+		if (launched(sbox) && confirmed_active(sbox) && sbox.services->proc.running()) {
 			total++;
 		}
 	}
@@ -158,7 +168,14 @@ auto do_sandbox_processing(const std::shared_ptr<const model>& audio, const scuf
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::confirm_activated& msg) -> void {
-	// TOODOO:
+	DATA_->model.update_publish([sbox = sbox](model&& m) mutable {
+		sbox.flags.value |= sandbox_flags::confirmed_active;
+		m.sandboxes       = m.sandboxes.insert(sbox);
+		auto group                   = m.groups.at(sbox.group);
+		group.total_active_sandboxes = get_active_sandbox_count(m, group);
+		m.groups                     = m.groups.insert(group);
+		return m;
+	});
 }
 
 static
@@ -168,7 +185,8 @@ auto process_message_(const sandbox& sbox, const msg::out::return_created_device
 		if (!msg.ports_shmid.empty()) {
 			// The sandbox succeeded in creating the remote device.
 			auto device             = m.devices.at({msg.dev_id});
-			const auto device_shmid = shm::device::make_id(DATA_->instance_id, {msg.dev_id});
+			const auto& sbox        = m.sandboxes.at(device.sbox);
+			const auto device_shmid = shm::device::make_id(sbox.services->get_shmid(), {msg.dev_id});
 			device.services->shm    = shm::device{bip::open_only, shm::segment::remove_when_done, device_shmid};
 			m.devices = m.devices.insert(device);
 			return_fn({msg.dev_id}, true);
@@ -246,22 +264,24 @@ auto process_message(const sandbox& sbox, const msg::out::msg& msg) -> void {
 
 static
 auto process_sandbox_messages(const sandbox& sbox) -> void {
-	if (sbox.is_active && !sbox.services->proc.running()) {
+	if (launched(sbox) && !sbox.services->proc.running()) {
 		DATA_->model.update_publish([sbox = sbox](model&& m) mutable {
-			auto group = m.groups.at(sbox.group);
+			sbox.flags.value &= ~sandbox_flags::launched;
+			m.sandboxes       = m.sandboxes.insert(sbox);
+			auto group                   = m.groups.at(sbox.group);
 			group.total_active_sandboxes = get_active_sandbox_count(m, group);
-			sbox.is_active = false;
-			m.groups = m.groups.insert(group);
-			m.sandboxes = m.sandboxes.insert(sbox);
+			m.groups                     = m.groups.insert(group);
 			return m;
 		});
 		report::send(sbox, report::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
 		return;
 	}
-	sbox.services->send_msgs_to_sandbox();
-	const auto msgs = sbox.services->receive_msgs_from_sandbox();
-	for (const auto& msg : msgs) {
-		process_message(sbox, msg);
+	if (sbox.services) {
+		sbox.services->send_msgs_to_sandbox();
+		const auto msgs = sbox.services->receive_msgs_from_sandbox();
+		for (const auto& msg : msgs) {
+			process_message(sbox, msg);
+		}
 	}
 }
 
@@ -381,7 +401,7 @@ auto poll_thread(std::stop_token stop_token) -> void {
 
 [[nodiscard]] static
 auto is_running(const sandbox& sbox) -> bool {
-	return sbox.services->proc.running();
+	return sbox.services && sbox.services->proc.running();
 }
 
 [[nodiscard]] static
@@ -1102,9 +1122,9 @@ auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::s
 			const auto sandbox_shmid = shm::sandbox::make_id(DATA_->instance_id, sbox.id);
 			const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, group.sample_rate);
 			auto proc                = bp::child{std::string{sbox_exe_path}, exe_args};
+			sbox.flags.value        |= sandbox_flags::launched;
 			sbox.group               = {group_id};
 			sbox.services            = std::make_shared<sandbox_services>(std::move(proc), sandbox_shmid);
-			sbox.is_active           = true;
 			m.sandboxes              = m.sandboxes.insert(sbox);
 			m = add_sandbox_to_group(m, {group_id}, sbox.id);
 		}

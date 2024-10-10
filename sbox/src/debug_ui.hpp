@@ -1,6 +1,8 @@
 #pragma once
 
 #include <nappgui.h>
+#include <format>
+#include <string_view>
 
 namespace scuff::sbox::debug_ui {
 
@@ -40,8 +42,8 @@ auto destroy(model* m) -> void {
 }
 
 template <typename... Args> static
-auto log(model* m, std::string_view msg, Args&&... args) -> void {
-	textview_printf(m->log_view, msg.data(), std::forward<Args>(args)...);
+auto log(model* m, std::string_view fmt, Args&&... args) -> void {
+	textview_printf(m->log_view, std::format("{}\n", fmt).data(), std::forward<Args>(args)...);
 }
 
 #else
@@ -49,7 +51,7 @@ auto log(model* m, std::string_view msg, Args&&... args) -> void {
 struct model {};
 static auto create(model* m) -> void {}
 static auto destroy(model* m) -> void {}
-template <typename... Args> static auto log(model* m, std::string_view msg, Args&&... args) -> void {}
+template <typename... Args> static auto log(model* m, std::string_view fmt, Args&&... args) -> void {}
 
 #endif
 
