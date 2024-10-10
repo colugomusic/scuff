@@ -111,6 +111,8 @@ auto notify_sandbox_finished_processing(signaling::group_data* data) -> void {
 
 #elif defined(SCUFF_SIGNALING_MODE_SPEEN) //////////////////////////////////////////////////
 
+// Busy-waiting with yield(), good performance but very high CPU usage so unusable.
+
 namespace scuff::signaling {
 
 struct group_data {
