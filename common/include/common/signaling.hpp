@@ -124,10 +124,12 @@ struct group_data {
 
 static
 auto signal_sandbox_processing(signaling::group_data* data, int sandbox_count, uint64_t epoch) -> void {
-	// Set the sandbox counter
-	data->sandboxes_processing.store(sandbox_count);
-	// Set the epoch.
-	data->epoch.store(epoch, std::memory_order_release);
+	if (sandbox_count > 0) {
+		// Set the sandbox counter
+		data->sandboxes_processing.store(sandbox_count);
+		// Set the epoch.
+		data->epoch.store(epoch, std::memory_order_release);
+	}
 }
 
 [[nodiscard]] static
@@ -138,8 +140,8 @@ auto wait_for_all_sandboxes_done(signaling::group_data* data) -> bool {
 	if (done()) {
 		return true;
 	}
-	for (int i = 0; i < 100; i++) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	for (int i = 0; i < 10000000; i++) {
+		std::this_thread::yield();
 		if (done()) {
 			return true;
 		}
@@ -154,8 +156,8 @@ auto wait_for_signaled(signaling::group_data* data, std::stop_token stop_token, 
 		epoch = data->epoch;
 		return epoch > *local_epoch || stop_token.stop_requested();
 	};
-	for (int i = 0; i < 100; i++) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	for (int i = 0; i < 10000000; i++) {
+		std::this_thread::yield();
 		if (wait_condition()) {
 			break;
 		}

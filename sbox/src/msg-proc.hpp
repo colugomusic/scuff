@@ -58,7 +58,6 @@ auto activate(sbox::app* app, const sbox::device& dev, double sr) -> void {
 		}
 		return;
 	}
-	app->msg_sender.enqueue(msg::out::confirm_activated{});
 }
 
 static
@@ -276,6 +275,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::activate& msg) -> 
 	for (const auto& dev : m.devices) {
 		activate(app, dev, msg.sr);
 	}
+	app->msg_sender.enqueue(msg::out::confirm_activated{});
 }
 
 static
