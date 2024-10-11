@@ -51,6 +51,7 @@ auto create() -> sbox::app* {
 
 static
 auto destroy(sbox::app** app) -> void {
+	debug_log(*app, "scuff::sbox::main::destroy");
 	debug_ui::destroy(&(*app)->debug_ui);
 	if ((*app)->audio_thread.joinable()) {
 		(*app)->audio_thread.request_stop();

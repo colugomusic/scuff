@@ -135,7 +135,7 @@ struct sandbox_data {
 };
 
 struct group_data {
-	signaling::group_data signaling;
+	signaling::group_shm_data signaling;
 };
 
 template <typename T> static
@@ -163,6 +163,7 @@ auto require_shm_obj(bip::managed_shared_memory* seg, std::string_view id, size_
 struct group : segment {
 	static constexpr auto SEGMENT_SIZE = sizeof(group_data) + SEGMENT_OVERHEAD;
 	group_data* data = nullptr;
+	signaling::group_local_data signaling;
 	group() = default;
 	group(bip::create_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id, SEGMENT_SIZE} { create(); }
 	group(bip::open_only_t, std::string_view id) : segment{id} { open(); }
@@ -172,10 +173,12 @@ struct group : segment {
 	}
 private:
 	auto create() -> void {
-		data = seg().construct<group_data>(OBJECT_DATA)();
+		data      = seg().construct<group_data>(OBJECT_DATA)();
+		signaling = signaling::group_local_data{signaling::client{&data->signaling}};
 	}
 	auto open() -> void {
 		require_shm_obj<group_data>(&seg(), OBJECT_DATA, 1, &data);
+		signaling = signaling::group_local_data{signaling::sandbox{&data->signaling}};
 	}
 };
 

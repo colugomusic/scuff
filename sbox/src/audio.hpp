@@ -52,7 +52,7 @@ auto do_processing(sbox::app* app) -> void {
 		const auto dev = app->audio_model->devices.at(dev_id);
 		do_processing(*app, dev);
 	}
-	signaling::notify_sandbox_finished_processing(&app->shm_group.data->signaling);
+	signaling::notify_sandbox_finished_processing(&app->shm_group.data->signaling, &app->shm_group.signaling);
 	app->audio_model.reset();
 }
 
@@ -62,7 +62,7 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 		debug_log(app, "Audio thread has started.");
 		uint64_t local_epoch = 0;
 		for (;;) {
-			auto result = signaling::wait_for_signaled(&app->shm_group.data->signaling, stop_token, &local_epoch);
+			auto result = signaling::wait_for_signaled(&app->shm_group.data->signaling, &app->shm_group.signaling, stop_token, &local_epoch);
 			if (result == signaling::wait_for_signaled_result::stop_requested) {
 				debug_log(app, "Audio thread is stopping because it was requested to.");
 				return;
@@ -86,6 +86,7 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 
 static
 auto start(sbox::app* app) -> void {
+	debug_log(app, "audio::start()");
 	if (app->audio_thread.joinable()) {
 		return;
 	}
@@ -95,6 +96,7 @@ auto start(sbox::app* app) -> void {
 
 static
 auto stop(sbox::app* app) -> void {
+	debug_log(app, "audio::stop()");
 	if (app->audio_thread.joinable()) {
 		app->audio_thread.request_stop();
 		app->audio_thread.join();

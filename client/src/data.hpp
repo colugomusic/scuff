@@ -77,6 +77,7 @@ struct group_flags {
 struct group_services {
 	report::msg::group_q reporter;
 	shm::group shm;
+	signaling::group_local_data signaling;
 	uint64_t epoch = 0;
 	std::atomic_int ref_count = 0;
 };

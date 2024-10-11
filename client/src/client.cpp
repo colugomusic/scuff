@@ -161,9 +161,11 @@ auto zero_inactive_device_outputs(const std::shared_ptr<const model>& audio, con
 
 [[nodiscard]] static
 auto do_sandbox_processing(const std::shared_ptr<const model>& audio, const scuff::group& group, uint64_t epoch) -> bool {
-	signaling::signal_sandbox_processing(&group.services->shm.data->signaling, group.total_active_sandboxes, epoch);
+	if (!signaling::signal_sandbox_processing(&group.services->shm.data->signaling, &group.services->shm.signaling, group.total_active_sandboxes, epoch)) {
+		return false;
+	}
 	zero_inactive_device_outputs(audio, group);
-	return signaling::wait_for_all_sandboxes_done(&group.services->shm.data->signaling);
+	return signaling::wait_for_all_sandboxes_done(&group.services->shm.data->signaling, &group.services->shm.signaling);
 }
 
 static
