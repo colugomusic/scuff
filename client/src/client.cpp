@@ -51,9 +51,10 @@ auto write_entry_ports(const scuff::model& m, const input_devices& devices) -> v
 	for (size_t i = 0; i < devices.size(); i++) {
 		const auto& item  = devices[i];
 		const auto dev_id = id::device{item.dev};
-		const auto& dev   = m.devices.at(dev_id);
-		write_audio(dev, item.audio_writers);
-		write_events(dev, item.event_writer);
+		if (const auto dev = m.devices.find(dev_id)) {
+			write_audio(*dev, item.audio_writers);
+			write_events(*dev, item.event_writer);
+		}
 	}
 }
 
@@ -67,7 +68,7 @@ auto read_audio(const scuff::device& dev, const audio_readers& readers) -> void 
 }
 
 static
-auto read_zeros(const scuff::device& dev, const audio_readers& readers) -> void {
+auto read_zeros(const audio_readers& readers) -> void {
 	std::array<float, CHANNEL_COUNT * VECTOR_SIZE> zeros = {0.0f};
 	for (size_t j = 0; j < readers.size(); j++) {
 		const auto& reader = readers[j];
@@ -98,19 +99,17 @@ auto read_exit_ports(const scuff::model& m, const output_devices& devices) -> vo
 	for (size_t i = 0; i < devices.size(); i++) {
 		const auto& item  = devices[i];
 		const auto dev_id = id::device{item.dev};
-		const auto& dev   = m.devices.at(dev_id);
-		read_audio(dev, item.audio_readers);
-		read_events(dev, item.event_reader);
+		if (const auto dev = m.devices.find(dev_id)) {
+			read_audio(*dev, item.audio_readers);
+			read_events(*dev, item.event_reader);
+		}
 	}
 }
 
 static
 auto read_zeros(const scuff::model& m, const output_devices& devices) -> void {
 	for (size_t i = 0; i < devices.size(); i++) {
-		const auto& item  = devices[i];
-		const auto dev_id = id::device{item.dev};
-		const auto& dev   = m.devices.at(dev_id);
-		read_zeros(dev, item.audio_readers);
+		read_zeros(devices[i].audio_readers);
 	}
 }
 
@@ -165,7 +164,21 @@ auto do_sandbox_processing(const std::shared_ptr<const model>& audio, const scuf
 		return false;
 	}
 	zero_inactive_device_outputs(audio, group);
-	return signaling::wait_for_all_sandboxes_done(&group.services->shm.data->signaling, &group.services->shm.signaling);
+	if (group.total_active_sandboxes <= 0) {
+		return true;
+	}
+	const auto result = signaling::wait_for_all_sandboxes_done(&group.services->shm.data->signaling, &group.services->shm.signaling);
+	switch (result) {
+		case signaling::wait_for_sandboxes_done_result::done: {
+			return true;
+		}
+		case signaling::wait_for_sandboxes_done_result::not_responding: {
+			return false;
+		}
+		default: {
+			throw std::runtime_error("Unexpected wait_for_sandboxes_done_result value.");
+		}
+	}
 }
 
 static
@@ -275,6 +288,9 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 			m.groups                     = m.groups.insert(group);
 			return m;
 		});
+		const auto m      = DATA_->model.read();
+		const auto& group = m.groups.at(sbox.group);
+		signaling::notify_sandbox_crashed(&group.services->shm.data->signaling, &group.services->shm.signaling);
 		report::send(sbox, report::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
 		return;
 	}
@@ -689,11 +705,6 @@ auto get_features(id::plugin plugin) -> std::vector<std::string> {
 }
 
 [[nodiscard]] static
-auto get_name(id::device dev) -> const char* {
-	return DATA_->model.read().devices.at(dev).name->c_str();
-}
-
-[[nodiscard]] static
 auto get_param_count(id::device dev) -> size_t {
 	const auto m       = DATA_->model.read();
 	const auto& device = m.devices.at(dev);
@@ -931,24 +942,6 @@ auto get_error(id::plugin plugin) -> const char* {
 [[nodiscard]] static
 auto get_ext_id(id::plugin plugin) -> ext::id::plugin {
 	return DATA_->model.read().plugins.at(plugin).ext_id;
-}
-
-[[nodiscard]] static
-auto get_metadata(id::device dev_id, size_t column) -> std::any {
-	const auto m    = DATA_->model.read();
-	const auto& dev = m.devices.at(dev_id);
-	return dev.metadata.at(column);
-}
-
-auto set_metadata(id::device dev_id, size_t column, std::any data) -> void {
-	DATA_->model.update([=](model&& m){
-		auto dev = m.devices.at(dev_id);
-		while (dev.metadata.size() <= column) {
-			dev.metadata = dev.metadata.push_back({});
-		}
-		dev.metadata = dev.metadata.set(column, std::move(data));
-		return m;
-	});
 }
 
 [[nodiscard]] static
@@ -1200,18 +1193,21 @@ auto ref(id::sandbox id) -> void {
 }
 
 auto unref(id::device id) -> void {
+	if (!DATA_) { return; }
 	if (--DATA_->model.read().devices.at(id).services->ref_count <= 0) {
 		erase(id);
 	}
 }
 
 auto unref(id::group id) -> void {
+	if (!DATA_) { return; }
 	if (--DATA_->model.read().groups.at(id).services->ref_count <= 0) {
 		erase(id);
 	}
 }
 
 auto unref(id::sandbox id) -> void {
+	if (!DATA_) { return; }
 	if (--DATA_->model.read().sandboxes.at(id).services->ref_count <= 0) {
 		erase(id);
 	}
@@ -1339,11 +1335,6 @@ auto get_error(id::device device) -> const char* {
 	catch (const std::exception& err) { report::send(api_error(err.what())); return ""; }
 }
 
-auto get_name(id::device dev) -> const char* {
-	try                               { return impl::get_name(dev); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return ""; }
-}
-
 auto get_param_count(id::device dev) -> size_t {
 	try                               { return impl::get_param_count(dev); }
 	catch (const std::exception& err) { report::send(api_error(err.what())); return 0; }
@@ -1411,11 +1402,6 @@ auto get_features(id::plugin plugin) -> std::vector<std::string> {
 
 auto get_info(id::device dev, idx::param param) -> param_info {
 	try                               { return impl::get_info({dev}, param); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
-}
-
-auto get_metadata(id::device dev, size_t column) -> std::any {
-	try                               { return impl::get_metadata(dev, column); }
 	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
 }
 
@@ -1541,11 +1527,6 @@ auto save_async(id::device dev, return_bytes fn) -> void {
 
 auto scan(std::string_view scan_exe_path, scan_flags flags) -> void {
 	try                               { impl::do_scan(scan_exe_path, flags); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
-}
-
-auto set_metadata(id::device dev, size_t column, std::any data) -> void {
-	try                               { impl::set_metadata(dev, column, data); }
 	catch (const std::exception& err) { report::send(api_error(err.what())); }
 }
 

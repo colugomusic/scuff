@@ -196,6 +196,10 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 			const std::vector<std::string> features = j["features"];
 			const bool has_gui                      = j["has-gui"];
 			const bool has_params                   = j["has-params"];
+			// TOODOO: Check if plugin id is already known.
+			// If it is, check if the version is higher.
+			// If it is, update the existing plugin entry.
+			// If it isn't ignore this plugin and emit a warning.
 			scuff::plugin plugin;
 			plugin.id            = id::plugin{id_gen_++};
 			plugin.ext_id        = ext::id::plugin{id};

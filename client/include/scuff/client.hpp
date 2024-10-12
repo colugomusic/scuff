@@ -6,7 +6,6 @@
 #include "common/plugin_type.hpp"
 #include "common/render_mode.hpp"
 #include "common/types.hpp"
-#include <any>
 #include <functional>
 #include <string_view>
 #include <vector>
@@ -237,10 +236,6 @@ auto get_ext_id(id::plugin plugin) -> ext::id::plugin;
 // Return the parameter info.
 auto get_info(id::device dev, idx::param param) -> param_info;
 
-// TOODOO: get rid of this
-// Get device metadata at column.
-auto get_metadata(id::device dev, size_t column) -> std::any;
-
 // Returns the plugin name
 auto get_name(id::plugin plugin) -> const char*;
 
@@ -267,9 +262,6 @@ auto get_error(id::device dev) -> const char*;
 // Not sure how this will look for VST yet.
 // This might change.
 auto get_features(id::plugin plugin) -> std::vector<std::string>;
-
-// Return the device name.
-auto get_name(id::device dev) -> const char*;
 
 // Return the number of parameters for the given device.
 auto get_param_count(id::device dev) -> size_t;
@@ -343,9 +335,6 @@ auto save_async(id::device dev, return_bytes fn) -> void;
 // Scan the system for plugins. If the scanner process is already
 // running, it is restarted.
 auto scan(std::string_view scan_exe_path, scan_flags flags) -> void;
-
-// Set device metadata at column.
-auto set_metadata(id::device dev, size_t column, std::any data) -> void;
 
 // Set the render mode for the given group.
 auto set_render_mode(id::group group, render_mode mode) -> void;

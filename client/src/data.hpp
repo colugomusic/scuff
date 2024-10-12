@@ -99,9 +99,7 @@ struct device {
 	plugin_type type;
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
-	immer::box<std::string> name;
 	immer::box<scuff::bytes> last_saved_state;
-	immer::vector<std::any> metadata;
 	std::shared_ptr<device_services> services;
 };
 

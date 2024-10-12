@@ -63,17 +63,23 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 		uint64_t local_epoch = 0;
 		for (;;) {
 			auto result = signaling::wait_for_signaled(&app->shm_group.data->signaling, &app->shm_group.signaling, stop_token, &local_epoch);
-			if (result == signaling::wait_for_signaled_result::stop_requested) {
-				debug_log(app, "Audio thread is stopping because it was requested to.");
-				return;
-			}
-			if (result == signaling::wait_for_signaled_result::timeout) {
-				debug_log(app, "Audio thread is stopping because the client took too long to signal it.");
-				app->schedule_terminate = true;
-				return;
-			}
-			if (result == signaling::wait_for_signaled_result::signaled) {
-				do_processing(app);
+			switch (result) {
+				case signaling::wait_for_signaled_result::not_responding: {
+					debug_log(app, "Audio thread is stopping because the client is not responding.");
+					app->schedule_terminate = true;
+					return;
+				}
+				case signaling::wait_for_signaled_result::signaled: {
+					do_processing(app);
+					break;
+				}
+				case signaling::wait_for_signaled_result::stop_requested: {
+					debug_log(app, "Audio thread is stopping because it was requested to.");
+					return;
+				}
+				default: {
+					throw std::runtime_error("Unknown result from signaling::wait_for_signaled()");
+				}
 			}
 		}
 	}

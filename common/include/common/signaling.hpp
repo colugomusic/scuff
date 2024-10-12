@@ -11,17 +11,24 @@ namespace scuff::signaling {
 struct group_shm_data;
 struct group_local_data;
 
+enum class wait_for_sandboxes_done_result {
+	done,
+	not_responding,
+};
+
 enum class wait_for_signaled_result {
 	signaled,
+	not_responding,
 	stop_requested,
-	timeout
 };
+
+              static auto notify_sandbox_crashed(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void;
 
 // Signal all sandboxes in the group to begin processing.
 [[nodiscard]] static auto signal_sandbox_processing(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data, int sandbox_count, uint64_t epoch) -> bool;
 
 // Wait for all sandboxes in the group to finish processing.
-[[nodiscard]] static auto wait_for_all_sandboxes_done(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> bool;
+[[nodiscard]] static auto wait_for_all_sandboxes_done(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> wait_for_sandboxes_done_result;
 
 // The sandbox process calls this to wait for a signal from the client that it should begin processing.
 [[nodiscard]] static auto wait_for_signaled(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data, std::stop_token stop_token, uint64_t* local_epoch) -> wait_for_signaled_result;
@@ -149,39 +156,39 @@ struct group_local_data {
 	}
 };
 
+static
+auto notify_sandbox_crashed(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void {
+	SetEvent(local_data->signal_client_event.h);
+}
+
 [[nodiscard]] static
 auto signal_sandbox_processing(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data, int sandbox_count, uint64_t epoch) -> bool {
 	// Set the sandbox counter
 	shm_data->sandboxes_processing.store(sandbox_count);
 	// Set the epoch.
-	shm_data->epoch.store(epoch);//, std::memory_order_release);
+	shm_data->epoch.store(epoch);
 	// Signal sandboxes to start processing.
 	return SetEvent(local_data->signal_sandboxes_event.h);
 }
 
 [[nodiscard]] static
-auto wait_for_all_sandboxes_done(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> bool {
-	 // the sandboxes not completing their work within 1 second is a
-	 // catastrophic failure.
-	//static constexpr auto TIMEOUT_MS = 1000;
-	//auto done = [shm_data]() -> bool {
-	//	return shm_data->sandboxes_processing.load(std::memory_order_acquire) <= 0;
-	//};
-	//if (done()) {
-	//	return true;
-	//}
-	return WaitForSingleObject(local_data->signal_client_event.h, INFINITE) == WAIT_OBJECT_0;
+auto wait_for_all_sandboxes_done(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> wait_for_sandboxes_done_result {
+	const auto result = WaitForSingleObject(local_data->signal_client_event.h, INFINITE);
+	if (result != WAIT_OBJECT_0) {
+		throw std::runtime_error{"wait_for_all_sandboxes_done: WaitForSingleObject failed"};
+	}
+	if (shm_data->sandboxes_processing.load(std::memory_order_acquire) > 0) {
+		return wait_for_sandboxes_done_result::not_responding;
+	}
+	return wait_for_sandboxes_done_result::done;
 }
 
 [[nodiscard]] static
 auto wait_for_signaled(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data, std::stop_token stop_token, uint64_t* local_epoch) -> wait_for_signaled_result {
 	//static constexpr auto TIMEOUT_MS = 1000;
 	const auto result = WaitForSingleObject(local_data->signal_sandboxes_event.h, INFINITE);
-	if (result == WAIT_FAILED) {
-		throw std::runtime_error{"WaitForSingleObject failed"};
-	}
-	if (result == WAIT_TIMEOUT) {
-		return wait_for_signaled_result::timeout;
+	if (result != WAIT_OBJECT_0) {
+		throw std::runtime_error{"wait_for_signaled: WaitForSingleObject failed"};
 	}
 	if (stop_token.stop_requested()) {
 		return wait_for_signaled_result::stop_requested;
@@ -190,7 +197,7 @@ auto wait_for_signaled(signaling::group_shm_data* shm_data, signaling::group_loc
 		*local_epoch = shm_data->epoch;
 		return wait_for_signaled_result::signaled;
 	}
-	throw std::runtime_error{"Unexpected WaitForSingleObject result"};
+	return wait_for_signaled_result::not_responding;
 }
 
 static
