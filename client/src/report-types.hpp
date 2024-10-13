@@ -14,7 +14,7 @@ namespace msg {
 
 struct device_error          { id::device dev; std::string error; };
 struct device_params_changed { id::device dev; };
-struct error				 { std::string error; };
+struct error                 { std::string error; };
 struct plugfile_broken       { id::plugfile plugfile; };
 struct plugfile_scanned      { id::plugfile plugfile; };
 struct plugin_broken         { id::plugin plugin; };
@@ -27,6 +27,7 @@ struct sbox_warning          { id::sandbox sbox; std::string warning; };
 struct scan_complete         { };
 struct scan_error            { std::string error; };
 struct scan_started          { };
+struct scan_warning          { std::string warning; };
 
 using general = std::variant<
 	error,
@@ -36,7 +37,8 @@ using general = std::variant<
 	plugin_scanned,
 	scan_complete,
 	scan_error,
-	scan_started
+	scan_started,
+	scan_warning
 >;
 
 using group = std::variant<

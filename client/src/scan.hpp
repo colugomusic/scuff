@@ -180,6 +180,20 @@ auto to_immer(const std::vector<std::string>& strings) -> immer::vector<std::str
 	return t.persistent();
 }
 
+[[nodiscard]] static
+auto find_existing_plugin(const scuff::model& m, std::string_view id) -> std::optional<scuff::plugin> {
+	for (const auto& plugin : m.plugins) {
+		if (plugin.ext_id.value == id) {
+			return plugin;
+		}
+	}
+	return std::nullopt;
+}
+
+[[nodiscard]] static
+auto is_this_plugin_version_higher_than_the_existing_one(const scuff::model& m, std::string_view id, std::string_view version) -> bool {
+}
+
 static
 auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 	const std::string plugfile_type = j["plugfile-type"];
@@ -196,10 +210,17 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 			const std::vector<std::string> features = j["features"];
 			const bool has_gui                      = j["has-gui"];
 			const bool has_params                   = j["has-params"];
-			// TOODOO: Check if plugin id is already known.
+			// Check if plugin id is already known.
 			// If it is, check if the version is higher.
 			// If it is, update the existing plugin entry.
-			// If it isn't ignore this plugin and emit a warning.
+			// If it isn't ignore this plugin.
+			const auto m = DATA_->model.read();
+			if (const auto existing_plugin = find_existing_plugin(m, id)) {
+				report::send(report::msg::scan_warning{std::format("The scanner found multiple plugins with the same id: '{}'", id)});
+				if (version.compare(existing_plugin->version) <= 0) {
+					return;
+				}
+			}
 			scuff::plugin plugin;
 			plugin.id            = id::plugin{id_gen_++};
 			plugin.ext_id        = ext::id::plugin{id};

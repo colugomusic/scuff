@@ -330,6 +330,7 @@ static auto return_report_msg_(const report::msg::plugin_scanned& msg, const gen
 static auto return_report_msg_(const report::msg::scan_complete& msg, const general_reporter& reporter) -> void { reporter.on_scan_complete(); }
 static auto return_report_msg_(const report::msg::scan_error& msg, const general_reporter& reporter) -> void { reporter.on_scan_error(msg.error); }
 static auto return_report_msg_(const report::msg::scan_started& msg, const general_reporter& reporter) -> void { reporter.on_scan_started(); }
+static auto return_report_msg_(const report::msg::scan_warning& msg, const general_reporter& reporter) -> void { reporter.on_scan_warning(msg.warning); }
 static auto return_report_msg_(const report::msg::device_error& msg, const group_reporter& reporter) -> void { reporter.on_device_error(msg.dev, msg.error); }
 static auto return_report_msg_(const report::msg::device_params_changed& msg, const group_reporter& reporter) -> void { reporter.on_device_params_changed(msg.dev); }
 static auto return_report_msg_(const report::msg::error& msg, const group_reporter& reporter) -> void { reporter.on_error(msg.error); }

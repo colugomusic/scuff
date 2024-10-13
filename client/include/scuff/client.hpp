@@ -74,6 +74,7 @@ using on_sbox_warning          = std::function<void(id::sandbox sbox, std::strin
 using on_scan_complete         = std::function<void()>;
 using on_scan_error            = std::function<void(std::string_view error)>;
 using on_scan_started          = std::function<void()>;
+using on_scan_warning          = std::function<void(std::string_view warning)>;
 using return_bytes             = std::function<void(const scuff::bytes& bytes)>;
 using return_device            = std::function<void(id::device dev, bool load_success)>;
 using return_double            = std::function<void(double value)>;
@@ -89,6 +90,7 @@ struct general_reporter {
 	scuff::on_scan_complete on_scan_complete;
 	scuff::on_scan_error on_scan_error;
 	scuff::on_scan_started on_scan_started;
+	scuff::on_scan_warning on_scan_warning;
 };
 
 struct group_reporter {
