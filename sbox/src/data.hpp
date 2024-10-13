@@ -64,6 +64,8 @@ struct model {
 	immer::vector<id::device> device_processing_order;
 };
 
+using heartbeat_time = std::chrono::time_point<std::chrono::steady_clock>;
+
 struct app {
 	sbox::options                      options;
 	shm::group                         shm_group;
@@ -78,6 +80,8 @@ struct app {
 	std::atomic_bool                   schedule_terminate = false;
 	std::mutex                         log_mutex;
 	sbox::debug_ui::model              debug_ui;
+	bool                               active = false;
+	heartbeat_time                     last_heartbeat;
 };
 
 } // scuff::sbox

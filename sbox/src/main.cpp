@@ -54,16 +54,32 @@ auto destroy(sbox::app** app) -> void {
 	debug_log(*app, "scuff::sbox::main::destroy");
 	debug_ui::destroy(&(*app)->debug_ui);
 	if ((*app)->audio_thread.joinable()) {
+		auto& group_shm = (*app)->shm_group;
 		(*app)->audio_thread.request_stop();
+		signaling::sandbox_signal_self(&group_shm.data->signaling, &group_shm.signaling);
 		(*app)->audio_thread.join();
 	}
 	delete *app;
 }
 
 static
+auto check_heartbeat(sbox::app* app) -> void {
+	if (app->active) {
+		const auto now  = std::chrono::steady_clock::now();
+		const auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - app->last_heartbeat).count();
+		if (diff > HEARTBEAT_TIMEOUT_MS) {
+			log(app, "Heartbeat timeout");
+			app->msg_sender.enqueue(scuff::msg::out::report_error{"Heartbeat timeout"});
+			osapp_finish();
+		}
+	}
+}
+
+static
 auto update(sbox::app* app, const real64_t prtime, const real64_t ctime) -> void {
 	if (app) {
 		main::process_messages(app);
+		check_heartbeat(app);
 		clap::main::update(app);
 		if (app->schedule_terminate) {
 			osapp_finish();

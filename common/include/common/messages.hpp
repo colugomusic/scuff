@@ -16,11 +16,13 @@ namespace scuff::msg::in {
 
 // These messages are sent from the client to a sandbox process.
 
+struct activate               { double sr; };
 struct clean_shutdown         {};
 struct close_all_editors      {};
 struct crash                  {}; // Tell the sandbox process to crash. Important for testing.
-struct device_create          { id::device::type dev_id; plugin_type type; std::string plugfile_path; std::string plugin_id; size_t callback; };
+struct deactivate             {};
 struct device_connect         { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
+struct device_create          { id::device::type dev_id; plugin_type type; std::string plugfile_path; std::string plugin_id; size_t callback; };
 struct device_disconnect      { int64_t out_dev_id; size_t out_port; int64_t in_dev_id; size_t in_port; };
 struct device_erase           { id::device::type dev_id; };
 struct device_gui_hide        { id::device::type dev_id; };
@@ -31,8 +33,7 @@ struct device_set_render_mode { id::device::type dev_id; render_mode mode; };
 struct event                  { id::device::type dev_id; scuff::event event; };
 struct get_param_value        { id::device::type dev_id; size_t param_idx; size_t callback; };
 struct get_param_value_text   { id::device::type dev_id; size_t param_idx; double value; size_t callback; };
-struct activate               { double sr; };
-struct deactivate             {};
+struct heartbeat              {}; // Sandbox shuts itself down if this isn't received within a certain time.
 
 using msg = std::variant<
 	activate,
@@ -40,8 +41,8 @@ using msg = std::variant<
 	close_all_editors,
 	crash,
 	deactivate,
-	device_create,
 	device_connect,
+	device_create,
 	device_disconnect,
 	device_erase,
 	device_gui_hide,
@@ -51,7 +52,8 @@ using msg = std::variant<
 	device_set_render_mode,
 	event,
 	get_param_value,
-	get_param_value_text
+	get_param_value_text,
+	heartbeat
 >;
 
 } // scuff::msg::in

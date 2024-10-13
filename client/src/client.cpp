@@ -290,7 +290,7 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 		});
 		const auto m      = DATA_->model.read();
 		const auto& group = m.groups.at(sbox.group);
-		signaling::notify_sandbox_crashed(&group.services->shm.data->signaling, &group.services->shm.signaling);
+		signaling::client_signal_self(&group.services->shm.data->signaling, &group.services->shm.signaling);
 		report::send(sbox, report::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
 		return;
 	}
@@ -401,30 +401,46 @@ auto save_dirty_device_states() -> void {
 	}
 }
 
+[[nodiscard]] static
+auto is_running(const sandbox& sbox) -> bool {
+	return sbox.services && launched(sbox) && sbox.services->proc.running();
+}
+
+[[nodiscard]] static
+auto is_running(id::sandbox sbox) -> bool {
+	return is_running(scuff::DATA_->model.read().sandboxes.at({sbox}));
+}
+
+static
+auto send_heartbeat() -> void {
+	const auto m = DATA_->model.read();
+	for (const auto& sbox : m.sandboxes) {
+		if (is_running(sbox)) {
+			sbox.services->enqueue(msg::in::heartbeat{});
+		}
+	}
+	
+}
+
 static
 auto poll_thread(std::stop_token stop_token) -> void {
 	auto now     = std::chrono::steady_clock::now();
 	auto next_gc = now + std::chrono::milliseconds{GC_INTERVAL_MS};
+	auto next_hb = now + std::chrono::milliseconds{HEARTBEAT_INTERVAL_MS};
 	while (!stop_token.stop_requested()) {
 		now = std::chrono::steady_clock::now();
 		if (now > next_gc) {
 			DATA_->model.gc();
 			next_gc = now + std::chrono::milliseconds{GC_INTERVAL_MS};
 		}
+		if (now > next_hb) {
+			send_heartbeat();
+			next_hb = now + std::chrono::milliseconds{HEARTBEAT_INTERVAL_MS};
+		}
 		process_sandbox_messages();
 		save_dirty_device_states();
 		std::this_thread::sleep_for(std::chrono::milliseconds{POLL_SLEEP_MS});
 	}
-}
-
-[[nodiscard]] static
-auto is_running(const sandbox& sbox) -> bool {
-	return sbox.services && sbox.services->proc.running();
-}
-
-[[nodiscard]] static
-auto is_running(id::sandbox sbox) -> bool {
-	return is_running(scuff::DATA_->model.read().sandboxes.at({sbox}));
 }
 
 static

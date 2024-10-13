@@ -18,11 +18,11 @@ enum class wait_for_sandboxes_done_result {
 
 enum class wait_for_signaled_result {
 	signaled,
-	not_responding,
 	stop_requested,
 };
 
-              static auto notify_sandbox_crashed(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void;
+              static auto client_signal_self(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void;
+              static auto sandbox_signal_self(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void;
 
 // Signal all sandboxes in the group to begin processing.
 [[nodiscard]] static auto signal_sandbox_processing(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data, int sandbox_count, uint64_t epoch) -> bool;
@@ -157,8 +157,13 @@ struct group_local_data {
 };
 
 static
-auto notify_sandbox_crashed(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void {
+auto client_signal_self(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void {
 	SetEvent(local_data->signal_client_event.h);
+}
+
+static
+auto sandbox_signal_self(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void {
+	SetEvent(local_data->signal_sandboxes_event.h);
 }
 
 [[nodiscard]] static
@@ -185,19 +190,23 @@ auto wait_for_all_sandboxes_done(signaling::group_shm_data* shm_data, signaling:
 
 [[nodiscard]] static
 auto wait_for_signaled(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data, std::stop_token stop_token, uint64_t* local_epoch) -> wait_for_signaled_result {
-	//static constexpr auto TIMEOUT_MS = 1000;
-	const auto result = WaitForSingleObject(local_data->signal_sandboxes_event.h, INFINITE);
-	if (result != WAIT_OBJECT_0) {
-		throw std::runtime_error{"wait_for_signaled: WaitForSingleObject failed"};
+	for (;;) {
+		const auto result = WaitForSingleObject(local_data->signal_sandboxes_event.h, INFINITE);
+		if (result != WAIT_OBJECT_0) {
+			throw std::runtime_error{"wait_for_signaled: WaitForSingleObject failed"};
+		}
+		if (stop_token.stop_requested()) {
+			return wait_for_signaled_result::stop_requested;
+		}
+		if (shm_data->epoch > *local_epoch) {
+			*local_epoch = shm_data->epoch;
+			return wait_for_signaled_result::signaled;
+		}
+		// If we got here, it means another sandbox in the same group didn't receive a heartbeat from the
+		// client in time and so it's killing itself. In order to do that it needed to signal itself which
+		// also signals all other sandboxes in the group, including this one. So we're just going to loop
+		// back and wait again.
 	}
-	if (stop_token.stop_requested()) {
-		return wait_for_signaled_result::stop_requested;
-	}
-	if (shm_data->epoch > *local_epoch) {
-		*local_epoch = shm_data->epoch;
-		return wait_for_signaled_result::signaled;
-	}
-	return wait_for_signaled_result::not_responding;
 }
 
 static

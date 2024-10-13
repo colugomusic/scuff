@@ -276,6 +276,8 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::activate& msg) -> 
 		activate(app, dev, msg.sr);
 	}
 	app->msg_sender.enqueue(msg::out::confirm_activated{});
+	app->last_heartbeat = std::chrono::steady_clock::now();
+	app->active         = true;
 }
 
 static
@@ -286,6 +288,13 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::deactivate& msg) -
 		deactivate(app, dev);
 	}
 	audio::stop(app);
+	app->active = false;
+}
+
+static
+auto process_input_msg_(sbox::app* app, const scuff::msg::in::heartbeat& msg) -> void {
+	log(app, "msg::in::heartbeat:");
+	app->last_heartbeat = std::chrono::steady_clock::now();
 }
 
 static

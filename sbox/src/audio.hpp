@@ -64,11 +64,6 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 		for (;;) {
 			auto result = signaling::wait_for_signaled(&app->shm_group.data->signaling, &app->shm_group.signaling, stop_token, &local_epoch);
 			switch (result) {
-				case signaling::wait_for_signaled_result::not_responding: {
-					debug_log(app, "Audio thread is stopping because the client is not responding.");
-					app->schedule_terminate = true;
-					return;
-				}
 				case signaling::wait_for_signaled_result::signaled: {
 					do_processing(app);
 					break;
