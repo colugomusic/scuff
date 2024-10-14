@@ -1,7 +1,7 @@
 #pragma once
 
 #include "clap.hpp"
-#include "common/shm.hpp"
+#include "common-shm.hpp"
 #include "data.hpp"
 #include "log.hpp"
 

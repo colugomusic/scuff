@@ -1,9 +1,9 @@
 #pragma once
 
 #include "client.hpp"
-#include "common/audio_sync.hpp"
-#include "common/shm.hpp"
-#include "common/slot_buffer.hpp"
+#include "common-audio-sync.hpp"
+#include "common-shm.hpp"
+#include "common-slot-buffer.hpp"
 #include "report-types.hpp"
 #include <atomic>
 #include <boost/asio.hpp>

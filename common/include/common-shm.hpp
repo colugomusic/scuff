@@ -1,9 +1,9 @@
 #pragma once
 
-#include "common/event_buffer.hpp"
-#include "common/param_info.hpp"
-#include "common/signaling.hpp"
-#include "messages.hpp"
+#include "common-event-buffer.hpp"
+#include "common-param-info.hpp"
+#include "common-signaling.hpp"
+#include "common-messages.hpp"
 #include <array>
 #include <boost/container/static_vector.hpp>
 #include <boost/interprocess/containers/string.hpp>
@@ -105,8 +105,9 @@ using audio_buffer = std::array<float, VECTOR_SIZE * CHANNEL_COUNT>;
 
 struct device_flags {
 	enum e {
-		has_gui    = 1 << 0,
-		has_params = 1 << 1,
+		has_gui       = 1 << 0,
+		has_params    = 1 << 1,
+		gui_resizable = 1 << 2,
 	};
 	int value = 0;
 };

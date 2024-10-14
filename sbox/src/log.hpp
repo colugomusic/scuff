@@ -7,15 +7,13 @@ namespace scuff::sbox {
 
 template <typename... Args> static
 auto log(sbox::app* app, std::string_view fmt, Args&&... args) -> void {
-	auto lock = std::lock_guard{app->log_mutex};
-	log_printf(fmt.data(), std::forward<Args>(args)...);
 	debug_ui::log(&app->debug_ui, fmt, std::forward<Args>(args)...);
 }
 
 template <typename... Args> static
 auto debug_log(sbox::app* app, std::string_view fmt, Args&&... args) -> void {
 #if _DEBUG
-	log(app, fmt, std::forward<Args>(args)...);
+	log_printf(fmt.data(), std::forward<Args>(args)...);
 #endif
 }
 

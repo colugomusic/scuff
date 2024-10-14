@@ -1,9 +1,9 @@
 #pragma once
 
 #include "data.hpp"
-#include "common/clap.hpp"
-#include "common/shm.hpp"
-#include "common/visit.hpp"
+#include "common-clap.hpp"
+#include "common-shm.hpp"
+#include "common-visit.hpp"
 #include <optional>
 #include <ranges>
 
@@ -738,8 +738,11 @@ auto get_extensions(clap::iface_plugin* iface) -> void {
 auto init_gui(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
 	const auto& iface = clap_dev.iface->plugin;
 	if (iface.gui) {
-		if (iface.gui->is_api_supported(iface.plugin, os::get_clap_window_api(), false)) {
+		if (iface.gui->is_api_supported(iface.plugin, scuff::os::get_clap_window_api(), false)) {
 			dev.service.shm->data->flags.value |= shm::device_flags::has_gui;
+			if (iface.gui->can_resize(iface.plugin)) {
+				dev.service.shm->data->flags.value |= shm::device_flags::gui_resizable;
+			}
 			return dev;
 		}
 	}
@@ -953,6 +956,16 @@ auto deactivate(const sbox::app& app, id::device dev_id) -> void {
 		return;
 	}
 	clap_dev.iface->plugin.plugin->deactivate(clap_dev.iface->plugin.plugin);
+}
+
+static
+auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> void {
+	// TOODOO:
+}
+
+static
+auto shutdown_editor_window(sbox::app* app, const sbox::device& dev) -> void {
+	// TOODOO:
 }
 
 } // scuff::sbox::clap::main

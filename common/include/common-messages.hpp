@@ -1,8 +1,8 @@
 #pragma once
 
-#include "plugin_type.hpp"
-#include "render_mode.hpp"
-#include "serialize_events.hpp"
+#include "common-plugin-type.hpp"
+#include "common-render-mode.hpp"
+#include "common-serialize-events.hpp"
 #include <clap/id.h>
 #include <cs_plain_guarded.h>
 #include <deque>

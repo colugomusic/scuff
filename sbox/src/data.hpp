@@ -1,12 +1,12 @@
 #pragma once
 
-#include "clap_data.hpp"
-#include "common/audio_sync.hpp"
-#include "common/plugin_type.hpp"
-#include "common/events.hpp"
-#include "common/shm.hpp"
-#include "common/slot_buffer.hpp"
-#include "debug_ui.hpp"
+#include "clap-data.hpp"
+#include "common-audio-sync.hpp"
+#include "common-plugin-type.hpp"
+#include "common-events.hpp"
+#include "common-shm.hpp"
+#include "common-slot-buffer.hpp"
+#include "debug-ui.hpp"
 #include "options.hpp"
 #include <boost/static_string.hpp>
 #include <cs_plain_guarded.h>
@@ -21,18 +21,17 @@ namespace scuff::sbox {
 
 struct device_flags {
 	enum e {
-		has_gui                    = 1 << 0,
-		has_params                 = 1 << 1,
-		was_created_successfully   = 1 << 2,
-		nappgui_window_was_resized = 1 << 3,
+		was_created_successfully   = 1 << 0,
+		nappgui_window_was_resized = 1 << 1,
 	};
 	int value = 0;
 };
 
 struct device_ui {
-	Panel* panel;
-	View* view;
-	Window* window;
+	View* view     = nullptr;
+	Layout* layout = nullptr;
+	Panel* panel   = nullptr;
+	Window* window = nullptr;
 };
 
 struct port_conn {
@@ -78,7 +77,6 @@ struct app {
 	std::shared_ptr<const sbox::model> audio_model;
 	std::atomic<uint64_t>              uid = 0;
 	std::atomic_bool                   schedule_terminate = false;
-	std::mutex                         log_mutex;
 	sbox::debug_ui::model              debug_ui;
 	bool                               active = false;
 	heartbeat_time                     last_heartbeat;

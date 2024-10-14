@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/events_clap.hpp"
+#include "common-events-clap.hpp"
 #include <boost/container/static_vector.hpp>
 #include <boost/static_string.hpp>
 #include <clap/clap.h>

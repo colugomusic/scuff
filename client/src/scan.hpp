@@ -1,7 +1,7 @@
 #pragma once
 
-#include "common/os.hpp"
-#include "common/plugin_type.hpp"
+#include "common-os.hpp"
+#include "common-plugin-type.hpp"
 #include "data.hpp"
 #include "report.hpp"
 #include <boost/process.hpp>

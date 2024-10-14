@@ -1,7 +1,7 @@
 #pragma once
 
-#include "constants.hpp"
-#include "types.hpp"
+#include "common-constants.hpp"
+#include "common-types.hpp"
 #include <variant>
 
 namespace scuff::events {

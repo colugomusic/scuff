@@ -7,15 +7,18 @@ include(../CPM.cmake)
 list (APPEND scuff-sbox_SRCFILES
 	src/audio.hpp
 	src/clap.hpp
-	src/clap_data.hpp
+	src/clap-data.hpp
 	src/cmdline.hpp
 	src/data.hpp
-	src/debug_ui.hpp
+	src/debug-ui.hpp
 	src/log.hpp
 	src/main.cpp
 	src/msg-proc.hpp
-	src/sbox-signaling.hpp
+	src/os.hpp
 	src/options.hpp
+	$<$<BOOL:${APPLE}>:src/os-mac.mm>
+	$<$<BOOL:${LINUX}>:src/os-lin.cpp>
+	$<$<BOOL:${WIN32}>:src/os-win.cpp>
 )
 find_package(Boost REQUIRED COMPONENTS filesystem headers)
 CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES                           )

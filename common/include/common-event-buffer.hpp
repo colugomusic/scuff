@@ -1,7 +1,7 @@
 #pragma once
 
-#include "constants.hpp"
-#include "events.hpp"
+#include "common-constants.hpp"
+#include "common-events.hpp"
 #include <boost/container/static_vector.hpp>
 
 namespace bc = boost::container;

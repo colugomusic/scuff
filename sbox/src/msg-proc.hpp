@@ -2,6 +2,7 @@
 
 #include "audio.hpp"
 #include "log.hpp"
+#include "os.hpp"
 #include <format>
 #include <immer/vector_transient.hpp>
 
@@ -185,16 +186,58 @@ static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_hide& msg) -> void {
 	log(app, "msg::in::device_gui_hide:");
 	const auto devices = app->model.read().devices;
-	const auto device  = devices.at({msg.dev_id});
-	window_hide(device.ui.window);
+	auto device        = devices.at({msg.dev_id});
+	if (!device.ui.window) {
+		return;
+	}
+	os::shutdown_editor_window(app, device);
+	switch (device.type) {
+		case plugin_type::clap: { clap::main::shutdown_editor_window(app, device); break; }
+		case plugin_type::vst3: { /* Not implemented yet. */ break; }
+	}
+	window_destroy(&device.ui.window);
+	app->model.update([device](model&& m){
+		m.devices = m.devices.insert(device);
+		return m;
+	});
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& msg) -> void {
 	log(app, "msg::in::device_gui_show:");
-	const auto devices = app->model.read().devices;
-	const auto device  = devices.at({msg.dev_id});
+	const auto devices   = app->model.read().devices;
+	auto device          = devices.at({msg.dev_id});
+	const auto resizable = device.service.shm->data->flags.value & shm::device_flags::gui_resizable;
+	const auto has_gui   = device.service.shm->data->flags.value & shm::device_flags::has_gui;
+	if (!has_gui) {
+		return;
+	}
+	if (device.ui.window) {
+		return;
+	}
+	uint32_t window_flags = ekWINDOW_STDRES;
+	if (!resizable) {
+		window_flags &= ~ekWINDOW_RESIZE;
+	}
+	window_flags &= ~ekWINDOW_MAX;
+	window_flags &= ~ekWINDOW_MIN;
+	device.ui.window = window_create(window_flags);
+	device.ui.panel  = panel_create();
+	device.ui.layout = layout_create(1, 1);
+	device.ui.view   = view_create();
+	layout_view(device.ui.layout, device.ui.view, 0, 0);
+	panel_layout(device.ui.panel, device.ui.layout);
+	window_panel(device.ui.window, device.ui.panel);
 	window_show(device.ui.window);
+	os::setup_editor_window(app, device);
+	switch (device.type) {
+		case plugin_type::clap: { clap::main::setup_editor_window(app, device); break; }
+		case plugin_type::vst3: { /* Not implemented yet. */ break; }
+	}
+	app->model.update([device](model&& m){
+		m.devices = m.devices.insert(device);
+		return m;
+	});
 }
 
 static

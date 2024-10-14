@@ -1,7 +1,7 @@
 #pragma once
 
-#include "events.hpp"
-#include "serialize.hpp"
+#include "common-events.hpp"
+#include "common-serialize.hpp"
 
 static
 auto deserialize(std::span<const std::byte>* bytes, scuff::event* e) -> void {

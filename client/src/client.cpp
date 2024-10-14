@@ -1,8 +1,8 @@
 #include "client.hpp"
-#include "common/signaling.hpp"
-#include "common/speen.hpp"
-#include "common/types.hpp"
-#include "common/visit.hpp"
+#include "common-signaling.hpp"
+#include "common-speen.hpp"
+#include "common-types.hpp"
+#include "common-visit.hpp"
 #include "managed.hpp"
 #include "scan.hpp"
 #include <clap/plugin-features.h>
@@ -687,19 +687,13 @@ auto erase(id::device dev_id) -> void {
 }
 
 [[nodiscard]] static
-auto find(id::device dev, ext::id::param param_id) -> idx::param {
-	// TOODOO: impl::find
-	return {};
-}
-
-[[nodiscard]] static
-auto find(id::device dev_id, uint32_t param_id) -> idx::param {
+auto find(id::device dev_id, ext::id::param param_id) -> idx::param {
 	const auto m    = DATA_->model.read();
 	const auto dev  = m.devices.at(dev_id);
-	const auto lock = std::unique_lock{dev.services->shm.data->param_info_mutex};
+	const auto lock = std::lock_guard{dev.services->shm.data->param_info_mutex};
 	for (size_t i = 0; i < dev.services->shm.data->param_info.size(); i++) {
 		const auto& info = dev.services->shm.data->param_info[i];
-		if (info.id.value == param_id) {
+		if (info.id == param_id) {
 			return {i};
 		}
 	}

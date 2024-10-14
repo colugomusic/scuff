@@ -1,6 +1,6 @@
-#include "common/clap.hpp"
-#include "common/plugin_type.hpp"
-#include "common/util.hpp"
+#include "common-clap.hpp"
+#include "common-plugin-type.hpp"
+#include "common-util.hpp"
 #include <clap/factory/plugin-factory.h>
 #include <clap/string-sizes.h>
 #include <cxxopts.hpp>

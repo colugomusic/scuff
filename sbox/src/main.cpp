@@ -1,6 +1,6 @@
 #include <boost/container/stable_vector.hpp> // included before nappgui to avoid preprocessor conflicts
-#include "common/os.hpp"
-#include "common/visit.hpp"
+#include "common-os.hpp"
+#include "common-visit.hpp"
 #include "cmdline.hpp"
 #include "log.hpp"
 #include "msg-proc.hpp"

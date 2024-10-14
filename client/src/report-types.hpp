@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/types.hpp"
+#include "common-types.hpp"
 #include <cs_plain_guarded.h>
 #include <deque>
 #include <string>

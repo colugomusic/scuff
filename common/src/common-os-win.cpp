@@ -1,6 +1,6 @@
-#include "common/constants.hpp"
-#include "common/os.hpp"
-#include "common/util.hpp"
+#include "common-constants.hpp"
+#include "common-os.hpp"
+#include "common-util.hpp"
 #include <flux.hpp>
 #include <io.h>
 #include <optional>

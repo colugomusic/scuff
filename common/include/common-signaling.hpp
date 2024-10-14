@@ -52,7 +52,8 @@ namespace scuff::signaling {
 struct event_create{ bool manual_reset = false; };
 struct event_duplicate{ DWORD client_process_id; HANDLE source_handle; };
 
-std::string shorten(std::wstring_view s) {
+[[nodiscard]] static
+auto shorten(std::wstring_view s) -> std::string {
 	if (s.empty()) {
 		return std::string();
 	}
@@ -63,19 +64,17 @@ std::string shorten(std::wstring_view s) {
 	return buf;
 }
 
-std::string errorMessage(int err) {
+[[nodiscard]] static
+auto win32_error_message(int err) -> std::string {
 	std::stringstream ss;
 	wchar_t buf[1000];
 	buf[0] = 0;
-	auto size = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, err,
-		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, 1000, NULL);
-	// omit trailing newlines or carriage returns
+	auto size = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, 1000, NULL);
 	auto ptr = buf + size - 1;
 	while (size-- && (*ptr == '\r' || *ptr == '\n')) {
 		*ptr-- = '\0';
 	}
 	ss << shorten(buf);
-	// include error number
 	ss << " [" << err << "]";
 	return ss.str();
 }
@@ -86,14 +85,14 @@ struct win32_event {
 		: h{CreateEventA(0, c.manual_reset, 0, 0)}
 	{
 		if (!h) {
-			throw std::runtime_error{std::format("CreateEvent failed: '{}'", errorMessage(GetLastError()))};
+			throw std::runtime_error{std::format("CreateEvent failed: '{}'", win32_error_message(GetLastError()))};
 		}
 	}
 	win32_event(event_duplicate d) {
 		p = OpenProcess(PROCESS_DUP_HANDLE, FALSE, d.client_process_id);
 		if (DuplicateHandle(p, d.source_handle, GetCurrentProcess(), &h, 0, FALSE, DUPLICATE_SAME_ACCESS) == 0) {
 			//while (!IsDebuggerPresent()) { Sleep(100); } __debugbreak();
-			throw std::runtime_error{std::format("DuplicateHandle failed: '{}'", errorMessage(GetLastError()))};
+			throw std::runtime_error{std::format("DuplicateHandle failed: '{}'", win32_error_message(GetLastError()))};
 		}
 	}
 	win32_event(win32_event&& other) noexcept

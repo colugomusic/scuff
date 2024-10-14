@@ -6,27 +6,10 @@ if(UNIX AND NOT APPLE)
 else()
 	set(LINUX FALSE)
 endif()
-list (APPEND headers
-	include/common/audio_sync.hpp
-	include/common/c_constants.h
-	include/common/c_events.h
-	include/common/c_plugin_type.h
-	include/common/c_render_mode.h
-	include/common/c_types.h
-	include/common/events.hpp
-	include/common/messages.hpp
-	include/common/os.hpp
-	include/common/serialization.hpp
-	include/common/shm.hpp
-	include/common/slot_buffer.hpp
-	include/common/speen.hpp
-	include/common/types.hpp
-	include/common/visit.hpp
-)
 list (APPEND sources
-	$<$<BOOL:${APPLE}>:${CMAKE_CURRENT_LIST_DIR}/src/os-mac.mm>
-	$<$<BOOL:${LINUX}>:${CMAKE_CURRENT_LIST_DIR}/src/os-lin.cpp>
-	$<$<BOOL:${WIN32}>:${CMAKE_CURRENT_LIST_DIR}/src/os-win.cpp>
+	$<$<BOOL:${APPLE}>:${CMAKE_CURRENT_LIST_DIR}/src/common-os-mac.mm>
+	$<$<BOOL:${LINUX}>:${CMAKE_CURRENT_LIST_DIR}/src/common-os-lin.cpp>
+	$<$<BOOL:${WIN32}>:${CMAKE_CURRENT_LIST_DIR}/src/common-os-win.cpp>
 )
 CPMAddPackage(NAME clap          GITHUB_REPOSITORY free-audio/clap           GIT_TAG c2c1dea          DOWNLOAD_ONLY YES)
 CPMAddPackage(NAME cs_libguarded GITHUB_REPOSITORY copperspice/cs_libguarded GIT_TAG libguarded-1.4.1 DOWNLOAD_ONLY YES)
@@ -34,8 +17,6 @@ CPMAddPackage(NAME flux          GITHUB_REPOSITORY tcbrindle/flux            GIT
 add_library(scuff-common INTERFACE)
 add_library(scuff::common ALIAS scuff-common)
 target_sources(scuff-common INTERFACE ${sources})
-source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX common/headers FILES ${headers})
-source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX common/sources FILES ${sources})
 target_compile_features(scuff-common INTERFACE
 	cxx_std_20
 )

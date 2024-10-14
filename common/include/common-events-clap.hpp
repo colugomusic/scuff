@@ -1,8 +1,9 @@
 #pragma once
 
-#include "common/events.hpp"
+#include "common-events.hpp"
 #include <boost/container/static_vector.hpp>
 #include <clap/events.h>
+#include <stdexcept>
 
 namespace bc = boost::container;
 

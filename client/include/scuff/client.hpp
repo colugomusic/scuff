@@ -1,11 +1,11 @@
 #pragma once
 
-#include "common/constants.hpp"
-#include "common/events.hpp"
-#include "common/param_info.hpp"
-#include "common/plugin_type.hpp"
-#include "common/render_mode.hpp"
-#include "common/types.hpp"
+#include "common-constants.hpp"
+#include "common-events.hpp"
+#include "common-param-info.hpp"
+#include "common-plugin-type.hpp"
+#include "common-render-mode.hpp"
+#include "common-types.hpp"
 #include <functional>
 #include <string_view>
 #include <vector>
