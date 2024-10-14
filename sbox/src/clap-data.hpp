@@ -65,7 +65,8 @@ struct param {
 
 struct device_host_data {
 	sbox::app* app;
-	id::device id;
+	iface_host iface;
+	id::device dev_id;
 };
 
 struct device_atomic_flags {
@@ -159,7 +160,6 @@ struct device_service {
 };
 
 struct iface {
-	clap::iface_host host;
 	clap::iface_plugin plugin;
 };
 

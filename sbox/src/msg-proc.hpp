@@ -196,6 +196,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_hide& m
 		case plugin_type::vst3: { /* Not implemented yet. */ break; }
 	}
 	window_destroy(&device.ui.window);
+	device.ui = {};
 	app->model.update([device](model&& m){
 		m.devices = m.devices.insert(device);
 		return m;
@@ -210,9 +211,11 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& m
 	const auto resizable = device.service.shm->data->flags.value & shm::device_flags::gui_resizable;
 	const auto has_gui   = device.service.shm->data->flags.value & shm::device_flags::has_gui;
 	if (!has_gui) {
+		log(app, "Device {} has no GUI", device.id.value);
 		return;
 	}
 	if (device.ui.window) {
+		log(app, "Device {} GUI is already shown", device.id.value);
 		return;
 	}
 	uint32_t window_flags = ekWINDOW_STDRES;
@@ -231,7 +234,12 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& m
 	window_show(device.ui.window);
 	os::setup_editor_window(app, device);
 	switch (device.type) {
-		case plugin_type::clap: { clap::main::setup_editor_window(app, device); break; }
+		case plugin_type::clap: {
+			if (!clap::main::setup_editor_window(app, device)) {
+				log(app, "Failed to setup clap editor window");
+			}
+			break;
+		}
 		case plugin_type::vst3: { /* Not implemented yet. */ break; }
 	}
 	app->model.update([device](model&& m){
@@ -336,7 +344,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::deactivate& msg) -
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::heartbeat& msg) -> void {
-	log(app, "msg::in::heartbeat:");
+	//log(app, "msg::in::heartbeat:");
 	app->last_heartbeat = std::chrono::steady_clock::now();
 }
 

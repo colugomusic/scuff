@@ -15,7 +15,7 @@ auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> void {
 }
 
 auto shutdown_editor_window(sbox::app* app, const sbox::device& dev) -> void {
-	// TOODOO:
+	// Nothing to do.
 }
 
 } // scuff::sbox::os

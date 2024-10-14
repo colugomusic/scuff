@@ -84,28 +84,27 @@ auto log(sbox::app* app, id::device dev_id, clap_log_severity severity, const ch
 }
 
 [[nodiscard]] static
-auto get_extension(sbox::app* app, id::device dev_id, const char* extension_id) -> const void* {
+auto get_extension(sbox::app* app, const clap::iface_host& iface_host, id::device dev_id, std::string_view extension_id) -> const void* {
 	const auto m   = app->model.rt_read();
-	const auto dev = m->clap_devices.at(dev_id);
-	if (extension_id == std::string_view{CLAP_EXT_AUDIO_PORTS})         { return &dev.iface->host.audio_ports; }
+	if (extension_id == std::string_view{CLAP_EXT_AUDIO_PORTS})         { return &iface_host.audio_ports; }
 	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU})        { return nullptr; } // Not implemented yet &iface.context_menu; }
 	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU_COMPAT}) { return nullptr; } // Not implemented yet &iface.context_menu; }
-	if (extension_id == std::string_view{CLAP_EXT_GUI})                 { return &dev.iface->host.gui; }
-	if (extension_id == std::string_view{CLAP_EXT_LATENCY})             { return &dev.iface->host.latency; }
-	if (extension_id == std::string_view{CLAP_EXT_LOG})                 { return &dev.iface->host.log; }
-	if (extension_id == std::string_view{CLAP_EXT_PARAMS})              { return &dev.iface->host.params; }
+	if (extension_id == std::string_view{CLAP_EXT_GUI})                 { return &iface_host.gui; }
+	if (extension_id == std::string_view{CLAP_EXT_LATENCY})             { return &iface_host.latency; }
+	if (extension_id == std::string_view{CLAP_EXT_LOG})                 { return &iface_host.log; }
+	if (extension_id == std::string_view{CLAP_EXT_PARAMS})              { return &iface_host.params; }
 	if (extension_id == std::string_view{CLAP_EXT_PRESET_LOAD})         { return nullptr; } // Not implemented yet &iface.preset_load; }
 	if (extension_id == std::string_view{CLAP_EXT_PRESET_LOAD_COMPAT})  { return nullptr; } // Not implemented yet &iface.preset_load; }
-	if (extension_id == std::string_view{CLAP_EXT_STATE})               { return &dev.iface->host.state; }
-	if (extension_id == std::string_view{CLAP_EXT_THREAD_CHECK})        { return &dev.iface->host.thread_check; }
-	if (extension_id == std::string_view{CLAP_EXT_TRACK_INFO})          { return &dev.iface->host.track_info; }
-	if (extension_id == std::string_view{CLAP_EXT_TRACK_INFO_COMPAT})   { return &dev.iface->host.track_info; }
+	if (extension_id == std::string_view{CLAP_EXT_STATE})               { return &iface_host.state; }
+	if (extension_id == std::string_view{CLAP_EXT_THREAD_CHECK})        { return &iface_host.thread_check; }
+	if (extension_id == std::string_view{CLAP_EXT_TRACK_INFO})          { return &iface_host.track_info; }
+	if (extension_id == std::string_view{CLAP_EXT_TRACK_INFO_COMPAT})   { return &iface_host.track_info; }
 	if (extension_id == std::string_view{CLAP_EXT_TAIL}) {
 		// Not supported at the moment because this extension is too under-specified
 		// https://github.com/free-audio/clap/blob/main/include/clap/ext/tail.h
 		return nullptr;
 	}
-	app->msg_sender.enqueue(scuff::msg::out::report_warning{std::format("Device '{}' requested an unsupported extension: {}", *dev.name, extension_id)});
+	app->msg_sender.enqueue(scuff::msg::out::report_warning{std::format("Device '{}' requested an unsupported extension: {}", dev_id.value, extension_id)});
 	return nullptr;
 }
 
@@ -600,127 +599,125 @@ auto update(sbox::app* app) -> void {
 
 namespace scuff::sbox::clap::main {
 
-[[nodiscard]] static
-auto make_host_for_instance(device_host_data* host_data) -> iface_host {
-	iface_host iface;
-	iface.host.clap_version = CLAP_VERSION;
-	iface.host.name         = "scuff-sbox";
-	iface.host.url          = "https://github.com/colugomusic/scuff";
-	iface.host.vendor       = "Moron Enterprises";
-	iface.host.host_data    = host_data;
-	iface.host.get_extension = [](const clap_host_t* host, const char* extension_id) -> const void* {
+static
+auto make_host_for_instance(device_host_data* host_data) -> void {
+	host_data->iface.host.clap_version = CLAP_VERSION;
+	host_data->iface.host.name         = "scuff-sbox";
+	host_data->iface.host.url          = "https://github.com/colugomusic/scuff";
+	host_data->iface.host.vendor       = "Moron Enterprises";
+	host_data->iface.host.host_data    = host_data;
+	host_data->iface.host.get_extension = [](const clap_host_t* host, const char* extension_id) -> const void* {
 		const auto& hd = get_host_data(host);
-		return get_extension(hd.app, hd.id, extension_id);
+		return get_extension(hd.app, hd.iface, hd.dev_id, extension_id);
 	};
-	iface.host.request_callback = [](const clap_host* host) {
+	host_data->iface.host.request_callback = [](const clap_host* host) {
 		const auto& hd = get_host_data(host);
-		cb_request_callback(hd.app, hd.id);
+		cb_request_callback(hd.app, hd.dev_id);
 	};
-	iface.host.request_process = [](const clap_host* host) {
+	host_data->iface.host.request_process = [](const clap_host* host) {
 		const auto& hd = get_host_data(host);
-		cb_request_process(hd.app, hd.id);
+		cb_request_process(hd.app, hd.dev_id);
 	};
-	iface.host.request_restart = [](const clap_host* host) {
+	host_data->iface.host.request_restart = [](const clap_host* host) {
 		const auto& hd = get_host_data(host);
-		cb_request_restart(hd.app, hd.id);
+		cb_request_restart(hd.app, hd.dev_id);
 	};
 	// AUDIO PORTS ______________________________________________________________
-	iface.audio_ports.is_rescan_flag_supported = [](const clap_host* host, uint32_t flag) -> bool {
+	host_data->iface.audio_ports.is_rescan_flag_supported = [](const clap_host* host, uint32_t flag) -> bool {
 		return true;
 	};
-	iface.audio_ports.rescan = [](const clap_host* host, uint32_t flags) -> void {
+	host_data->iface.audio_ports.rescan = [](const clap_host* host, uint32_t flags) -> void {
 		const auto& hd = get_host_data(host);
-		main::rescan_audio_ports(hd.app, hd.id, flags);
+		main::rescan_audio_ports(hd.app, hd.dev_id, flags);
 	};
 	// CONTEXT MENU _____________________________________________________________
-	iface.context_menu.can_popup = [](const clap_host* host) -> bool {
+	host_data->iface.context_menu.can_popup = [](const clap_host* host) -> bool {
 		// Not implemented yet
 		return false;
 	};
-	iface.context_menu.perform = [](const clap_host* host, const clap_context_menu_target_t* target, clap_id action_id) -> bool {
+	host_data->iface.context_menu.perform = [](const clap_host* host, const clap_context_menu_target_t* target, clap_id action_id) -> bool {
 		// Not implemented yet
 		return false;
 	};
-	iface.context_menu.populate = [](const clap_host* host, const clap_context_menu_target_t* target, const clap_context_menu_builder_t* builder) -> bool {
+	host_data->iface.context_menu.populate = [](const clap_host* host, const clap_context_menu_target_t* target, const clap_context_menu_builder_t* builder) -> bool {
 		// Not implemented yet
 		return false;
 	};
-	iface.context_menu.popup = [](const clap_host* host, const clap_context_menu_target_t* target, int32_t screen_index, int32_t x, int32_t y) -> bool {
+	host_data->iface.context_menu.popup = [](const clap_host* host, const clap_context_menu_target_t* target, int32_t screen_index, int32_t x, int32_t y) -> bool {
 		// Not implemented yet
 		return false;
 	};
 	// GUI ______________________________________________________________________
-	iface.gui.closed = [](const clap_host* host, bool was_destroyed) -> void {
+	host_data->iface.gui.closed = [](const clap_host* host, bool was_destroyed) -> void {
 		const auto& hd = get_host_data(host);
-		cb_gui_closed(hd.app, hd.id, was_destroyed);
+		cb_gui_closed(hd.app, hd.dev_id, was_destroyed);
 	};
-	iface.gui.request_hide = [](const clap_host* host) -> bool {
+	host_data->iface.gui.request_hide = [](const clap_host* host) -> bool {
 		const auto& hd = get_host_data(host);
-		cb_gui_request_hide(hd.app, hd.id);
+		cb_gui_request_hide(hd.app, hd.dev_id);
 		return true;
 	};
-	iface.gui.request_show = [](const clap_host* host) -> bool {
+	host_data->iface.gui.request_show = [](const clap_host* host) -> bool {
 		const auto& hd = get_host_data(host);
-		cb_gui_request_show(hd.app, hd.id);
+		cb_gui_request_show(hd.app, hd.dev_id);
 		return true;
 	};
-	iface.gui.request_resize = [](const clap_host* host, uint32_t width, uint32_t height) -> bool {
+	host_data->iface.gui.request_resize = [](const clap_host* host, uint32_t width, uint32_t height) -> bool {
 		const auto& hd = get_host_data(host);
-		cb_gui_request_resize(hd.app, hd.id, width, height);
+		cb_gui_request_resize(hd.app, hd.dev_id, width, height);
 		return true;
 	};
-	iface.gui.resize_hints_changed = [](const clap_host* host) -> void {
+	host_data->iface.gui.resize_hints_changed = [](const clap_host* host) -> void {
 		const auto& hd = get_host_data(host);
-		cb_gui_resize_hints_changed(hd.app, hd.id);
+		cb_gui_resize_hints_changed(hd.app, hd.dev_id);
 	};
 	// LATENCY __________________________________________________________________
-	iface.latency.changed = [](const clap_host* host) -> void {
+	host_data->iface.latency.changed = [](const clap_host* host) -> void {
 		// I don't do anything with this yet
 	};
 	// LOG ----------------------------------------------------------------------
-	iface.log.log = [](const clap_host* host, clap_log_severity severity, const char* msg) -> void {
+	host_data->iface.log.log = [](const clap_host* host, clap_log_severity severity, const char* msg) -> void {
 		const auto& hd = get_host_data(host);
-		clap::log(hd.app, hd.id, severity, msg);
+		clap::log(hd.app, hd.dev_id, severity, msg);
 	};
 	// PARAMS ___________________________________________________________________
-	iface.params.clear = [](const clap_host* host, clap_id param_id, clap_param_clear_flags flags) -> void {
+	host_data->iface.params.clear = [](const clap_host* host, clap_id param_id, clap_param_clear_flags flags) -> void {
 		// I don't do anything with this yet
 	};
-	iface.params.request_flush = [](const clap_host* host) -> void {
+	host_data->iface.params.request_flush = [](const clap_host* host) -> void {
 		const auto& hd = get_host_data(host);
-		cb_request_param_flush(hd.app, hd.id);
+		cb_request_param_flush(hd.app, hd.dev_id);
 	};
-	iface.params.rescan = [](const clap_host* host, clap_param_rescan_flags flags) -> void {
+	host_data->iface.params.rescan = [](const clap_host* host, clap_param_rescan_flags flags) -> void {
 		const auto& hd = get_host_data(host);
 		// TOODOO: params.rescan: Figure out what we do here
 	};
 	// PRESET LOAD ______________________________________________________________
-	iface.preset_load.loaded = [](const clap_host* host, uint32_t location_kind, const char* location, const char* load_key) -> void {
+	host_data->iface.preset_load.loaded = [](const clap_host* host, uint32_t location_kind, const char* location, const char* load_key) -> void {
 		// Not implemented yet
 	};
-	iface.preset_load.on_error = [](const clap_host* host, uint32_t location_kind, const char* location, const char* load_key, int32_t os_error, const char* msg) -> void {
+	host_data->iface.preset_load.on_error = [](const clap_host* host, uint32_t location_kind, const char* location, const char* load_key, int32_t os_error, const char* msg) -> void {
 		// Not implemented yet
 	};
 	// STATE ____________________________________________________________________
-	iface.state.mark_dirty = [](const clap_host* host) -> void {
+	host_data->iface.state.mark_dirty = [](const clap_host* host) -> void {
 		// I don't do anything with this yet
 	};
 	// THREAD CHECK _____________________________________________________________
-	iface.thread_check.is_audio_thread = [](const clap_host* host) -> bool {
+	host_data->iface.thread_check.is_audio_thread = [](const clap_host* host) -> bool {
 		const auto& hd = get_host_data(host);
 		return hd.app->main_thread_id != std::this_thread::get_id();
 	};
-	iface.thread_check.is_main_thread = [](const clap_host* host) -> bool {
+	host_data->iface.thread_check.is_main_thread = [](const clap_host* host) -> bool {
 		const auto& hd = get_host_data(host);
 		return hd.app->main_thread_id == std::this_thread::get_id();
 	};
 	// TRACK INFO _______________________________________________________________
-	iface.track_info.get = [](const clap_host* host, clap_track_info_t* info) -> bool {
+	host_data->iface.track_info.get = [](const clap_host* host, clap_track_info_t* info) -> bool {
 		const auto& hd = get_host_data(host);
 		// TOODOO: track_info.get: sort this out
 		return true;
 	};
-	return iface;
 }
 
 static
@@ -778,8 +775,8 @@ auto init_params(clap::device&& dev) -> clap::device {
 [[nodiscard]] static
 auto make_ext_data(sbox::app* app, id::device id) -> std::shared_ptr<clap::device_service_data> {
 	auto data = std::make_shared<clap::device_service_data>();
-	data->host_data.app = app;
-	data->host_data.id  = id;
+	data->host_data.app    = app;
+	data->host_data.dev_id = id;
 	data->input_events_context.service_data  = data.get();
 	data->output_events_context.service_data = data.get();
 	return data;
@@ -792,6 +789,7 @@ auto make_shm_device(std::string_view sbox_shmid, id::device dev_id) -> shm::dev
 
 static
 auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id, size_t callback) -> void {
+	// TOODOO: stop opening dylib multiple times?
 	const auto entry = scuff::os::find_clap_entry(plugfile_path);
 	if (!entry) {
 		throw std::runtime_error("Couldn't resolve clap_entry");
@@ -804,13 +802,16 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 		entry->deinit();
 		throw std::runtime_error("clap_plugin_entry.get_factory failed");
 	}
+	auto ext_data = make_ext_data(app, dev_id);
+	make_host_for_instance(&ext_data->host_data);
 	clap::iface iface;
-	auto ext_data       = make_ext_data(app, dev_id);
-	iface.host          = make_host_for_instance(&ext_data->host_data);
-	iface.plugin.plugin = factory->create_plugin(factory, &iface.host.host, plugin_id.data());
+	iface.plugin.plugin = factory->create_plugin(factory, &ext_data->host_data.iface.host, plugin_id.data());
 	if (!iface.plugin.plugin) {
 		entry->deinit();
 		throw std::runtime_error("clap_plugin_factory.create_plugin failed");
+	}
+	if (!iface.plugin.plugin->init(iface.plugin.plugin)) {
+		throw std::runtime_error("clap_plugin.init failed");
 	}
 	get_extensions(&iface.plugin);
 	auto dev                         = sbox::device{};
@@ -958,13 +959,45 @@ auto deactivate(const sbox::app& app, id::device dev_id) -> void {
 	clap_dev.iface->plugin.plugin->deactivate(clap_dev.iface->plugin.plugin);
 }
 
-static
-auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> void {
-	// TOODOO:
+[[nodiscard]] static
+auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
+	log(app, "clap::main::setup_editor_window");
+	const auto m         = app->model.read();
+	const auto clap_dev  = m.clap_devices.at(dev.id);
+	const auto iface     = clap_dev.iface->plugin;
+	if (!iface.gui) {
+		log(app, "iface.gui is null?");
+		return false;
+	}
+	if (!iface.gui->create(iface.plugin, scuff::os::get_clap_window_api(), false)) {
+		log(app, "iface.gui->create failed");
+		return false;
+	}
+	log(app, "iface.gui->create succeeded");
+	clap_window_t cw;
+	cw.api = scuff::os::get_clap_window_api();
+	// TOODOO: cross platform stuff
+	cw.win32 = view_native(dev.ui.view);
+	if (!iface.gui->set_parent(iface.plugin, &cw)) {
+		log(app, "iface.gui->set_parent(%d) failed", int64_t(cw.win32));
+		return false;
+	}
+	log(app, "iface.gui->set_parent(%d) succeeded", int64_t(cw.win32));
+	// This return value is ignored because some Plugins return false
+	// even if the window is shown.
+	iface.gui->show(iface.plugin);
+	// TOODOO: More to do with resizing and stuff?
+	return true;
 }
 
 static
 auto shutdown_editor_window(sbox::app* app, const sbox::device& dev) -> void {
+	const auto m        = app->model.read();
+	const auto clap_dev = m.clap_devices.at(dev.id);
+	const auto iface_gui = clap_dev.iface->plugin.gui;
+	if (!iface_gui) {
+		return;
+	}
 	// TOODOO:
 }
 
