@@ -19,6 +19,13 @@
 
 namespace scuff::sbox {
 
+struct create_gui_result {
+	bool success    = false;
+	bool resizable  = false;
+	uint32_t width  = 0;
+	uint32_t height = 0;
+};
+
 struct device_flags {
 	enum e {
 		was_created_successfully   = 1 << 0,

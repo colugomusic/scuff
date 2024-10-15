@@ -5,7 +5,7 @@ namespace scuff::sbox::os {
 
 [[nodiscard]] static
 auto get_top_hwnd(HWND hwnd) -> HWND {
-	GetAncestor(hwnd, GA_ROOT);
+	return GetAncestor(hwnd, GA_ROOT);
 }
 
 auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> void {

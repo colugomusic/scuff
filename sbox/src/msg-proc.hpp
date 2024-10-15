@@ -204,22 +204,51 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_hide& m
 }
 
 static
+auto on_window_resize(Window* window, Event* event) -> void {
+	const auto size = event_result(event, EvSize);
+	log_printf("on_window_resize: %f,%f", size->width, size->height);
+}
+
+[[nodiscard]] static
+auto create_gui(sbox::app* app, const sbox::device& dev) -> sbox::create_gui_result {
+	switch (dev.type) {
+		case plugin_type::clap: { return clap::main::create_gui(app, dev); }
+		case plugin_type::vst3: { /* Not implemented yet. */ return {}; }
+		default:                { assert (false); return {}; }
+	}
+}
+
+[[nodiscard]] static
+auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
+	os::setup_editor_window(app, dev);
+	switch (dev.type) {
+		case plugin_type::clap: { return clap::main::setup_editor_window(app, dev); }
+		case plugin_type::vst3: { /* Not implemented yet. */ return false; }
+		default:                { assert (false); return false; }
+	}
+}
+
+static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& msg) -> void {
 	log(app, "msg::in::device_gui_show:");
 	const auto devices   = app->model.read().devices;
 	auto device          = devices.at({msg.dev_id});
-	const auto resizable = device.service.shm->data->flags.value & shm::device_flags::gui_resizable;
 	const auto has_gui   = device.service.shm->data->flags.value & shm::device_flags::has_gui;
 	if (!has_gui) {
-		log(app, "Device {} has no GUI", device.id.value);
+		log(app, "Device %d has no GUI", device.id.value);
 		return;
 	}
 	if (device.ui.window) {
-		log(app, "Device {} GUI is already shown", device.id.value);
+		log(app, "Device %d GUI is already shown", device.id.value);
+		return;
+	}
+	const auto result = create_gui(app, device);
+	if (!result.success) {
+		log(app, "Failed to create GUI for device %d", device.id.value);
 		return;
 	}
 	uint32_t window_flags = ekWINDOW_STDRES;
-	if (!resizable) {
+	if (!result.resizable) {
 		window_flags &= ~ekWINDOW_RESIZE;
 	}
 	window_flags &= ~ekWINDOW_MAX;
@@ -231,16 +260,11 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& m
 	layout_view(device.ui.layout, device.ui.view, 0, 0);
 	panel_layout(device.ui.panel, device.ui.layout);
 	window_panel(device.ui.window, device.ui.panel);
+	window_OnResize(device.ui.window, listener(device.ui.window, on_window_resize, Window));
 	window_show(device.ui.window);
-	os::setup_editor_window(app, device);
-	switch (device.type) {
-		case plugin_type::clap: {
-			if (!clap::main::setup_editor_window(app, device)) {
-				log(app, "Failed to setup clap editor window");
-			}
-			break;
-		}
-		case plugin_type::vst3: { /* Not implemented yet. */ break; }
+	window_size(device.ui.window, S2Df(float(result.width), float(result.height)));
+	if (!setup_editor_window(app, device)) {
+		log(app, "Failed to setup clap editor window");
 	}
 	app->model.update([device](model&& m){
 		m.devices = m.devices.insert(device);

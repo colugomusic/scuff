@@ -107,7 +107,6 @@ struct device_flags {
 	enum e {
 		has_gui       = 1 << 0,
 		has_params    = 1 << 1,
-		gui_resizable = 1 << 2,
 	};
 	int value = 0;
 };

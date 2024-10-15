@@ -77,8 +77,9 @@ auto log(sbox::app* app, id::device dev_id, clap_log_severity severity, const ch
 	const auto len        = std::strlen(msg);
 	const auto chunk_size = device_msg::log_text::MAX;
 	for (size_t i = 0; i < len; i += chunk_size) {
-		const auto chunk = std::string_view{msg + i, std::min(chunk_size, len - i)};
-		send_msg(app, dev_id, device_msg::log_text{chunk.data()});
+		const auto count = std::min(chunk_size, len - i);
+		const auto chunk = std::string_view{msg + i, count};
+		send_msg(app, dev_id, device_msg::log_text{{chunk.data(), count}});
 	}
 	send_msg(app, dev_id, device_msg::log_end{});
 }
@@ -737,9 +738,6 @@ auto init_gui(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device 
 	if (iface.gui) {
 		if (iface.gui->is_api_supported(iface.plugin, scuff::os::get_clap_window_api(), false)) {
 			dev.service.shm->data->flags.value |= shm::device_flags::has_gui;
-			if (iface.gui->can_resize(iface.plugin)) {
-				dev.service.shm->data->flags.value |= shm::device_flags::gui_resizable;
-			}
 			return dev;
 		}
 	}
@@ -960,20 +958,39 @@ auto deactivate(const sbox::app& app, id::device dev_id) -> void {
 }
 
 [[nodiscard]] static
-auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
-	log(app, "clap::main::setup_editor_window");
+auto create_gui(sbox::app* app, const sbox::device& dev) -> sbox::create_gui_result {
+	log(app, "clap::main::create_gui");
 	const auto m         = app->model.read();
 	const auto clap_dev  = m.clap_devices.at(dev.id);
 	const auto iface     = clap_dev.iface->plugin;
 	if (!iface.gui) {
 		log(app, "iface.gui is null?");
-		return false;
+		return {};
 	}
 	if (!iface.gui->create(iface.plugin, scuff::os::get_clap_window_api(), false)) {
 		log(app, "iface.gui->create failed");
-		return false;
+		return {};
 	}
 	log(app, "iface.gui->create succeeded");
+	uint32_t width = 5000, height = 5000;
+	if (!iface.gui->get_size(iface.plugin, &width, &height)) {
+		log(app, "iface.gui->get_size failed");
+	}
+	const auto resizable = iface.gui->can_resize(iface.plugin);
+	sbox::create_gui_result result;
+	result.success   = true;
+	result.resizable = resizable;
+	result.width     = width;
+	result.height    = height;
+	return result;
+}
+
+[[nodiscard]] static
+auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
+	log(app, "clap::main::setup_editor_window");
+	const auto m         = app->model.read();
+	const auto clap_dev  = m.clap_devices.at(dev.id);
+	const auto iface     = clap_dev.iface->plugin;
 	clap_window_t cw;
 	cw.api = scuff::os::get_clap_window_api();
 	// TOODOO: cross platform stuff
