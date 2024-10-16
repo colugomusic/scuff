@@ -222,7 +222,7 @@ auto process_message_(const sandbox& sbox, const msg::out::device_editor_visible
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::device_param_info_changed& msg) -> void {
+auto process_message_(const sandbox& sbox, const msg::out::device_params_changed& msg) -> void {
 	report::send(sbox, report::msg::device_params_changed{{msg.dev_id}});
 }
 

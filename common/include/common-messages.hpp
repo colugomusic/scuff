@@ -64,7 +64,7 @@ namespace scuff::msg::out {
 
 struct confirm_activated             {};
 struct device_editor_visible_changed { id::device::type dev_id; bool visible; };
-struct device_param_info_changed     { id::device::type dev_id; std::string new_shmid; };
+struct device_params_changed         { id::device::type dev_id; };
 struct report_error                  { std::string text; };
 struct report_fatal_error            { std::string text; };
 struct report_info                   { std::string text; };
@@ -78,7 +78,7 @@ struct return_void                   { size_t callback; };
 using msg = std::variant<
 	confirm_activated,
 	device_editor_visible_changed,
-	device_param_info_changed,
+	device_params_changed,
 	report_error,
 	report_fatal_error,
 	report_info,
@@ -111,12 +111,6 @@ template <> inline
 auto deserialize<scuff::msg::in::event>(std::span<const std::byte>* bytes, scuff::msg::in::event* msg) -> void {
 	deserialize(bytes, &msg->dev_id);
 	deserialize(bytes, &msg->event);
-}
-
-template <> inline
-auto deserialize<scuff::msg::out::device_param_info_changed>(std::span<const std::byte>* bytes, scuff::msg::out::device_param_info_changed* msg) -> void {
-	deserialize(bytes, &msg->dev_id);
-	deserialize(bytes, &msg->new_shmid);
 }
 
 template <> inline
@@ -187,12 +181,6 @@ template <> inline
 auto serialize<scuff::msg::in::event>(const scuff::msg::in::event& msg, std::vector<std::byte>* bytes) -> void {
 	serialize(msg.dev_id, bytes);
 	serialize(msg.event, bytes);
-}
-
-template <> inline
-auto serialize<scuff::msg::out::device_param_info_changed>(const scuff::msg::out::device_param_info_changed& msg, std::vector<std::byte>* bytes) -> void {
-	serialize(msg.dev_id, bytes);
-	serialize(std::string_view{msg.new_shmid}, bytes);
 }
 
 template <> inline

@@ -109,6 +109,7 @@ struct gui_resize_hints_changed {};
 struct log_begin{clap_log_severity severity;};
 struct log_end{};
 struct log_text{ static constexpr size_t MAX = 64; boost::static_string<MAX> text;};
+struct params_rescan{ clap_param_rescan_flags flags; };
 
 using msg = std::variant<
 	gui_closed,
@@ -118,7 +119,8 @@ using msg = std::variant<
 	gui_resize_hints_changed,
 	log_begin,
 	log_end,
-	log_text
+	log_text,
+	params_rescan
 >;
 
 using q = rwq<msg>;

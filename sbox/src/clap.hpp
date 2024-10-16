@@ -2,6 +2,7 @@
 
 #include "data.hpp"
 #include "common-clap.hpp"
+#include "common-messages.hpp"
 #include "common-shm.hpp"
 #include "common-visit.hpp"
 #include <optional>
@@ -112,6 +113,11 @@ auto get_extension(sbox::app* app, const clap::iface_host& iface_host, id::devic
 [[nodiscard]] static
 auto get_host_data(const clap_host_t* host) -> device_host_data& {
 	return *static_cast<device_host_data*>(host->host_data);
+}
+
+static
+auto cb_params_rescan(sbox::app* app, id::device dev_id, clap_param_rescan_flags flags) -> void {
+	send_msg(app, dev_id, device_msg::params_rescan{flags});
 }
 
 static
@@ -515,6 +521,51 @@ auto rescan_audio_ports(sbox::app* app, id::device dev_id, uint32_t flags) -> vo
 	init_audio(app, dev_id);
 }
 
+[[nodiscard]] static
+auto init_params(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
+	const auto& iface = clap_dev.iface->plugin;
+	if (iface.params) {
+		dev.service->shm.data->flags.value |= shm::device_flags::has_params;
+	}
+	return dev;
+}
+
+[[nodiscard]] static
+auto init_params(clap::device&& dev) -> clap::device {
+	const auto& iface = dev.iface->plugin;
+	if (iface.params) {
+		const auto count = iface.params->count(iface.plugin);
+		for (const auto i : std::ranges::views::iota(0u, count)) {
+			clap_param_info_t info;
+			if (iface.params->get_info(iface.plugin, i, &info)) {
+				clap::param p;
+				p.info = info;
+				dev.params = dev.params.push_back(p);
+			}
+		}
+	}
+	return dev;
+}
+
+static
+auto init_params_shm(const sbox::device& dev, const clap::device& clap_dev) -> void {
+	auto lock = std::lock_guard{dev.service->shm.data->param_info_mutex};
+	dev.service->shm.data->param_info.resize(clap_dev.params.size());
+	for (size_t i = 0; i < clap_dev.params.size(); i++) {
+		const auto& param = clap_dev.params[i];
+		scuff::param_info info;
+		info.id            = {param.info.id};
+		info.default_value = param.info.default_value;
+		info.max_value     = param.info.max_value;
+		info.min_value     = param.info.min_value;
+		info.clap.cookie   = param.info.cookie;
+		const auto name_buffer_size = std::min(std::size(info.name), std::size(param.info.name));
+		std::copy_n(std::begin(param.info.name), name_buffer_size, std::begin(info.name));
+		info.name[name_buffer_size - 1] = '\0';
+		dev.service->shm.data->param_info[i] = std::move(info);
+	}
+}
+
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_closed& msg) -> void {
 	// TOODOO: process msg
@@ -579,6 +630,19 @@ auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log_text& msg) -> void {
 	dev.service.data->log_collector.chunks.push_back(msg.text);
+}
+
+static
+auto process_msg_(sbox::app* app, clap::device clap_dev, const clap::device_msg::params_rescan& msg) -> void {
+	const auto m    = app->model.read();
+	const auto& dev = m.devices.at(clap_dev.id);
+	clap_dev = init_params(std::move(clap_dev));
+	init_params_shm(dev, clap_dev);
+	app->model.update_publish([clap_dev](model&& m){
+		m.clap_devices = m.clap_devices.insert(clap_dev);
+		return m;
+	});
+	app->msg_sender.enqueue(scuff::msg::out::device_params_changed{dev.id.value});
 }
 
 static
@@ -692,7 +756,7 @@ auto make_host_for_instance(device_host_data* host_data) -> void {
 	};
 	host_data->iface.params.rescan = [](const clap_host* host, clap_param_rescan_flags flags) -> void {
 		const auto& hd = get_host_data(host);
-		// TOODOO: params.rescan: Figure out what we do here
+		cb_params_rescan(hd.app, hd.dev_id, flags);
 	};
 	// PRESET LOAD ______________________________________________________________
 	host_data->iface.preset_load.loaded = [](const clap_host* host, uint32_t location_kind, const char* location, const char* load_key) -> void {
@@ -740,32 +804,6 @@ auto init_gui(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device 
 		if (iface.gui->is_api_supported(iface.plugin, scuff::os::get_clap_window_api(), false)) {
 			dev.service->shm.data->flags.value |= shm::device_flags::has_gui;
 			return dev;
-		}
-	}
-	return dev;
-}
-
-[[nodiscard]] static
-auto init_params(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
-	const auto& iface = clap_dev.iface->plugin;
-	if (iface.params) {
-		dev.service->shm.data->flags.value |= shm::device_flags::has_params;
-	}
-	return dev;
-}
-
-[[nodiscard]] static
-auto init_params(clap::device&& dev) -> clap::device {
-	const auto& iface = dev.iface->plugin;
-	if (iface.params) {
-		const auto count = iface.params->count(iface.plugin);
-		for (const auto i : std::ranges::views::iota(0u, count)) {
-			clap_param_info_t info;
-			if (iface.params->get_info(iface.plugin, i, &info)) {
-				clap::param p;
-				p.info = info;
-				dev.params = dev.params.push_back(p);
-			}
 		}
 	}
 	return dev;
@@ -831,20 +869,7 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	dev                   = init_params(std::move(dev), clap_dev);
 	clap_dev              = init_audio(std::move(clap_dev), dev);
 	clap_dev              = init_params(std::move(clap_dev));
-	dev.service->shm.data->param_info.resize(clap_dev.params.size());
-	for (size_t i = 0; i < clap_dev.params.size(); i++) {
-		const auto& param = clap_dev.params[i];
-		scuff::param_info info;
-		info.id            = {param.info.id};
-		info.default_value = param.info.default_value;
-		info.max_value     = param.info.max_value;
-		info.min_value     = param.info.min_value;
-		info.clap.cookie   = param.info.cookie;
-		const auto name_buffer_size = std::min(std::size(info.name), std::size(param.info.name));
-		std::copy_n(std::begin(param.info.name), name_buffer_size, std::begin(info.name));
-		info.name[name_buffer_size - 1] = '\0';
-		dev.service->shm.data->param_info[i] = std::move(info);
-	}
+	init_params_shm(dev, clap_dev);
 	app->model.update_publish([=](model&& m) {
 		m.devices      = m.devices.insert(dev);
 		m.clap_devices = m.clap_devices.insert(clap_dev);
