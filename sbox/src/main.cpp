@@ -50,6 +50,16 @@ auto create() -> sbox::app* {
 }
 
 static
+auto destroy_all_editor_windows(const sbox::app& app) -> void {
+	const auto m = app.model.read();
+	for (auto dev : m.devices) {
+		if (dev.ui.window) {
+			window_destroy(&dev.ui.window);
+		}
+	}
+}
+
+static
 auto destroy(sbox::app** app) -> void {
 	debug_log(*app, "scuff::sbox::main::destroy");
 	debug_ui::destroy(&(*app)->debug_ui);
@@ -59,6 +69,7 @@ auto destroy(sbox::app** app) -> void {
 		signaling::sandbox_signal_self(&group_shm.data->signaling, &group_shm.signaling);
 		(*app)->audio_thread.join();
 	}
+	destroy_all_editor_windows(**app);
 	delete *app;
 }
 
@@ -76,9 +87,24 @@ auto check_heartbeat(sbox::app* app) -> void {
 }
 
 static
+auto do_scheduled_window_resizes(sbox::app* app) -> void {
+	const auto m = app->model.read();
+	for (const auto& dev : m.devices) {
+		if (dev.service->scheduled_window_resize) {
+			S2Df sz;
+			sz.width  = dev.service->scheduled_window_resize->width;
+			sz.height = dev.service->scheduled_window_resize->height;
+			window_size(dev.ui.window, sz);
+			dev.service->scheduled_window_resize.reset();
+		}
+	}
+}
+
+static
 auto update(sbox::app* app, const real64_t prtime, const real64_t ctime) -> void {
 	if (app) {
 		main::process_messages(app);
+		main::do_scheduled_window_resizes(app);
 		check_heartbeat(app);
 		clap::main::update(app);
 		if (app->schedule_terminate) {
@@ -90,4 +116,4 @@ auto update(sbox::app* app, const real64_t prtime, const real64_t ctime) -> void
 } // scuff::sbox::main
 
 #include <osmain.h>
-osmain_sync(0.1, scuff::sbox::main::create, scuff::sbox::main::destroy, scuff::sbox::main::update, "", scuff::sbox::app)
+osmain_sync(0.04, scuff::sbox::main::create, scuff::sbox::main::destroy, scuff::sbox::main::update, "", scuff::sbox::app)

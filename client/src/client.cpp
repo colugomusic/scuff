@@ -217,6 +217,11 @@ auto process_message_(const sandbox& sbox, const msg::out::return_created_device
 }
 
 static
+auto process_message_(const sandbox& sbox, const msg::out::device_editor_visible_changed& msg) -> void {
+	report::send(sbox, report::msg::device_editor_visible_changed{{msg.dev_id}, msg.visible});
+}
+
+static
 auto process_message_(const sandbox& sbox, const msg::out::device_param_info_changed& msg) -> void {
 	report::send(sbox, report::msg::device_params_changed{{msg.dev_id}});
 }
@@ -331,6 +336,7 @@ static auto return_report_msg_(const report::msg::scan_complete& msg, const gene
 static auto return_report_msg_(const report::msg::scan_error& msg, const general_reporter& reporter) -> void { reporter.on_scan_error(msg.error); }
 static auto return_report_msg_(const report::msg::scan_started& msg, const general_reporter& reporter) -> void { reporter.on_scan_started(); }
 static auto return_report_msg_(const report::msg::scan_warning& msg, const general_reporter& reporter) -> void { reporter.on_scan_warning(msg.warning); }
+static auto return_report_msg_(const report::msg::device_editor_visible_changed& msg, const group_reporter& reporter) -> void { reporter.on_device_editor_visible_changed(msg.dev, msg.visible); }
 static auto return_report_msg_(const report::msg::device_error& msg, const group_reporter& reporter) -> void { reporter.on_device_error(msg.dev, msg.error); }
 static auto return_report_msg_(const report::msg::device_params_changed& msg, const group_reporter& reporter) -> void { reporter.on_device_params_changed(msg.dev); }
 static auto return_report_msg_(const report::msg::error& msg, const group_reporter& reporter) -> void { reporter.on_error(msg.error); }

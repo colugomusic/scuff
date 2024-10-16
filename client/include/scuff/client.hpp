@@ -59,27 +59,28 @@ struct group_process {
 	scuff::output_devices output_devices;
 };
 
-using on_device_error          = std::function<void(id::device dev, std::string_view error)>;
-using on_device_params_changed = std::function<void(id::device dev)>;
-using on_error                 = std::function<void(std::string_view error)>;
-using on_plugfile_broken       = std::function<void(id::plugfile plugfile)>;
-using on_plugfile_scanned      = std::function<void(id::plugfile plugfile)>;
-using on_plugin_broken         = std::function<void(id::plugin plugin)>;
-using on_plugin_scanned        = std::function<void(id::plugin plugin)>;
-using on_sbox_crashed          = std::function<void(id::sandbox sbox, std::string_view error)>;
-using on_sbox_error            = std::function<void(id::sandbox sbox, std::string_view error)>;
-using on_sbox_info             = std::function<void(id::sandbox sbox, std::string_view info)>;
-using on_sbox_started          = std::function<void(id::sandbox sbox)>;
-using on_sbox_warning          = std::function<void(id::sandbox sbox, std::string_view warning)>;
-using on_scan_complete         = std::function<void()>;
-using on_scan_error            = std::function<void(std::string_view error)>;
-using on_scan_started          = std::function<void()>;
-using on_scan_warning          = std::function<void(std::string_view warning)>;
-using return_bytes             = std::function<void(const scuff::bytes& bytes)>;
-using return_device            = std::function<void(id::device dev, bool load_success)>;
-using return_double            = std::function<void(double value)>;
-using return_string            = std::function<void(std::string_view text)>;
-using return_void              = std::function<void(void)>;
+using on_device_editor_visible_changed = std::function<void(id::device dev, bool visible)>;
+using on_device_error                  = std::function<void(id::device dev, std::string_view error)>;
+using on_device_params_changed         = std::function<void(id::device dev)>;
+using on_error                         = std::function<void(std::string_view error)>;
+using on_plugfile_broken               = std::function<void(id::plugfile plugfile)>;
+using on_plugfile_scanned              = std::function<void(id::plugfile plugfile)>;
+using on_plugin_broken                 = std::function<void(id::plugin plugin)>;
+using on_plugin_scanned                = std::function<void(id::plugin plugin)>;
+using on_sbox_crashed                  = std::function<void(id::sandbox sbox, std::string_view error)>;
+using on_sbox_error                    = std::function<void(id::sandbox sbox, std::string_view error)>;
+using on_sbox_info                     = std::function<void(id::sandbox sbox, std::string_view info)>;
+using on_sbox_started                  = std::function<void(id::sandbox sbox)>;
+using on_sbox_warning                  = std::function<void(id::sandbox sbox, std::string_view warning)>;
+using on_scan_complete                 = std::function<void()>;
+using on_scan_error                    = std::function<void(std::string_view error)>;
+using on_scan_started                  = std::function<void()>;
+using on_scan_warning                  = std::function<void(std::string_view warning)>;
+using return_bytes                     = std::function<void(const scuff::bytes& bytes)>;
+using return_device                    = std::function<void(id::device dev, bool load_success)>;
+using return_double                    = std::function<void(double value)>;
+using return_string                    = std::function<void(std::string_view text)>;
+using return_void                      = std::function<void(void)>;
 
 struct general_reporter {
 	scuff::on_error on_error;
@@ -94,6 +95,7 @@ struct general_reporter {
 };
 
 struct group_reporter {
+	scuff::on_device_editor_visible_changed on_device_editor_visible_changed;
 	scuff::on_device_error on_device_error;
 	scuff::on_device_params_changed on_device_params_changed;
 	scuff::on_error on_error;

@@ -155,7 +155,7 @@ auto cb_gui_request_show(sbox::app* app, id::device dev_id) -> void {
 
 static
 auto cb_gui_request_resize(sbox::app* app, id::device dev_id, uint32_t width, uint32_t height) -> void {
-	send_msg(app, dev_id, device_msg::gui_request_resize{width, height});
+	send_msg(app, dev_id, device_msg::gui_request_resize{{width, height}});
 }
 
 static
@@ -166,18 +166,18 @@ auto cb_gui_resize_hints_changed(sbox::app* app, id::device dev_id) -> void {
 static
 auto convert_input_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
 	auto get_cookie = [dev](idx::param param) -> void* {
-		return dev.service.shm->data->param_info[param.value].clap.cookie;
+		return dev.service->shm.data->param_info[param.value].clap.cookie;
 	};
 	auto get_id = [dev](idx::param param) -> clap_id {
-		return dev.service.shm->data->param_info[param.value].id.value;
+		return dev.service->shm.data->param_info[param.value].id.value;
 	};
 	auto fns = scuff::events::clap::scuff_to_clap_conversion_fns{get_cookie, get_id};
 	scuff::events::clap::event_buffer input_clap_events;
-	for (const auto& event : dev.service.shm->data->events_in) {
+	for (const auto& event : dev.service->shm.data->events_in) {
 		input_clap_events.push_back(scuff::events::clap::from_scuff(event, fns));
 	}
 	clap_dev.service.data->input_event_buffer = std::move(input_clap_events);
-	dev.service.shm->data->events_in.clear();
+	dev.service->shm.data->events_in.clear();
 }
 
 static
@@ -186,7 +186,7 @@ auto convert_output_events(const sbox::device& dev, const clap::device& clap_dev
 		auto has_id = [id](const scuff::param_info& info) -> bool {
 			return info.id.value == id;
 		};
-		const auto& infos = dev.service.shm->data->param_info;
+		const auto& infos = dev.service->shm.data->param_info;
 		const auto pos    = std::find_if(std::begin(infos), std::end(infos), has_id);
 		if (pos == std::end(infos)) {
 			throw std::runtime_error(std::format("Could not find parameter with CLAP id: {}", id));
@@ -198,7 +198,7 @@ auto convert_output_events(const sbox::device& dev, const clap::device& clap_dev
 	for (const auto& event : clap_dev.service.data->output_event_buffer) {
 		output_scuff_events.push_back(scuff::events::clap::to_scuff(event, fns));
 	}
-	dev.service.shm->data->events_out = std::move(output_scuff_events);
+	dev.service->shm.data->events_out = std::move(output_scuff_events);
 	clap_dev.service.data->output_event_buffer.clear();
 }
 
@@ -308,7 +308,7 @@ auto process_audio_device(const sbox::device& dev, const clap::device& clap_dev)
 	auto& audio_buffers = clap_dev.service.audio->buffers;
 	convert_input_events(dev, clap_dev);
 	const auto status = iface.plugin->process(iface.plugin, &process);
-	handle_audio_process_result(*dev.service.shm, clap_dev, status);
+	handle_audio_process_result(dev.service->shm, clap_dev, status);
 	convert_output_events(dev, clap_dev);
 }
 
@@ -468,7 +468,7 @@ auto init_audio(const sbox::device& dev, const clap::device& clap_dev) -> std::s
 	auto out = device_service_audio{};
 	if (clap_dev.iface->plugin.audio_ports) {
 		// AUDIO PLUGIN
-		make_audio_buffers(*dev.service.shm, clap_dev.service.audio_port_info, &out.buffers);
+		make_audio_buffers(dev.service->shm, clap_dev.service.audio_port_info, &out.buffers);
 		initialize_process_struct_for_audio_device(clap_dev, &out);
 	}
 	else {
@@ -526,8 +526,9 @@ auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui
 }
 
 static
-auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_request_resize& msg) -> void {
-	// TOODOO: process msg
+auto process_msg_(sbox::app* app, const device& clap_dev, const clap::device_msg::gui_request_resize& msg) -> void {
+	const auto& dev = app->model.read().devices.at(clap_dev.id);
+	dev.service->scheduled_window_resize = msg.size;
 }
 
 static
@@ -737,7 +738,7 @@ auto init_gui(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device 
 	const auto& iface = clap_dev.iface->plugin;
 	if (iface.gui) {
 		if (iface.gui->is_api_supported(iface.plugin, scuff::os::get_clap_window_api(), false)) {
-			dev.service.shm->data->flags.value |= shm::device_flags::has_gui;
+			dev.service->shm.data->flags.value |= shm::device_flags::has_gui;
 			return dev;
 		}
 	}
@@ -748,7 +749,7 @@ auto init_gui(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device 
 auto init_params(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
 	const auto& iface = clap_dev.iface->plugin;
 	if (iface.params) {
-		dev.service.shm->data->flags.value |= shm::device_flags::has_params;
+		dev.service->shm.data->flags.value |= shm::device_flags::has_params;
 	}
 	return dev;
 }
@@ -816,12 +817,12 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	auto clap_dev                    = clap::device{};
 	dev.id                           = dev_id;
 	dev.type                         = plugin_type::clap;
-	dev.service.shm                  = make_shm_device(app->shm_sbox.id(), dev_id);
+	dev.service->shm                 = make_shm_device(app->shm_sbox.id(), dev_id);
 	clap_dev.service.audio_port_info = retrieve_audio_port_info(iface.plugin);
 	const auto audio_in_count    = clap_dev.service.audio_port_info->inputs.size();
 	const auto audio_out_count   = clap_dev.service.audio_port_info->outputs.size();
-	dev.service.shm->data->audio_in.resize(audio_in_count);
-	dev.service.shm->data->audio_out.resize(audio_out_count);
+	dev.service->shm.data->audio_in.resize(audio_in_count);
+	dev.service->shm.data->audio_out.resize(audio_out_count);
 	clap_dev.id           = dev_id;
 	clap_dev.iface        = std::move(iface);
 	clap_dev.name         = clap_dev.iface->plugin.plugin->desc->name;
@@ -830,7 +831,7 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	dev                   = init_params(std::move(dev), clap_dev);
 	clap_dev              = init_audio(std::move(clap_dev), dev);
 	clap_dev              = init_params(std::move(clap_dev));
-	dev.service.shm->data->param_info.resize(clap_dev.params.size());
+	dev.service->shm.data->param_info.resize(clap_dev.params.size());
 	for (size_t i = 0; i < clap_dev.params.size(); i++) {
 		const auto& param = clap_dev.params[i];
 		scuff::param_info info;
@@ -842,14 +843,14 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 		const auto name_buffer_size = std::min(std::size(info.name), std::size(param.info.name));
 		std::copy_n(std::begin(param.info.name), name_buffer_size, std::begin(info.name));
 		info.name[name_buffer_size - 1] = '\0';
-		dev.service.shm->data->param_info[i] = std::move(info);
+		dev.service->shm.data->param_info[i] = std::move(info);
 	}
 	app->model.update_publish([=](model&& m) {
 		m.devices      = m.devices.insert(dev);
 		m.clap_devices = m.clap_devices.insert(clap_dev);
 		return m;
 	});
-	app->msg_sender.enqueue(scuff::msg::out::return_created_device{dev.id.value, dev.service.shm->id().data(), callback});
+	app->msg_sender.enqueue(scuff::msg::out::return_created_device{dev.id.value, dev.service->shm.id().data(), callback});
 }
 
 [[nodiscard]] static
@@ -1011,11 +1012,43 @@ static
 auto shutdown_editor_window(sbox::app* app, const sbox::device& dev) -> void {
 	const auto m        = app->model.read();
 	const auto clap_dev = m.clap_devices.at(dev.id);
-	const auto iface_gui = clap_dev.iface->plugin.gui;
-	if (!iface_gui) {
+	const auto iface     = clap_dev.iface->plugin;
+	if (!iface.gui) {
 		return;
 	}
-	// TOODOO:
+	iface.gui->hide(iface.plugin);
+	iface.gui->destroy(iface.plugin);
+}
+
+[[nodiscard]] static
+auto get_gui_size(const clap::iface_plugin& iface) -> std::optional<window_size_u32> {
+	uint32_t old_width, old_height;
+	if (iface.gui->get_size(iface.plugin, &old_width, &old_height)) {
+		return window_size_u32{old_width, old_height};
+	}
+	return std::nullopt;
+}
+
+static
+auto on_native_window_resize(const sbox::app* app, const sbox::device& dev, window_size_f native_window_size) -> void {
+	const auto m                = app->model.read();
+	const auto& clap_dev        = m.clap_devices.at(dev.id);
+	const auto iface            = clap_dev.iface->plugin;
+	const auto old_size         = get_gui_size(iface);
+	auto native_window_size_u32 = window_size_u32{native_window_size};
+	auto adjusted_size          = native_window_size_u32;
+	iface.gui->adjust_size(iface.plugin, &adjusted_size.width, &adjusted_size.height);
+	if (adjusted_size == native_window_size_u32) {
+		if (!iface.gui->set_size(iface.plugin, adjusted_size.width, adjusted_size.height)) {
+			if (old_size) {
+				dev.service->scheduled_window_resize = *old_size;
+				iface.gui->set_size(iface.plugin, old_size->width, old_size->height);
+			}
+		}
+		return;
+	}
+	dev.service->scheduled_window_resize = adjusted_size;
+	iface.gui->set_size(iface.plugin, adjusted_size.width, adjusted_size.height);
 }
 
 } // scuff::sbox::clap::main

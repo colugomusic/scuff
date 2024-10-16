@@ -97,13 +97,15 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::crash& msg) -> voi
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
 	log(app, "msg::in::device_create:");
+	const auto dev_id = id::device{msg.dev_id};
 	try {
 		if (msg.type == plugin_type::clap) {
-			clap::main::create_device(app, {msg.dev_id}, msg.plugfile_path, msg.plugin_id, msg.callback);
-			app->model.update_publish([](model&& m){
+			clap::main::create_device(app, dev_id, msg.plugfile_path, msg.plugin_id, msg.callback);
+			app->model.update_publish([dev_id](model&& m){
 				m.device_processing_order = make_device_processing_order(m.devices);
 				return m;
 			});
+			app->model.read().devices.at(dev_id).service->window_listener = {app, dev_id};
 			return;
 		}
 		else {
@@ -183,30 +185,53 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg)
 }
 
 static
-auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_hide& msg) -> void {
-	log(app, "msg::in::device_gui_hide:");
-	const auto devices = app->model.read().devices;
-	auto device        = devices.at({msg.dev_id});
-	if (!device.ui.window) {
+auto gui_hide(sbox::app* app, sbox::device dev) -> void {
+	if (!dev.ui.window) {
 		return;
 	}
-	os::shutdown_editor_window(app, device);
-	switch (device.type) {
-		case plugin_type::clap: { clap::main::shutdown_editor_window(app, device); break; }
+	os::shutdown_editor_window(app, dev);
+	switch (dev.type) {
+		case plugin_type::clap: { clap::main::shutdown_editor_window(app, dev); break; }
 		case plugin_type::vst3: { /* Not implemented yet. */ break; }
 	}
-	window_destroy(&device.ui.window);
-	device.ui = {};
-	app->model.update([device](model&& m){
-		m.devices = m.devices.insert(device);
+	window_hide(dev.ui.window);
+	app->model.update([dev](model&& m){
+		m.devices = m.devices.insert(dev);
 		return m;
 	});
 }
 
 static
-auto on_window_resize(Window* window, Event* event) -> void {
-	const auto size = event_result(event, EvSize);
+auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_hide& msg) -> void {
+	log(app, "msg::in::device_gui_hide:");
+	const auto devices = app->model.read().devices;
+	auto device        = devices.at({msg.dev_id});
+	gui_hide(app, device);
+}
+
+static
+auto on_native_window_resize_impl(sbox::app* app, const sbox::device& dev, window_size_f window_size) -> void {
+	switch (dev.type) {
+		case plugin_type::clap: { clap::main::on_native_window_resize(app, dev, window_size); break; }
+		case plugin_type::vst3: { /* Not implemented yet. */ break; }
+		default:                { assert (false); break; }
+	}
+}
+
+static
+auto on_native_window_close(device_window_listener* dwl, Event* event) -> void {
+	const auto& device = dwl->app->model.read().devices.at(dwl->dev_id);
+	gui_hide(dwl->app, device);
+	dwl->app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dwl->dev_id.value, false});
+}
+
+static
+auto on_native_window_resize(device_window_listener* dwl, Event* event) -> void {
+	const auto size = event_params(event, EvSize);
 	log_printf("on_window_resize: %f,%f", size->width, size->height);
+	const auto m    = dwl->app->model.read();
+	const auto& dev = m.devices.at(dwl->dev_id);
+	on_native_window_resize_impl(dwl->app, dev, {size->width, size->height});
 }
 
 [[nodiscard]] static
@@ -233,14 +258,13 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& m
 	log(app, "msg::in::device_gui_show:");
 	const auto devices   = app->model.read().devices;
 	auto device          = devices.at({msg.dev_id});
-	const auto has_gui   = device.service.shm->data->flags.value & shm::device_flags::has_gui;
+	const auto has_gui   = device.service->shm.data->flags.value & shm::device_flags::has_gui;
 	if (!has_gui) {
 		log(app, "Device %d has no GUI", device.id.value);
 		return;
 	}
 	if (device.ui.window) {
-		log(app, "Device %d GUI is already shown", device.id.value);
-		return;
+		window_destroy(&device.ui.window);
 	}
 	const auto result = create_gui(app, device);
 	if (!result.success) {
@@ -260,7 +284,8 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& m
 	layout_view(device.ui.layout, device.ui.view, 0, 0);
 	panel_layout(device.ui.panel, device.ui.layout);
 	window_panel(device.ui.window, device.ui.panel);
-	window_OnResize(device.ui.window, listener(device.ui.window, on_window_resize, Window));
+	window_OnClose(device.ui.window, listener(&device.service->window_listener, on_native_window_close, device_window_listener));
+	window_OnResize(device.ui.window, listener(&device.service->window_listener, on_native_window_resize, device_window_listener));
 	window_show(device.ui.window);
 	window_size(device.ui.window, S2Df(float(result.width), float(result.height)));
 	if (!setup_editor_window(app, device)) {
@@ -314,7 +339,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::event& msg) -> voi
 	const auto dev_id  = id::device{msg.dev_id};
 	const auto devices = app->model.read().devices;
 	const auto dev     = devices.at(dev_id);
-	dev.service.input_events_from_main->enqueue(msg.event);
+	dev.service->input_events_from_main.enqueue(msg.event);
 }
 
 static

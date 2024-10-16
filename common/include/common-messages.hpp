@@ -62,20 +62,22 @@ namespace scuff::msg::out {
 
 // These messages are sent back from a sandbox process to the client.
 
-struct confirm_activated         {};
-struct device_param_info_changed { id::device::type dev_id; std::string new_shmid; };
-struct report_error              { std::string text; };
-struct report_fatal_error        { std::string text; };
-struct report_info               { std::string text; };
-struct report_warning            { std::string text; };
-struct return_created_device     { id::device::type dev_id; std::string ports_shmid; size_t callback; };
-struct return_param_value        { double value; size_t callback; };
-struct return_param_value_text   { std::string text; size_t callback; };
-struct return_state              { std::vector<std::byte> bytes; size_t callback; };
-struct return_void               { size_t callback; };
+struct confirm_activated             {};
+struct device_editor_visible_changed { id::device::type dev_id; bool visible; };
+struct device_param_info_changed     { id::device::type dev_id; std::string new_shmid; };
+struct report_error                  { std::string text; };
+struct report_fatal_error            { std::string text; };
+struct report_info                   { std::string text; };
+struct report_warning                { std::string text; };
+struct return_created_device         { id::device::type dev_id; std::string ports_shmid; size_t callback; };
+struct return_param_value            { double value; size_t callback; };
+struct return_param_value_text       { std::string text; size_t callback; };
+struct return_state                  { std::vector<std::byte> bytes; size_t callback; };
+struct return_void                   { size_t callback; };
 
 using msg = std::variant<
 	confirm_activated,
+	device_editor_visible_changed,
 	device_param_info_changed,
 	report_error,
 	report_fatal_error,

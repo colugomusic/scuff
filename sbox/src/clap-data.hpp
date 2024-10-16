@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common-events-clap.hpp"
+#include "window-size.hpp"
 #include <boost/container/static_vector.hpp>
 #include <boost/static_string.hpp>
 #include <clap/clap.h>
@@ -102,7 +103,7 @@ namespace device_msg { ///////////////////////////////////////////
 
 struct gui_closed { bool destroyed; };
 struct gui_request_hide {};
-struct gui_request_resize { uint32_t width; uint32_t height; };
+struct gui_request_resize { window_size_u32 size; };
 struct gui_request_show {};
 struct gui_resize_hints_changed {};
 struct log_begin{clap_log_severity severity;};

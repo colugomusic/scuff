@@ -17,15 +17,15 @@ auto copy_data_from_output(const shm::device& dest, size_t dest_port_index, cons
 static
 auto copy_data_from_connected_outputs(const sbox::app& app, const sbox::device& dev) -> void {
 	for (const auto& conn : dev.output_conns) {
-		copy_data_from_output(*app.audio_model->devices.at(conn.other_device).service.shm, conn.other_port_index, *dev.service.shm, conn.this_port_index);
+		copy_data_from_output(app.audio_model->devices.at(conn.other_device).service->shm, conn.other_port_index, dev.service->shm, conn.this_port_index);
 	}
 }
 
 static
 auto transfer_input_events_from_main(const sbox::device& dev) -> void {
 	scuff::event event;
-	while (dev.service.input_events_from_main->try_dequeue(event)) {
-		dev.service.shm->data->events_in.push_back(event);
+	while (dev.service->input_events_from_main.try_dequeue(event)) {
+		dev.service->shm.data->events_in.push_back(event);
 	}
 }
 

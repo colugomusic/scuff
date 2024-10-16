@@ -8,6 +8,7 @@
 #include "common-slot-buffer.hpp"
 #include "debug-ui.hpp"
 #include "options.hpp"
+#include "window-size.hpp"
 #include <boost/static_string.hpp>
 #include <cs_plain_guarded.h>
 #include <memory>
@@ -48,9 +49,16 @@ struct port_conn {
 	auto operator<=>(const port_conn&) const = default;
 };
 
+struct device_window_listener {
+	sbox::app* app;
+	id::device dev_id;
+};
+
 struct device_service {
-	immer::box<shm::device> shm;
-	std::shared_ptr<rwq<scuff::event>> input_events_from_main = std::make_shared<rwq<scuff::event>>(EVENT_PORT_SIZE);
+	shm::device shm;
+	device_window_listener window_listener;
+	std::optional<window_size_f> scheduled_window_resize;
+	rwq<scuff::event> input_events_from_main = rwq<scuff::event>(EVENT_PORT_SIZE);
 };
 
 struct device {
@@ -61,7 +69,7 @@ struct device {
 	double sample_rate = 0.0;
 	immer::box<std::string> name;
 	immer::flex_vector<port_conn> output_conns;
-	device_service service;
+	std::shared_ptr<device_service> service = std::make_shared<device_service>();
 };
 
 struct model {
