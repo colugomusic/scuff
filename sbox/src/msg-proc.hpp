@@ -64,7 +64,7 @@ auto activate(sbox::app* app, const sbox::device& dev, double sr) -> void {
 static
 auto deactivate(sbox::app* app, const sbox::device& dev) -> void {
 	if (dev.type == plugin_type::clap) {
-		clap::main::deactivate(*app, dev.id);
+		clap::main::deactivate(app, dev.id);
 	}
 }
 
@@ -105,7 +105,11 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 				m.device_processing_order = make_device_processing_order(m.devices);
 				return m;
 			});
-			app->model.read().devices.at(dev_id).service->window_listener = {app, dev_id};
+			const auto dev = app->model.read().devices.at(dev_id);
+			if (app->active) {
+				activate(app, dev, app->sample_rate);
+			}
+			dev.service->window_listener = {app, dev_id};
 			return;
 		}
 		else {
@@ -282,12 +286,17 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& m
 	device.ui.layout = layout_create(1, 1);
 	device.ui.view   = view_create();
 	layout_view(device.ui.layout, device.ui.view, 0, 0);
+	if (!result.resizable) {
+		view_size(device.ui.view, S2Df(float(result.width), float(result.height)));
+	}
 	panel_layout(device.ui.panel, device.ui.layout);
 	window_panel(device.ui.window, device.ui.panel);
 	window_OnClose(device.ui.window, listener(&device.service->window_listener, on_native_window_close, device_window_listener));
 	window_OnResize(device.ui.window, listener(&device.service->window_listener, on_native_window_resize, device_window_listener));
+	if (result.resizable) {
+		window_size(device.ui.window, S2Df(float(result.width), float(result.height)));
+	}
 	window_show(device.ui.window);
-	window_size(device.ui.window, S2Df(float(result.width), float(result.height)));
 	if (!setup_editor_window(app, device)) {
 		log(app, "Failed to setup clap editor window");
 	}
@@ -377,6 +386,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::activate& msg) -> 
 	}
 	app->msg_sender.enqueue(msg::out::confirm_activated{});
 	app->last_heartbeat = std::chrono::steady_clock::now();
+	app->sample_rate    = msg.sr;
 	app->active         = true;
 }
 

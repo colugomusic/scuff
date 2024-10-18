@@ -45,7 +45,7 @@ auto unset_flags(device_atomic_flags* atomic_flags, uint32_t flags_to_unset) -> 
 
 [[nodiscard]] static
 auto is_active(const device& device) -> bool {
-	return is_flag_set(device.service.data->atomic_flags, device_atomic_flags::active);
+	return is_flag_set(device.flags.value, device_flags::active);
 }
 
 [[nodiscard]] static
@@ -418,8 +418,8 @@ auto make_input_event_list(const clap::device& dev) -> clap_input_events_t {
 		return static_cast<uint32_t>(ctx.service_data->input_event_buffer.size());
 	};
 	list.get = [](const clap_input_events_t* list, uint32_t index) -> const clap_event_header_t* {
-		const auto& event_buffer = *static_cast<const events::clap::event_buffer*>(list->ctx);
-		return &scuff::events::clap::to_header(event_buffer[index]);
+		const auto& ctx = *static_cast<const clap::event_queue_context*>(list->ctx);
+		return &scuff::events::clap::to_header(ctx.service_data->input_event_buffer[index]);
 	};
 	return list;
 }
@@ -952,34 +952,47 @@ auto activate(sbox::app* app, id::device dev_id, double sr) -> bool {
 	const auto m              = app->model.read();
 	const auto dev            = m.devices.at(dev_id);
 	const auto clap_dev       = m.clap_devices.at(dev_id);
-	const auto already_active = clap_dev.service.data->atomic_flags.value & device_atomic_flags::active;
+	const auto already_active = clap_dev.flags.value & device_flags::active;
 	const auto current_sr     = dev.sample_rate;
 	if (already_active && current_sr == sr) {
 		return true;
 	}
-	clap_dev.iface->plugin.plugin->deactivate(clap_dev.iface->plugin.plugin);
+	if (already_active) {
+		clap_dev.iface->plugin.plugin->deactivate(clap_dev.iface->plugin.plugin);
+	}
 	auto result = clap_dev.iface->plugin.plugin->activate(clap_dev.iface->plugin.plugin, sr, VECTOR_SIZE, VECTOR_SIZE);
 	if (!result) {
 		return false;
 	}
 	app->model.update_publish([dev_id, sr](model&& m) {
-		auto dev = m.devices.at(dev_id);
-		dev.sample_rate = sr;
-		m.devices = m.devices.insert(dev);
+		m.devices = m.devices.update(dev_id, [sr](sbox::device dev) {
+			dev.sample_rate = sr;
+			return dev;
+		});
+		m.clap_devices = m.clap_devices.update(dev_id, [](clap::device clap_dev) {
+			clap_dev.flags.value |= device_flags::active;
+			return clap_dev;
+		});
 		return m;
 	});
-	clap_dev.service.data->atomic_flags.value |= device_atomic_flags::active;
 	return true;
 }
 
 static
-auto deactivate(const sbox::app& app, id::device dev_id) -> void {
-	const auto m         = app.model.read();
+auto deactivate(sbox::app* app, id::device dev_id) -> void {
+	const auto m         = app->model.read();
 	const auto clap_dev  = m.clap_devices.at(dev_id);
-	const auto is_active = clap_dev.service.data->atomic_flags.value & device_atomic_flags::active;
+	const auto is_active = clap_dev.flags.value & device_flags::active;
 	if (!is_active) {
 		return;
 	}
+	app->model.update_publish([dev_id](model&& m) {
+		m.clap_devices = m.clap_devices.update(dev_id, [](clap::device clap_dev) {
+			clap_dev.flags.value &= ~device_flags::active;
+			return clap_dev;
+		});
+		return m;
+	});
 	clap_dev.iface->plugin.plugin->deactivate(clap_dev.iface->plugin.plugin);
 }
 

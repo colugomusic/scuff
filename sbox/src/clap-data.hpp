@@ -70,16 +70,22 @@ struct device_host_data {
 	id::device dev_id;
 };
 
+struct device_flags {
+	enum e {
+		active = 1 << 0,
+	};
+	int value = 0;
+};
+
 struct device_atomic_flags {
 	enum e {
-		active               = 1 << 0,
-		processing           = 1 << 1,
-		schedule_active      = 1 << 2,
-		schedule_callback    = 1 << 3,
-		schedule_erase       = 1 << 4,
-		schedule_restart     = 1 << 5,
-		schedule_param_flush = 1 << 6,
-		schedule_process     = 1 << 7,
+		processing           = 1 << 0,
+		schedule_active      = 1 << 1,
+		schedule_callback    = 1 << 2,
+		schedule_erase       = 1 << 3,
+		schedule_restart     = 1 << 4,
+		schedule_param_flush = 1 << 5,
+		schedule_process     = 1 << 6,
 	};
 	std::atomic<int> value = 0;
 };
@@ -168,6 +174,7 @@ struct iface {
 
 struct device {
 	id::device id;
+	device_flags flags;
 	immer::box<clap::iface> iface;
 	immer::box<std::string> name;
 	immer::vector<param> params;

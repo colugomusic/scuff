@@ -127,6 +127,7 @@ auto audio_process(const group_process& process) -> void;
 //  - If an error occurs during initialization then the error callback will be called.
 //  - Returns true if the initialization was successful, or if scuff was already
 //    initialized.
+[[nodiscard]]
 auto init(const scuff::on_error& on_error) -> bool;
 
 // Call this when you're done with the sandboxing system.
@@ -164,16 +165,19 @@ auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port
 //  - You can create a device with a plugin ID that hasn't been scanned yet. It will be
 //    created in an error state and will remain that way until the plugin is found by
 //    a future scan where the reload_failed_devices flag is set.
+[[nodiscard]]
 auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id) -> id::device;
 
 // Create a device and add it to the sandbox asynchronously.
 //  - When the operation is complete, call the given function with the device id.
+[[nodiscard]]
 auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_device fn) -> id::device;
 
 // Create a new group.
 // - Every sandbox has to belong to a group.
 // - This is what allows data to travel between sandboxes.
 // - On failure, returns an invalid id
+[[nodiscard]]
 auto create_group(double sample_rate) -> id::group;
 
 // Create a new sandbox.
@@ -181,6 +185,7 @@ auto create_group(double sample_rate) -> id::group;
 // - Data can travel between sandboxes in the same group.
 // - If starting the sandbox process fails, the sandbox will still be created,
 //   but it will be in an error state.
+[[nodiscard]]
 auto create_sandbox(id::group group, std::string_view sbox_exe_path) -> id::sandbox;
 
 // Remove the given connection between two devices.
@@ -189,10 +194,12 @@ auto disconnect(id::device dev_out, size_t port_out, id::device dev_in, size_t p
 // Create a device by duplicating an existing device, and add it to the sandbox.
 // - The target device can belong to a different sandbox.
 // - The target device can belong to a different group.
+[[nodiscard]]
 auto duplicate(id::device dev, id::sandbox sbox) -> id::device;
 
 // Duplicate a device asynchronously.
 // - When the operation is complete, call the given function with the device id.
+[[nodiscard]]
 auto duplicate_async(id::device dev, id::sandbox sbox, return_device fn) -> id::device;
 
 // Erase a device.
@@ -213,40 +220,55 @@ auto erase(id::sandbox sbox) -> void;
 // Find the device parameter with the given id.
 // The id is either a Steinberg::Vst::ParamID or a clap_id.
 // - This will return an invalid index if the device hasn't finished being created yet.
+[[nodiscard]]
 auto find(id::device dev, ext::id::param param_id) -> idx::param;
 
 // Find a scanned plugin with the given string ID.
 // Returns < 0 if the plugin was not found.
+[[nodiscard]]
 auto find(ext::id::plugin plugin_id) -> id::plugin;
 
 // Return a list of plugin files which failed to load.
+[[nodiscard]]
 auto get_broken_plugfiles() -> std::vector<id::plugfile>;
 
 // Return a list of plugins which failed to load.
+[[nodiscard]]
 auto get_broken_plugins() -> std::vector<id::plugin>;
 
+[[nodiscard]]
+auto get_devices(id::sandbox sbox) -> std::vector<id::device>;
+
 // If the plugin file failed to scan, return the error string.
+[[nodiscard]]
 auto get_error(id::plugfile plugfile) -> const char*;
 
 // If the plugin failed to load, return the error string.
+[[nodiscard]]
 auto get_error(id::plugin plugin) -> const char*;
 
 // If the sandbox failed to start, return the error string.
+[[nodiscard]]
 auto get_error(id::sandbox sbox) -> const char*;
 
 // Returns the plugin ID string.
+[[nodiscard]]
 auto get_ext_id(id::plugin plugin) -> ext::id::plugin;
 
 // Return the parameter info.
+[[nodiscard]]
 auto get_info(id::device dev, idx::param param) -> param_info;
 
 // Returns the plugin name
+[[nodiscard]]
 auto get_name(id::plugin plugin) -> const char*;
 
 // Return the file path of the plugin file.
+[[nodiscard]]
 auto get_path(id::plugfile plugfile) -> const char*;
 
 // Get the current value of the parameter.
+[[nodiscard]]
 auto get_value(id::device dev, idx::param param) -> double;
 
 // Get the current value of the parameter, asynchronously.
@@ -254,32 +276,41 @@ auto get_value(id::device dev, idx::param param) -> double;
 auto get_value_async(id::device dev, idx::param param, return_double fn) -> void;
 
 // Returns the plugin vendor.
+[[nodiscard]]
 auto get_vendor(id::plugin plugin) -> const char*;
 
 // Returns the plugin version string.
+[[nodiscard]]
 auto get_version(id::plugin plugin) -> const char*;
 
 // If the device failed to load successfully, return the error string.
+[[nodiscard]]
 auto get_error(id::device dev) -> const char*;
 
 // For CLAP plugins, return the list of feature strings.
 // Not sure how this will look for VST yet.
 // This might change.
+[[nodiscard]]
 auto get_features(id::plugin plugin) -> std::vector<std::string>;
 
 // Return the number of parameters for the given device.
+[[nodiscard]]
 auto get_param_count(id::device dev) -> size_t;
 
 // Return the plugin for the given device.
+[[nodiscard]]
 auto get_plugin(id::device dev) -> id::plugin;
 
 // Returns the plugin ID string for the given device.
+[[nodiscard]]
 auto get_plugin_ext_id(id::device dev) -> ext::id::plugin;
 
 // Return the plugin type.
+[[nodiscard]]
 auto get_type(id::plugin plugin) -> plugin_type;
 
 // Calculate the string representation of the given value.
+[[nodiscard]]
 auto get_value_text(id::device dev, idx::param param, double value) -> std::string;
 
 // Calculate the string representation of the given value, asynchronously.
@@ -288,6 +319,7 @@ auto get_value_text_async(id::device dev, idx::param param, double value, return
 
 // Return a list of plugins which at least appear to be working
 // (they did not fail to load during plugin scanning.)
+[[nodiscard]]
 auto get_working_plugins() -> std::vector<id::plugin>;
 
 // Hide the device editor window.
@@ -297,9 +329,11 @@ auto gui_hide(id::device dev) -> void;
 auto gui_show(id::device dev) -> void;
 
 // Return true if the device has a GUI.
+[[nodiscard]]
 auto has_gui(id::device dev) -> bool;
 
 // Return true if the device has parameters.
+[[nodiscard]]
 auto has_params(id::device dev) -> bool;
 
 // Return true if this plugin is suitable for use in a "rack", for example it is an audio
@@ -308,12 +342,15 @@ auto has_params(id::device dev) -> bool;
 // I don't know what we will do for VSTs yet.
 // I'm not sure I like this function so I might replace it with something else. Let me know
 // what you think.
+[[nodiscard]]
 auto has_rack_features(id::plugin plugin) -> bool;
 
 // Check if the given sandbox is running.
+[[nodiscard]]
 auto is_running(id::sandbox sbox) -> bool;
 
 // Return true if the plugin scanner process is currently running.
+[[nodiscard]]
 auto is_scanning(void) -> bool;
 
 // Load the device state and block until the operation is complete.
@@ -330,6 +367,7 @@ auto push_event(id::device dev, const scuff::event& event) -> void;
 auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void;
 
 // Save the device state.
+[[nodiscard]]
 auto save(id::device dev) -> scuff::bytes;
 
 // Save the device state, asynchronously.
@@ -344,6 +382,7 @@ auto scan(std::string_view scan_exe_path, scan_flags flags) -> void;
 auto set_render_mode(id::group group, render_mode mode) -> void;
 
 // Return true if the device loaded successfully.
+[[nodiscard]]
 auto was_loaded_successfully(id::device dev) -> bool;
 
 } // scuff

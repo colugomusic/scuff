@@ -61,7 +61,7 @@ auto destroy_all_editor_windows(const sbox::app& app) -> void {
 
 static
 auto destroy(sbox::app** app) -> void {
-	debug_log(*app, "scuff::sbox::main::destroy");
+	debug_log("scuff::sbox::main::destroy");
 	debug_ui::destroy(&(*app)->debug_ui);
 	if ((*app)->audio_thread.joinable()) {
 		auto& group_shm = (*app)->shm_group;

@@ -24,7 +24,12 @@ auto copy_data_from_connected_outputs(const sbox::app& app, const sbox::device& 
 static
 auto transfer_input_events_from_main(const sbox::device& dev) -> void {
 	scuff::event event;
+	auto& events_in = dev.service->shm.data->events_in;
 	while (dev.service->input_events_from_main.try_dequeue(event)) {
+		if (events_in.size() == events_in.max_size()) {
+			debug_log("Dropping input events because the input event queue is full. This is a bug!");
+			break;
+		}
 		dev.service->shm.data->events_in.push_back(event);
 	}
 }
@@ -59,7 +64,7 @@ auto do_processing(sbox::app* app) -> void {
 static
 auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 	try {
-		debug_log(app, "Audio thread has started.");
+		debug_log("Audio thread has started.");
 		uint64_t local_epoch = 0;
 		for (;;) {
 			auto result = signaling::wait_for_signaled(&app->shm_group.data->signaling, &app->shm_group.signaling, stop_token, &local_epoch);
@@ -69,7 +74,7 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 					break;
 				}
 				case signaling::wait_for_signaled_result::stop_requested: {
-					debug_log(app, "Audio thread is stopping because it was requested to.");
+					debug_log("Audio thread is stopping because it was requested to.");
 					return;
 				}
 				default: {
@@ -79,7 +84,7 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 		}
 	}
 	catch (const std::exception& err) {
-		debug_log(app, "Audio thread is stopping because there was a fatal error: %s", err.what());
+		debug_log("Audio thread is stopping because there was a fatal error: %s", err.what());
 		app->msg_sender.enqueue(msg::out::report_fatal_error{err.what()});
 		app->schedule_terminate = true;
 	}
@@ -87,7 +92,7 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 
 static
 auto start(sbox::app* app) -> void {
-	debug_log(app, "audio::start()");
+	debug_log("audio::start()");
 	if (app->audio_thread.joinable()) {
 		return;
 	}
@@ -97,7 +102,7 @@ auto start(sbox::app* app) -> void {
 
 static
 auto stop(sbox::app* app) -> void {
-	debug_log(app, "audio::stop()");
+	debug_log("audio::stop()");
 	if (app->audio_thread.joinable()) {
 		app->audio_thread.request_stop();
 		app->audio_thread.join();

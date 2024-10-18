@@ -94,6 +94,7 @@ struct app {
 	std::atomic_bool                   schedule_terminate = false;
 	sbox::debug_ui::model              debug_ui;
 	bool                               active = false;
+	double                             sample_rate = 44100.0;
 	heartbeat_time                     last_heartbeat;
 };
 

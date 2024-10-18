@@ -203,6 +203,7 @@ auto process_message_(const sandbox& sbox, const msg::out::return_created_device
 			const auto& sbox        = m.sandboxes.at(device.sbox);
 			const auto device_shmid = shm::device::make_id(sbox.services->get_shmid(), {msg.dev_id});
 			device.services->shm    = shm::device{bip::open_only, shm::segment::remove_when_done, device_shmid};
+			device.flags.value     |= device_flags::created_successfully;
 			m.devices = m.devices.insert(device);
 			return_fn({msg.dev_id}, true);
 			return m;
@@ -835,6 +836,17 @@ auto get_broken_plugins() -> std::vector<id::plugin> {
 	return out;
 }
 
+[[nodiscard]] static
+auto get_devices(id::sandbox sbox_id) -> std::vector<id::device> {
+	const auto m     = DATA_->model.read();
+	const auto& sbox = m.sandboxes.at(sbox_id);
+	std::vector<id::device> out;
+	for (const auto dev_id : sbox.devices) {
+		out.push_back(dev_id);
+	}
+	return out;
+}
+
 static
 auto gui_hide(id::device dev) -> void {
 	const auto m       = DATA_->model.read();
@@ -853,7 +865,7 @@ auto gui_show(id::device dev) -> void {
 
 [[nodiscard]] static
 auto was_loaded_successfully(id::device dev) -> bool {
-	return DATA_->model.read().devices.at(dev).error->empty();
+	return DATA_->model.read().devices.at(dev).flags.value & device_flags::created_successfully;
 }
 
 [[nodiscard]] static
@@ -1389,6 +1401,11 @@ auto get_broken_plugfiles() -> std::vector<id::plugfile> {
 
 auto get_broken_plugins() -> std::vector<id::plugin> {
 	try                               { return impl::get_broken_plugins(); }
+	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+}
+
+auto get_devices(id::sandbox sbox) -> std::vector<id::device> {
+	try                               { return impl::get_devices(sbox); }
 	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
 }
 

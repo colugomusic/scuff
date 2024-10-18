@@ -12,7 +12,7 @@ auto log(sbox::app* app, std::string_view fmt, Args&&... args) -> void {
 }
 
 template <typename... Args> static
-auto debug_log(sbox::app* app, std::string_view fmt, Args&&... args) -> void {
+auto debug_log(std::string_view fmt, Args&&... args) -> void {
 #if _DEBUG
 	log_printf(fmt.data(), std::forward<Args>(args)...);
 #endif

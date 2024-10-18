@@ -82,6 +82,13 @@ struct group_services {
 	std::atomic_int ref_count = 0;
 };
 
+struct device_flags {
+	enum e {
+		created_successfully = 1 << 0,
+	};
+	int value = 0;
+};
+
 struct device_services {
 	// Increment this any time a parameter change output
 	// event is received, to signal that the last saved
@@ -96,6 +103,7 @@ struct device {
 	id::device id;
 	id::plugin plugin;
 	id::sandbox sbox;
+	device_flags flags;
 	plugin_type type;
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
