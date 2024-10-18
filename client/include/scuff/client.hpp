@@ -364,7 +364,8 @@ auto load_async(id::device dev, const scuff::bytes& bytes, return_void fn) -> vo
 auto push_event(id::device dev, const scuff::event& event) -> void;
 
 // Restart the sandbox.
-auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void;
+[[nodiscard]]
+auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool;
 
 // Save the device state.
 [[nodiscard]]

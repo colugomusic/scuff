@@ -1019,8 +1019,8 @@ auto get_version(id::plugin plugin) -> const char* {
 	return DATA_->model.read().plugins.at({plugin}).version->c_str();
 }
 
-static
-auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
+[[nodiscard]] static
+auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool {
 	const auto m       = DATA_->model.read();
 	const auto sandbox = m.sandboxes.at({sbox});
 	const auto& group  = m.groups.at(sandbox.group);
@@ -1031,6 +1031,8 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 	const auto sandbox_shmid = sandbox.services->get_shmid();
 	const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, group.sample_rate);
 	sandbox.services->proc   = bp::child{std::string{sbox_exe_path}, exe_args};
+	for (const auto dev_id : sandbox.devices) {
+	}
 	// TOODOO: the rest of this
 }
 
@@ -1544,9 +1546,9 @@ auto receive_report(id::group group_id, const group_reporter& reporter) -> void 
 	catch (const std::exception& err) { report::send(api_error(err.what())); }
 }
 
-auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
-	try                               { impl::restart(sbox, sbox_exe_path); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool {
+	try                               { return impl::restart(sbox, sbox_exe_path); }
+	catch (const std::exception& err) { report::send(api_error(err.what())); return false; }
 }
 
 auto save(id::device dev) -> scuff::bytes {
