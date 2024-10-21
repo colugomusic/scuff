@@ -63,13 +63,16 @@ namespace scuff::msg::out {
 // These messages are sent back from a sandbox process to the client.
 
 struct confirm_activated             {};
+struct device_create_fail            { id::device::type dev_id; size_t callback; };
+struct device_create_success         { id::device::type dev_id; std::string ports_shmid; size_t callback; };
 struct device_editor_visible_changed { id::device::type dev_id; bool visible; };
+struct device_load_fail              { id::device::type dev_id; };
+struct device_load_success           { id::device::type dev_id; };
 struct device_params_changed         { id::device::type dev_id; };
 struct report_error                  { std::string text; };
 struct report_fatal_error            { std::string text; };
 struct report_info                   { std::string text; };
 struct report_warning                { std::string text; };
-struct return_created_device         { id::device::type dev_id; std::string ports_shmid; size_t callback; };
 struct return_param_value            { double value; size_t callback; };
 struct return_param_value_text       { std::string text; size_t callback; };
 struct return_state                  { std::vector<std::byte> bytes; size_t callback; };
@@ -77,13 +80,16 @@ struct return_void                   { size_t callback; };
 
 using msg = std::variant<
 	confirm_activated,
+	device_create_fail,
+	device_create_success,
 	device_editor_visible_changed,
+	device_load_fail,
+	device_load_success,
 	device_params_changed,
 	report_error,
 	report_fatal_error,
 	report_info,
 	report_warning,
-	return_created_device,
 	return_param_value,
 	return_param_value_text,
 	return_state,
@@ -98,7 +104,6 @@ auto deserialize<scuff::msg::in::device_create>(std::span<const std::byte>* byte
 	deserialize(bytes, &msg->type);
 	deserialize(bytes, &msg->plugfile_path);
 	deserialize(bytes, &msg->plugin_id);
-	deserialize(bytes, &msg->callback);
 }
 
 template <> inline
@@ -114,10 +119,26 @@ auto deserialize<scuff::msg::in::event>(std::span<const std::byte>* bytes, scuff
 }
 
 template <> inline
-auto deserialize<scuff::msg::out::return_created_device>(std::span<const std::byte>* bytes, scuff::msg::out::return_created_device* msg) -> void {
+auto deserialize<scuff::msg::out::device_create_fail>(std::span<const std::byte>* bytes, scuff::msg::out::device_create_fail* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->callback);
+}
+
+template <> inline
+auto deserialize<scuff::msg::out::device_create_success>(std::span<const std::byte>* bytes, scuff::msg::out::device_create_success* msg) -> void {
 	deserialize(bytes, &msg->dev_id);
 	deserialize(bytes, &msg->ports_shmid);
 	deserialize(bytes, &msg->callback);
+}
+
+template <> inline
+auto deserialize<scuff::msg::out::device_load_fail>(std::span<const std::byte>* bytes, scuff::msg::out::device_load_fail* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+}
+
+template <> inline
+auto deserialize<scuff::msg::out::device_load_success>(std::span<const std::byte>* bytes, scuff::msg::out::device_load_success* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
 }
 
 template <> inline
@@ -168,7 +189,6 @@ auto serialize<scuff::msg::in::device_create>(const scuff::msg::in::device_creat
 	serialize(msg.type, bytes);
 	serialize(std::string_view{msg.plugfile_path}, bytes);
 	serialize(std::string_view{msg.plugin_id}, bytes);
-	serialize(msg.callback, bytes);
 }
 
 template <> inline
@@ -184,10 +204,26 @@ auto serialize<scuff::msg::in::event>(const scuff::msg::in::event& msg, std::vec
 }
 
 template <> inline
-auto serialize<scuff::msg::out::return_created_device>(const scuff::msg::out::return_created_device& msg, std::vector<std::byte>* bytes) -> void {
+auto serialize<scuff::msg::out::device_create_fail>(const scuff::msg::out::device_create_fail& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
+	serialize(msg.callback, bytes);
+}
+
+template <> inline
+auto serialize<scuff::msg::out::device_create_success>(const scuff::msg::out::device_create_success& msg, std::vector<std::byte>* bytes) -> void {
 	serialize(msg.dev_id, bytes);
 	serialize(std::string_view{msg.ports_shmid}, bytes);
 	serialize(msg.callback, bytes);
+}
+
+template <> inline
+auto serialize<scuff::msg::out::device_load_fail>(const scuff::msg::out::device_load_fail& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
+}
+
+template <> inline
+auto serialize<scuff::msg::out::device_load_success>(const scuff::msg::out::device_load_success& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
 }
 
 template <> inline

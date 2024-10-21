@@ -3,7 +3,7 @@
 #include "common-os.hpp"
 #include "common-plugin-type.hpp"
 #include "data.hpp"
-#include "report.hpp"
+#include "ui.hpp"
 #include <boost/process.hpp>
 #include <deque>
 #include <nlohmann/json.hpp>
@@ -104,7 +104,7 @@ auto read_broken_plugfile(const nlohmann::json& j) -> void {
 		m.plugfiles = m.plugfiles.insert(pf);
 		return m;
 	});
-	report::send(report::msg::plugfile_broken{pf.id});
+	ui::send(ui::msg::plugfile_broken{pf.id});
 }
 
 [[nodiscard]] static
@@ -143,7 +143,7 @@ auto read_broken_plugin(const nlohmann::json& j) -> void {
 			m.plugins = m.plugins.insert(plugin);
 			return m;
 		});
-		report::send(report::msg::plugin_broken{plugin.id});
+		ui::send(ui::msg::plugin_broken{plugin.id});
 	}
 }
 
@@ -167,7 +167,7 @@ auto read_plugfile(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 		m.plugfiles = m.plugfiles.insert(pf);
 		return m;
 	});
-	report::send(report::msg::plugfile_scanned{pf.id});
+	ui::send(ui::msg::plugfile_scanned{pf.id});
 	basio::post(scanner->context, [scanner, path] { async_scan_clap_file(scanner, path); });
 }
 
@@ -216,7 +216,7 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 			// If it isn't ignore this plugin.
 			const auto m = DATA_->model.read();
 			if (const auto existing_plugin = find_existing_plugin(m, id)) {
-				report::send(report::msg::scan_warning{std::format("The scanner found multiple plugins with the same id: '{}'", id)});
+				ui::send(ui::msg::scan_warning{std::format("The scanner found multiple plugins with the same id: '{}'", id)});
 				if (version.compare(existing_plugin->version) <= 0) {
 					return;
 				}
@@ -234,7 +234,7 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 				m.plugins = m.plugins.insert(plugin);
 				return m;
 			});
-			report::send(report::msg::plugin_scanned{plugin.id});
+			ui::send(ui::msg::plugin_scanned{plugin.id});
 			// TOODOO: if flags & scuff_scan_flag_reload_failed_devices,
 			//       reload any unloaded devices which use this plugin 
 			return;
@@ -262,7 +262,7 @@ auto stdout_respond(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 
 static
 auto report_exception(const std::exception& err) -> void {
-	report::send(report::msg::scan_error{err.what()});
+	ui::send(ui::msg::scan_error{err.what()});
 }
 
 auto read_lines(scan_::scanner* scanner, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred, respond_fn respond) -> void {
@@ -296,7 +296,7 @@ static
 auto scan_system_for_installed_plugins(scan_::scanner* scanner) -> void {
 	if (!(std::filesystem::exists(scanner->exe_path) && std::filesystem::is_regular_file(scanner->exe_path))) {
 		const auto err = std::format("Scanner executable not found: {}", scanner->exe_path);
-		report::send(report::msg::scan_error{err});
+		ui::send(ui::msg::scan_error{err});
 		return;
 	}
 	const auto exe_args = make_exe_args_for_plugin_listing();
@@ -311,12 +311,12 @@ auto thread(std::stop_token token, std::string scan_exe_path, scan_flags flags) 
 	scan_::scanner scanner;
 	scanner.exe_path = scan_exe_path;
 	scanner.flags    = flags;
-	report::send(report::msg::scan_started{});
+	ui::send(ui::msg::scan_started{});
 	basio::post(scanner.context, [&scanner] { scan_system_for_installed_plugins(&scanner); });
 	while (!(token.stop_requested() || scanner.context.stopped())) {
 		scanner.context.run_one();
 	}
-	report::send(report::msg::scan_complete{});
+	ui::send(ui::msg::scan_complete{});
 }
 
 static

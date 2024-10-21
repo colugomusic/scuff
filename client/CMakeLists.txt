@@ -10,9 +10,9 @@ list (APPEND src
 	include/scuff/managed.hpp
 	src/client.cpp
 	src/data.hpp
-	src/report.hpp
-	src/report-types.hpp
 	src/scan.hpp
+	src/ui.hpp
+	src/ui-types.hpp
 )
 set(immer_BUILD_TESTS OFF)
 set(immer_BUILD_EXAMPLES OFF)

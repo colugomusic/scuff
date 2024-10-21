@@ -9,11 +9,12 @@
 namespace lg = libguarded;
 
 namespace scuff {
-namespace report {
+namespace ui {
 namespace msg {
 
 struct device_editor_visible_changed { id::device dev; bool visible; };
-struct device_error                  { id::device dev; std::string error; };
+struct device_create                 { create_device_result result; return_device callback; };
+struct device_load                   { load_device_result result; };
 struct device_params_changed         { id::device dev; };
 struct error                         { std::string error; };
 struct plugfile_broken               { id::plugfile plugfile; };
@@ -44,7 +45,8 @@ using general = std::variant<
 
 using group = std::variant<
 	device_editor_visible_changed,
-	device_error,
+	device_create,
+	device_load,
 	device_params_changed,
 	error,
 	sbox_crashed,
@@ -59,5 +61,5 @@ using general_q = q<general>;
 using group_q   = q<group>;
 
 } // msg
-} // report
+} // ui
 } // scuff

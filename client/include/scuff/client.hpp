@@ -22,6 +22,16 @@ struct scan_flags {
 	int value = 0;
 };
 
+struct create_device_result {
+	id::device id;
+	bool was_created_successfully = false;
+};
+
+struct load_device_result {
+	id::device id;
+	bool was_loaded_successfully = false;
+};
+
 struct audio_writer {
 	size_t port_index;
 	std::function<void(float* floats)> write;
@@ -60,7 +70,7 @@ struct group_process {
 };
 
 using on_device_editor_visible_changed = std::function<void(id::device dev, bool visible)>;
-using on_device_error                  = std::function<void(id::device dev, std::string_view error)>;
+using on_device_load                   = std::function<void(load_device_result result)>;
 using on_device_params_changed         = std::function<void(id::device dev)>;
 using on_error                         = std::function<void(std::string_view error)>;
 using on_plugfile_broken               = std::function<void(id::plugfile plugfile)>;
@@ -77,12 +87,12 @@ using on_scan_error                    = std::function<void(std::string_view err
 using on_scan_started                  = std::function<void()>;
 using on_scan_warning                  = std::function<void(std::string_view warning)>;
 using return_bytes                     = std::function<void(const scuff::bytes& bytes)>;
-using return_device                    = std::function<void(id::device dev, bool load_success)>;
+using return_device                    = std::function<void(create_device_result result)>;
 using return_double                    = std::function<void(double value)>;
 using return_string                    = std::function<void(std::string_view text)>;
 using return_void                      = std::function<void(void)>;
 
-struct general_reporter {
+struct general_ui {
 	scuff::on_error on_error;
 	scuff::on_plugfile_broken on_plugfile_broken;
 	scuff::on_plugfile_scanned on_plugfile_scanned;
@@ -94,9 +104,9 @@ struct general_reporter {
 	scuff::on_scan_warning on_scan_warning;
 };
 
-struct group_reporter {
+struct group_ui {
 	scuff::on_device_editor_visible_changed on_device_editor_visible_changed;
-	scuff::on_device_error on_device_error;
+	scuff::on_device_load on_device_load;
 	scuff::on_device_params_changed on_device_params_changed;
 	scuff::on_error on_error;
 	scuff::on_sbox_crashed on_sbox_crashed;
@@ -117,7 +127,7 @@ auto audio_process(const group_process& process) -> void;
 // The rest of these functions are thread-safe, but NOT necessarily realtime-safe.
 // 
 // Functions with the *_async suffix return immediately and call the provided function
-// with the result when the operation is complete.
+// with the result when the operation is complete, on the next call to ui_update.
 // In a UI processing thread, it is recommended to use the asynchronous functions over
 // their blocking variants when possible because these operations require a
 // back-and-forth between the client and sandbox processes in order to do their work.
@@ -134,16 +144,17 @@ auto init(const scuff::on_error& on_error) -> bool;
 //  - Don't call anything else after this, except for init() to reinitialize.
 auto shutdown(void) -> void;
 
-// Call this periodically to receive general report messages for the sandboxing system.
-auto receive_report(const general_reporter& reporter) -> void;
+// Call this periodically to receive general messages for the sandboxing system.
+// - If you don't call this then messages will pile up and consume memory.
+auto ui_update(const general_ui& ui) -> void;
 
-// Call this periodically to receive report messages for the group.
-// In a simple audio application with one audio thread and one UI thread you might call
-// this in your UI message loop.
-// If you are doing offline processing in a background thread then maybe you could call
-// this once per audio buffer.
-// If you don't call this then report messages will pile up and consume memory.
-auto receive_report(scuff::id::group group, const group_reporter& reporter) -> void;
+// Call this periodically to receive messages for the group.
+// - In a simple audio application with one audio thread and one UI thread you might call
+//   this in your UI message loop.
+// - If you are doing offline processing in a background thread then maybe you could call
+//   this once per audio buffer.
+// - If you don't call this then messages will pile up and consume memory.
+auto ui_update(scuff::id::group group, const group_ui& ui) -> void;
 
 // Activate audio processing for the sandbox group.
 auto activate(id::group group, double sr) -> void;
@@ -159,17 +170,19 @@ auto close_all_editors(void) -> void;
 //    to cross from one sandbox to another, within the same sandbox group.
 auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void;
 
-// Create a device and add it to the sandbox.
-//  - If the device fails to load, it will still be created, but it will be in an error
+// Create a device and add it to the sandbox, synchronously.
+//  - This involves a round-trip to the sandbox process.
+//  - If the device fails to load, it will still be created, but it will be in an unloaded
 //    state.
 //  - You can create a device with a plugin ID that hasn't been scanned yet. It will be
-//    created in an error state and will remain that way until the plugin is found by
+//    created in an unloaded state and will remain that way until the plugin is found by
 //    a future scan where the reload_failed_devices flag is set.
 [[nodiscard]]
-auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id) -> id::device;
+auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id) -> create_device_result;
 
 // Create a device and add it to the sandbox asynchronously.
-//  - When the operation is complete, call the given function with the device id.
+//  - When the operation is complete, the callback will be called on the next call to ui_update(group).
+//  - Before the operation is complete, the returned device ID will be valid, but the device will be in an unloaded state.
 [[nodiscard]]
 auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_device fn) -> id::device;
 
@@ -191,14 +204,16 @@ auto create_sandbox(id::group group, std::string_view sbox_exe_path) -> id::sand
 // Remove the given connection between two devices.
 auto disconnect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void;
 
-// Create a device by duplicating an existing device, and add it to the sandbox.
+// Create a device by duplicating an existing device, and add it to the sandbox, synchronously.
+// - This involves a round-trip to the sandbox process.
 // - The target device can belong to a different sandbox.
 // - The target device can belong to a different group.
 [[nodiscard]]
-auto duplicate(id::device dev, id::sandbox sbox) -> id::device;
+auto duplicate(id::device dev, id::sandbox sbox) -> create_device_result;
 
 // Duplicate a device asynchronously.
-// - When the operation is complete, call the given function with the device id.
+// - When the operation is complete, the callback will be called on the next call to ui_update(group).
+// - Before the operation is complete, the returned device ID will be valid, but the device will be in an unloaded state.
 [[nodiscard]]
 auto duplicate_async(id::device dev, id::sandbox sbox, return_device fn) -> id::device;
 
@@ -267,12 +282,13 @@ auto get_name(id::plugin plugin) -> const char*;
 [[nodiscard]]
 auto get_path(id::plugfile plugfile) -> const char*;
 
-// Get the current value of the parameter.
+// Get the current value of the parameter, synchronously.
+//  - This involves a round-trip to the sandbox process.
 [[nodiscard]]
 auto get_value(id::device dev, idx::param param) -> double;
 
 // Get the current value of the parameter, asynchronously.
-//  - When the result is ready, call the given function with it.
+//  - When the result is ready, call the given function with it on the next call to ui_update(group).
 auto get_value_async(id::device dev, idx::param param, return_double fn) -> void;
 
 // Returns the plugin vendor.
@@ -309,12 +325,13 @@ auto get_plugin_ext_id(id::device dev) -> ext::id::plugin;
 [[nodiscard]]
 auto get_type(id::plugin plugin) -> plugin_type;
 
-// Calculate the string representation of the given value.
+// Calculate the string representation of the given value, synchronously.
+// - This involves a round-trip to the sandbox process.
 [[nodiscard]]
 auto get_value_text(id::device dev, idx::param param, double value) -> std::string;
 
 // Calculate the string representation of the given value, asynchronously.
-//  - When it is ready, call the given function with it.
+//  - When it is ready, call the given function with it, on the next call to ui_update(group).
 auto get_value_text_async(id::device dev, idx::param param, double value, return_string fn) -> void;
 
 // Return a list of plugins which at least appear to be working
@@ -357,7 +374,8 @@ auto is_scanning(void) -> bool;
 auto load(id::device dev, const scuff::bytes& bytes) -> void;
 
 // Load the device state, asynchronously.
-//  - When the operation is complete, call the given function.
+//  - When the operation is complete, call the given function,
+//    on the next call to ui_update(group).
 auto load_async(id::device dev, const scuff::bytes& bytes, return_void fn) -> void;
 
 // Push a device event
@@ -372,7 +390,8 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool;
 auto save(id::device dev) -> scuff::bytes;
 
 // Save the device state, asynchronously.
-//  - When the operation is complete, call the given function with the result.
+//  - When the operation is complete, call the given function with the result,
+//    on the next call to ui_update(group).
 auto save_async(id::device dev, return_bytes fn) -> void;
 
 // Scan the system for plugins. If the scanner process is already

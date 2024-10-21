@@ -406,16 +406,16 @@ auto take_some(std::deque<T>* vec) -> std::vector<T> {
 
 static
 auto update(host::app* app, double prtime, double ctime) -> void {
-	scuff::general_reporter reporter;
-	reporter.on_error            = [app](auto... args) { on_scuff_error(app, args...); };
-	reporter.on_plugfile_broken  = [app](auto... args) { on_scuff_plugfile_broken(app, args...); };
-	reporter.on_plugfile_scanned = [app](auto... args) { on_scuff_plugfile_scanned(app, args...); };
-	reporter.on_plugin_broken    = [app](auto... args) { on_scuff_plugin_broken(app, args...); };
-	reporter.on_plugin_scanned   = [app](auto... args) { on_scuff_plugin_scanned(app, args...); };
-	reporter.on_scan_complete    = [app](auto... args) { on_scuff_scan_complete(app); };
-	reporter.on_scan_error       = [app](auto... args) { on_scuff_scan_error(app, args...); };
-	reporter.on_scan_started     = [app](auto... args) { on_scuff_scan_started(app); };
-	scuff::receive_report(reporter);
+	scuff::general_ui ui;
+	ui.on_error            = [app](auto... args) { on_scuff_error(app, args...); };
+	ui.on_plugfile_broken  = [app](auto... args) { on_scuff_plugfile_broken(app, args...); };
+	ui.on_plugfile_scanned = [app](auto... args) { on_scuff_plugfile_scanned(app, args...); };
+	ui.on_plugin_broken    = [app](auto... args) { on_scuff_plugin_broken(app, args...); };
+	ui.on_plugin_scanned   = [app](auto... args) { on_scuff_plugin_scanned(app, args...); };
+	ui.on_scan_complete    = [app](auto... args) { on_scuff_scan_complete(app); };
+	ui.on_scan_error       = [app](auto... args) { on_scuff_scan_error(app, args...); };
+	ui.on_scan_started     = [app](auto... args) { on_scuff_scan_started(app); };
+	scuff::ui_update(ui);
 	if (app->plugfiles.dirty) {
 		std::sort(app->plugfiles.begin(), app->plugfiles.end());
 		tableview_update(app->ui.plugfile_table.view);

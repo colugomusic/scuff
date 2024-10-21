@@ -4,7 +4,7 @@
 #include "common-audio-sync.hpp"
 #include "common-shm.hpp"
 #include "common-slot-buffer.hpp"
-#include "report-types.hpp"
+#include "ui-types.hpp"
 #include <atomic>
 #include <boost/asio.hpp>
 #pragma warning(push, 0)
@@ -75,7 +75,7 @@ struct group_flags {
 };
 
 struct group_services {
-	report::msg::group_q reporter;
+	ui::msg::group_q ui;
 	shm::group shm;
 	signaling::group_local_data signaling;
 	uint64_t epoch = 0;
@@ -166,11 +166,11 @@ struct model {
 };
 
 struct data {
-	std::string            instance_id;
-	std::jthread           poll_thread;
-	std::jthread           scan_thread;
-	std::atomic_bool       scanning = false;
-	report::msg::general_q reporter;
+	std::string              instance_id;
+	std::jthread             poll_thread;
+	std::jthread             scan_thread;
+	std::atomic_bool         scanning = false;
+	ui::msg::general_q       ui;
 	audio_sync<scuff::model> model;
 };
 

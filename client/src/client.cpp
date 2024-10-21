@@ -194,49 +194,66 @@ auto process_message_(const sandbox& sbox, const msg::out::confirm_activated& ms
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::return_created_device& msg) -> void {
+auto process_message_(const sandbox& sbox, const msg::out::device_create_fail& msg) -> void {
+	// The sandbox failed to create the remote device.
 	DATA_->model.update_publish([sbox, msg](model&& m){
-		const auto return_fn = sbox.services->return_buffers.devices.take(msg.callback);
-		if (!msg.ports_shmid.empty()) {
-			// The sandbox succeeded in creating the remote device.
-			auto device             = m.devices.at({msg.dev_id});
-			const auto& sbox        = m.sandboxes.at(device.sbox);
-			const auto device_shmid = shm::device::make_id(sbox.services->get_shmid(), {msg.dev_id});
-			device.services->shm    = shm::device{bip::open_only, shm::segment::remove_when_done, device_shmid};
-			device.flags.value     |= device_flags::created_successfully;
-			m.devices = m.devices.insert(device);
-			return_fn({msg.dev_id}, true);
-			return m;
-		}
-		// The sandbox failed to create the remote device.
-		const auto err = "Failed to create remote device.";
-		m = set_error(std::move(m), {msg.dev_id}, err);
-		return_fn({msg.dev_id}, false);
-		report::send(sbox, report::msg::device_error{{msg.dev_id}, err});
+		m = set_error(std::move(m), {msg.dev_id}, "Failed to create remote device.");
 		return m;
 	});
+	const auto return_fn = sbox.services->return_buffers.devices.take(msg.callback);
+	ui::send(sbox, ui::msg::device_create{{msg.dev_id, false}, return_fn});
+	// TOODOO: do this in main thread:
+	//return_fn(create_device_result{msg.dev_id, false});
+}
+
+static
+auto process_message_(const sandbox& sbox, const msg::out::device_create_success& msg) -> void {
+	// The sandbox succeeded in creating the remote device.
+	DATA_->model.update_publish([sbox, msg](model&& m){
+		auto device             = m.devices.at({msg.dev_id});
+		const auto& sbox        = m.sandboxes.at(device.sbox);
+		const auto device_shmid = shm::device::make_id(sbox.services->get_shmid(), {msg.dev_id});
+		device.services->shm    = shm::device{bip::open_only, shm::segment::remove_when_done, device_shmid};
+		device.flags.value     |= device_flags::created_successfully;
+		m.devices = m.devices.insert(device);
+		return m;
+	});
+	const auto return_fn = sbox.services->return_buffers.devices.take(msg.callback);
+	ui::send(sbox, ui::msg::device_create{{msg.dev_id, true}, return_fn});
+	// TOODOO: do this in main thread:
+	//return_fn(create_device_result{msg.dev_id, true});
+}
+
+static
+auto process_message_(const sandbox& sbox, const msg::out::device_load_fail& msg) -> void {
+	// TOODOO:
+}
+
+static
+auto process_message_(const sandbox& sbox, const msg::out::device_load_success& msg) -> void {
+	// TOODOO:
 }
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::device_editor_visible_changed& msg) -> void {
-	report::send(sbox, report::msg::device_editor_visible_changed{{msg.dev_id}, msg.visible});
+	ui::send(sbox, ui::msg::device_editor_visible_changed{{msg.dev_id}, msg.visible});
 }
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::device_params_changed& msg) -> void {
-	report::send(sbox, report::msg::device_params_changed{{msg.dev_id}});
+	ui::send(sbox, ui::msg::device_params_changed{{msg.dev_id}});
 }
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::report_error& msg) -> void {
-	report::send(sbox, report::msg::sbox_error{sbox.id, msg.text});
+	ui::send(sbox, ui::msg::sbox_error{sbox.id, msg.text});
 }
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::report_fatal_error& msg) -> void {
 	// This message could be received if the sandbox process
 	// manages to prematurely terminate itself in a "clean" way.
-	report::send(sbox, report::msg::sbox_crashed{sbox.id, msg.text});
+	ui::send(sbox, ui::msg::sbox_crashed{sbox.id, msg.text});
 	if (sbox.services->proc.running()) {
 		sbox.services->proc.terminate();
 	}
@@ -244,12 +261,12 @@ auto process_message_(const sandbox& sbox, const msg::out::report_fatal_error& m
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::report_info& msg) -> void {
-	report::send(sbox, report::msg::sbox_info{sbox.id, msg.text});
+	ui::send(sbox, ui::msg::sbox_info{sbox.id, msg.text});
 }
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::report_warning& msg) -> void {
-	report::send(sbox, report::msg::sbox_warning{sbox.id, msg.text});
+	ui::send(sbox, ui::msg::sbox_warning{sbox.id, msg.text});
 }
 
 static
@@ -280,7 +297,7 @@ static
 auto process_message(const sandbox& sbox, const msg::out::msg& msg) -> void {
 	 const auto proc = [sbox](const auto& msg) -> void { process_message_(sbox, msg); };
 	 try                               { fast_visit(proc, msg); }
-	 catch (const std::exception& err) { report::send(sbox, report::msg::error{err.what()}); }
+	 catch (const std::exception& err) { ui::send(sbox, ui::msg::error{err.what()}); }
 }
 
 static
@@ -297,7 +314,7 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 		const auto m      = DATA_->model.read();
 		const auto& group = m.groups.at(sbox.group);
 		signaling::client_signal_self(&group.services->shm.data->signaling, &group.services->shm.signaling);
-		report::send(sbox, report::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
+		ui::send(sbox, ui::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
 		return;
 	}
 	if (sbox.services) {
@@ -314,62 +331,6 @@ auto process_sandbox_messages() -> void {
 	const auto sandboxes = DATA_->model.read().sandboxes;
 	for (const auto& sbox : sandboxes) {
 		process_sandbox_messages(sbox);
-	}
-}
-
-template <typename T> [[nodiscard]] static
-auto pop_report_msg(report::msg::q<T>* reporter) -> std::optional<T> {
-	const auto q   = reporter->lock();
-	if (q->empty()) {
-		return std::nullopt;
-	}
-	const auto msg = q->front();
-	q->pop_front();
-	return msg;
-}
-
-static auto return_report_msg_(const report::msg::error& msg, const general_reporter& reporter) -> void { reporter.on_error(msg.error); } 
-static auto return_report_msg_(const report::msg::plugfile_broken& msg, const general_reporter& reporter) -> void { reporter.on_plugfile_broken(msg.plugfile); }
-static auto return_report_msg_(const report::msg::plugfile_scanned& msg, const general_reporter& reporter) -> void { reporter.on_plugfile_scanned(msg.plugfile); }
-static auto return_report_msg_(const report::msg::plugin_broken& msg, const general_reporter& reporter) -> void { reporter.on_plugin_broken(msg.plugin); }
-static auto return_report_msg_(const report::msg::plugin_scanned& msg, const general_reporter& reporter) -> void { reporter.on_plugin_scanned(msg.plugin); }
-static auto return_report_msg_(const report::msg::scan_complete& msg, const general_reporter& reporter) -> void { reporter.on_scan_complete(); }
-static auto return_report_msg_(const report::msg::scan_error& msg, const general_reporter& reporter) -> void { reporter.on_scan_error(msg.error); }
-static auto return_report_msg_(const report::msg::scan_started& msg, const general_reporter& reporter) -> void { reporter.on_scan_started(); }
-static auto return_report_msg_(const report::msg::scan_warning& msg, const general_reporter& reporter) -> void { reporter.on_scan_warning(msg.warning); }
-static auto return_report_msg_(const report::msg::device_editor_visible_changed& msg, const group_reporter& reporter) -> void { reporter.on_device_editor_visible_changed(msg.dev, msg.visible); }
-static auto return_report_msg_(const report::msg::device_error& msg, const group_reporter& reporter) -> void { reporter.on_device_error(msg.dev, msg.error); }
-static auto return_report_msg_(const report::msg::device_params_changed& msg, const group_reporter& reporter) -> void { reporter.on_device_params_changed(msg.dev); }
-static auto return_report_msg_(const report::msg::error& msg, const group_reporter& reporter) -> void { reporter.on_error(msg.error); }
-static auto return_report_msg_(const report::msg::sbox_crashed& msg, const group_reporter& reporter) -> void { reporter.on_sbox_crashed(msg.sbox, msg.error); }
-static auto return_report_msg_(const report::msg::sbox_error& msg, const group_reporter& reporter) -> void { reporter.on_sbox_error(msg.sbox, msg.error); }
-static auto return_report_msg_(const report::msg::sbox_info& msg, const group_reporter& reporter) -> void { reporter.on_sbox_info(msg.sbox, msg.info); }
-static auto return_report_msg_(const report::msg::sbox_started& msg, const group_reporter& reporter) -> void { reporter.on_sbox_started(msg.sbox); }
-static auto return_report_msg_(const report::msg::sbox_warning& msg, const group_reporter& reporter) -> void { reporter.on_sbox_warning(msg.sbox, msg.warning); }
-
-static
-auto return_report_msg(const report::msg::general& msg, const general_reporter& reporter) -> void {
-	fast_visit([&reporter](const auto& msg) { return_report_msg_(msg, reporter); }, msg);
-}
-
-static
-auto return_report_msg(const report::msg::group& msg, const group_reporter& reporter) -> void {
-	fast_visit([&reporter](const auto& msg) { return_report_msg_(msg, reporter); }, msg);
-}
-
-static
-auto receive_report(const general_reporter& reporter) -> void {
-	while (const auto msg = pop_report_msg(&DATA_->reporter)) {
-		return_report_msg(*msg, reporter);
-	}
-}
-
-static
-auto receive_report(scuff::id::group group_id, const group_reporter& reporter) -> void {
-	const auto m      = DATA_->model.read();
-	const auto& group = m.groups.at(group_id);
-	while (const auto msg = pop_report_msg(&group.services->reporter)) {
-		return_report_msg(*msg, reporter);
 	}
 }
 
@@ -405,7 +366,7 @@ auto save_dirty_device_states() -> void {
 			save_dirty_device_state(dev);
 		}
 	} catch (const std::exception& err) {
-		report::send(report::msg::error{std::format("save_dirty_device_states: {}", err.what())});
+		ui::send(ui::msg::error{std::format("save_dirty_device_states: {}", err.what())});
 	}
 }
 
@@ -546,8 +507,7 @@ auto create_device_async(model&& m, id::device dev_id, const sandbox& sbox, plug
 		// state and call the return function immediately.
 		const auto err = "Plugin not found.";
 		m = set_error(std::move(m), dev.id, err);
-		report::send(sbox, report::msg::device_error{dev.id, err});
-		return_fn(dev.id, false);
+		ui::send(sbox, ui::msg::device_create{{dev.id, false}, return_fn});
 		return m;
 	}
 	// Plugin is available so we need to send a message to the sandbox to create the remote device.
@@ -559,12 +519,12 @@ auto create_device_async(model&& m, id::device dev_id, const sandbox& sbox, plug
 }
 
 [[nodiscard]] static
-auto create_device_async(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id, return_device fn) -> id::device {
+auto create_device_async(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id, return_device return_fn) -> id::device {
 	const auto dev_id = id::device{scuff::id_gen_++};
-	DATA_->model.update([dev_id, sbox_id, type, plugin_ext_id, fn](model&& m){
+	DATA_->model.update([dev_id, sbox_id, type, plugin_ext_id, return_fn](model&& m){
 		const auto sbox     = m.sandboxes.at(sbox_id);
 		const auto plugin_id = id::plugin{find(m, plugin_ext_id)};
-		m = create_device_async(std::move(m), dev_id, sbox, type, plugin_ext_id, plugin_id, fn);
+		m = create_device_async(std::move(m), dev_id, sbox, type, plugin_ext_id, plugin_id, return_fn);
 		return m;
 	});
 	return dev_id;
@@ -593,23 +553,23 @@ private:
 };
 
 [[nodiscard]] static
-auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id) -> id::device {
-	bool done = false;
+auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id) -> create_device_result {
+	std::optional<create_device_result> result;
 	blocking_sandbox_operation bso;
-	auto fn = bso.make_fn([&done](id::device dev_id, bool load_success) -> void {
-		done = true;
+	auto fn = bso.make_fn([&result](create_device_result remote_result) -> void {
+		result = remote_result;
 	});
-	auto ready = [&done] {
-		return done;
+	auto ready = [&result] {
+		return result.has_value();
 	};
 	const auto dev_id = impl::create_device_async(sbox_id, type, plugin_ext_id, fn);
 	if (!bso.wait_for(ready)) {
-		report::send(report::msg::error{"Timed out waiting for device creation"});
+		ui::send(ui::msg::error{"Timed out waiting for device creation"});
 	}
-	if (!done) {
-		return {};
+	if (!result) {
+		return create_device_result{dev_id, false};
 	}
-	return dev_id;
+	return *result;
 }
 
 static
@@ -638,6 +598,11 @@ auto device_disconnect(id::device dev_out_id, size_t port_out, id::device dev_in
 	});
 }
 
+[[nodiscard]] static
+auto debug__check_we_are_in_the_ui_thread() -> void {
+	// TOODOO:
+}
+
 static
 auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_device fn) -> id::device {
 	auto m                   = DATA_->model.read();
@@ -654,14 +619,16 @@ auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_devi
 		// Now we're going to send a message to the destination sandbox to actually create the new device,
 		// if the plugin is available.
 		// When the new device is created, call this function with it:
-		const auto return_fn = [=](id::device dev_id, bool success) {
-			if (success) {
+		const auto return_fn = [=](create_device_result result) {
+			// We should be in the UI thread at this point.
+			debug__check_we_are_in_the_ui_thread();
+			if (result.was_created_successfully) {
 				// Remote device was created successfully.
 				// Now send a message to the destination sandbox to load the saved state into the new device.
-				dst_sbox.services->enqueue(msg::in::device_load{dev_id.value, src_state});
+				dst_sbox.services->enqueue(msg::in::device_load{result.id.value, src_state});
 			}
 			// Call user's callback
-			fn(dev_id, success);
+			fn(result);
 		};
 		DATA_->model.update([=](model&& m){
 			return create_device_async(std::move(m), new_dev_id, dst_sbox, type, plugin_ext_id, plugin, return_fn);
@@ -672,7 +639,7 @@ auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_devi
 }
 
 static
-auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id) -> id::device {
+auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id) -> create_device_result {
 	// TOODOO: blocking duplicate
 	return {};
 }
@@ -880,7 +847,7 @@ auto create_group(double sample_rate) -> id::group {
 			group.services      = std::make_shared<group_services>();
 			group.services->shm = shm::group{bip::create_only, shm::segment::remove_when_done, shmid};
 		} catch (const std::exception& err) {
-			report::send(report::msg::error{err.what()});
+			ui::send(ui::msg::error{err.what()});
 			return m;
 		}
 		m.groups = m.groups.insert(group);
@@ -995,7 +962,7 @@ auto get_value_text(id::device dev_id, idx::param param, double value) -> std::s
 	};
 	get_value_text_async(dev_id, param, value, fn);
 	if (!bso.wait_for(ready)) {
-		report::send(report::msg::error{"Timed out waiting for value text."});
+		ui::send(ui::msg::error{"Timed out waiting for value text."});
 	}
 	return result;
 }
@@ -1031,9 +998,10 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool {
 	const auto sandbox_shmid = sandbox.services->get_shmid();
 	const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, group.sample_rate);
 	sandbox.services->proc   = bp::child{std::string{sbox_exe_path}, exe_args};
+	// TOODOO: the rest of this
 	for (const auto dev_id : sandbox.devices) {
 	}
-	// TOODOO: the rest of this
+	return false;
 }
 
 static
@@ -1056,7 +1024,7 @@ auto load(id::device dev, const scuff::bytes& bytes) -> void {
 	};
 	load_async(dev, bytes, fn);
 	if (!bso.wait_for(ready)) {
-		report::send(report::msg::error{"Timed out waiting for device load."});
+		ui::send(ui::msg::error{"Timed out waiting for device load."});
 	}
 }
 
@@ -1105,7 +1073,7 @@ auto save(id::device dev_id) -> scuff::bytes {
 	const auto& dev = m.devices.at(dev_id);
 	save_async(dev, fn);
 	if (!bso.wait_for(ready)) {
-		report::send(report::msg::error{"Timed out waiting for device save."});
+		ui::send(ui::msg::error{"Timed out waiting for device save."});
 	}
 	return bytes;
 }
@@ -1157,7 +1125,7 @@ auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::s
 		catch (const std::exception& err) {
 			sbox.error = err.what();
 			m.sandboxes = m.sandboxes.insert(sbox);
-			report::send(report::msg::error{err.what()});
+			ui::send(ui::msg::error{err.what()});
 			return m;
 		}
 		return m;
@@ -1287,338 +1255,338 @@ auto shutdown() -> void {
 }
 
 [[nodiscard]] static
-auto api_error(std::string_view what, const std::source_location& location = std::source_location::current()) -> report::msg::error {
-	return report::msg::error{std::format("Scuff API error in {}: {}", location.function_name(), what)};
+auto api_error(std::string_view what, const std::source_location& location = std::source_location::current()) -> ui::msg::error {
+	return ui::msg::error{std::format("Scuff API error in {}: {}", location.function_name(), what)};
 }
 
 auto activate(id::group group, double sr) -> void {
 	try                               { impl::activate(group, sr); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto close_all_editors() -> void {
 	try                               { impl::close_all_editors(); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void {
 	try                               { impl::connect(dev_out, port_out, dev_in, port_in); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
-auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id) -> id::device {
+auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id) -> create_device_result {
 	try                               { return impl::create_device(sbox, type, plugin_id); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_device fn) -> id::device {
 	try                               { return impl::create_device_async(sbox, type, plugin_id, fn); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::sandbox {
 	try                               { return impl::create_sandbox(group_id, sbox_exe_path); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto deactivate(id::group group) -> void {
 	try                               { impl::deactivate(group); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto disconnect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void {
 	try                               { impl::device_disconnect(dev_out, port_out, dev_in, port_in); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
-auto duplicate(id::device dev, id::sandbox sbox) -> id::device {
+auto duplicate(id::device dev, id::sandbox sbox) -> create_device_result {
 	try                               { return impl::duplicate(dev, sbox); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto duplicate_async(id::device dev, id::sandbox sbox, return_device fn) -> id::device {
 	try                               { return impl::duplicate_async(dev, sbox, fn); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto erase(id::device dev) -> void {
 	try                               { impl::erase({dev}); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto erase(id::sandbox sbox) -> void {
 	try                               { impl::erase(sbox); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto find(id::device dev, ext::id::param param_id) -> idx::param {
 	try                               { return impl::find(dev, param_id); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto find(ext::id::plugin plugin_id) -> id::plugin {
 	try                               { return impl::find(plugin_id); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto get_error(id::device device) -> const char* {
 	try                               { return impl::get_error(device); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return ""; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
 }
 
 auto get_param_count(id::device dev) -> size_t {
 	try                               { return impl::get_param_count(dev); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return 0; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return 0; }
 }
 
 auto get_plugin(id::device dev) -> id::plugin {
 	try                               { return impl::get_plugin(dev); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto gui_hide(id::device dev) -> void {
 	try                               { impl::gui_hide(dev); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto gui_show(id::device dev) -> void {
 	try                               { impl::gui_show(dev); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto create_group(double sample_rate) -> id::group {
 	try                               { return impl::create_group(sample_rate); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto erase(id::group group) -> void {
 	try                               { impl::erase({group}); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto get_broken_plugfiles() -> std::vector<id::plugfile> {
 	try                               { return impl::get_broken_plugfiles(); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto get_broken_plugins() -> std::vector<id::plugin> {
 	try                               { return impl::get_broken_plugins(); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto get_devices(id::sandbox sbox) -> std::vector<id::device> {
 	try                               { return impl::get_devices(sbox); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto get_error(id::plugfile plugfile) -> const char* {
 	try                               { return impl::get_error(plugfile); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return ""; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
 }
 
 auto get_error(id::plugin plugin) -> const char* {
 	try                               { return impl::get_error(plugin); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return ""; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
 }
 
 auto get_error(id::sandbox sbox) -> const char* {
 	try                               { return impl::get_error(sbox); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return ""; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
 }
 
 auto get_ext_id(id::plugin plugin) -> ext::id::plugin {
 	try                               { return impl::get_ext_id(plugin); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto get_features(id::plugin plugin) -> std::vector<std::string> {
 	try                               { return impl::get_features(plugin); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto get_info(id::device dev, idx::param param) -> param_info {
 	try                               { return impl::get_info({dev}, param); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto get_name(id::plugin plugin) -> const char* {
 	try                               { return impl::get_name(plugin); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return ""; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
 }
 
 auto get_path(id::plugfile plugfile) -> const char* {
 	try                               { return impl::get_path(plugfile); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return ""; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
 }
 
 auto get_plugin_ext_id(id::device dev) -> ext::id::plugin {
 	try                               { return impl::get_plugin_ext_id(dev); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto get_type(id::plugin plugin) -> plugin_type {
 	try                               { return impl::get_type(plugin); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return plugin_type::unknown; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return plugin_type::unknown; }
 }
 
 auto get_value(id::device dev, idx::param param) -> double {
 	try                               { return impl::get_value(dev, param); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return 0.0; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return 0.0; }
 }
 
 auto get_value_async(id::device dev, idx::param param, return_double fn) -> void {
 	try                               { impl::get_value_async(dev, param, fn); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto get_value_text(id::device dev, idx::param param, double value) -> std::string {
 	try                               { return impl::get_value_text(dev, param, value); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return ""; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
 }
 
 auto get_value_text_async(id::device dev, idx::param param, double value, return_string fn) -> void {
 	try                               { impl::get_value_text_async(dev, param, value, fn); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto get_vendor(id::plugin plugin) -> const char* {
 	try                               { return impl::get_vendor(plugin); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return ""; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
 }
 
 auto get_version(id::plugin plugin) -> const char* {
 	try                               { return impl::get_version(plugin); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return ""; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
 }
 
 auto get_working_plugins() -> std::vector<id::plugin> {
 	try                               { return impl::get_working_plugins(); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto has_gui(id::device dev) -> bool {
 	try                               { return impl::has_gui(dev); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return false; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
 }
 
 auto has_params(id::device dev) -> bool {
 	try                               { return impl::has_params(dev); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return false; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
 }
 
 auto has_rack_features(id::plugin plugin) -> bool {
 	try                               { return impl::has_rack_features(plugin); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return false; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
 }
 
 auto is_running(id::sandbox sbox) -> bool {
 	try                               { return impl::is_running(sbox); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return false; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
 }
 
 auto is_scanning() -> bool {
 	try                               { return impl::is_scanning(); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return false; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
 }
 
 auto load(id::device dev, const scuff::bytes& bytes) -> void {
 	try                               { impl::load(dev, bytes); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto load_async(id::device dev, const scuff::bytes& bytes, return_void fn) -> void {
 	try                               { impl::load_async(dev, bytes, fn); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto push_event(id::device dev, const scuff::event& event) -> void {
 	try                               { impl::push_event(dev, event); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
-auto receive_report(const general_reporter& reporter) -> void {
-	try                               { impl::receive_report(reporter); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+auto ui_update(const general_ui& ui) -> void {
+	try                               { ui::call_callbacks(ui); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
-auto receive_report(id::group group_id, const group_reporter& reporter) -> void {
-	try                               { impl::receive_report(group_id, reporter); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+auto ui_update(id::group group_id, const group_ui& ui) -> void {
+	try                               { ui::call_callbacks(group_id, ui); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool {
 	try                               { return impl::restart(sbox, sbox_exe_path); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return false; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
 }
 
 auto save(id::device dev) -> scuff::bytes {
 	try                               { return impl::save(dev); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto save_async(id::device dev, return_bytes fn) -> void {
 	try                               { impl::save_async(dev, fn); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto scan(std::string_view scan_exe_path, scan_flags flags) -> void {
 	try                               { impl::do_scan(scan_exe_path, flags); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto set_render_mode(id::device dev, render_mode mode) -> void {
 	try                               { impl::set_render_mode(dev, mode); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto was_loaded_successfully(id::device dev) -> bool {
 	try                               { return impl::was_loaded_successfully(dev); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return false; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
 }
 
 auto managed(id::device id) -> managed_device {
 	try                               { return impl::managed(id); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto managed(id::group id) -> managed_group {
 	try                               { return impl::managed(id); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto managed(id::sandbox id) -> managed_sandbox {
 	try                               { return impl::managed(id); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
 }
 
 auto ref(id::device id) -> void {
 	try                               { impl::ref(id); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto ref(id::group id) -> void {
 	try                               { impl::ref(id); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto ref(id::sandbox id) -> void {
 	try                               { impl::ref(id); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto unref(id::device id) -> void {
 	try                               { impl::unref(id); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto unref(id::group id) -> void {
 	try                               { impl::unref(id); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 auto unref(id::sandbox id) -> void {
 	try                               { impl::unref(id); }
-	catch (const std::exception& err) { report::send(api_error(err.what())); }
+	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
 } // scuff
