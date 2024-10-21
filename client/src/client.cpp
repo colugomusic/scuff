@@ -988,6 +988,7 @@ auto get_version(id::plugin plugin) -> const char* {
 
 [[nodiscard]] static
 auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool {
+	// TOODOO: should be an async function?
 	const auto m       = DATA_->model.read();
 	const auto sandbox = m.sandboxes.at({sbox});
 	const auto& group  = m.groups.at(sandbox.group);
@@ -1000,6 +1001,8 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool {
 	sandbox.services->proc   = bp::child{std::string{sbox_exe_path}, exe_args};
 	// TOODOO: the rest of this
 	for (const auto dev_id : sandbox.devices) {
+		const auto& dev = m.devices.at(dev_id);
+		// TOODOO: load device from last saved state.
 	}
 	return false;
 }
