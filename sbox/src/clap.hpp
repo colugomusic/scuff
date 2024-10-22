@@ -821,26 +821,22 @@ auto make_ext_data(sbox::app* app, id::device id) -> std::shared_ptr<clap::devic
 
 [[nodiscard]] static
 auto make_shm_device(std::string_view sbox_shmid, id::device dev_id) -> shm::device {
-	return shm::device{bip::create_only, shm::device::make_id(sbox_shmid, dev_id)};
+	return shm::open_or_create_device(shm::make_device_id(sbox_shmid, dev_id), false);
 }
 
 static
 auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id, size_t callback) -> void {
 	// TOODOO: stop opening dylib multiple times?
-	// TOODOO: send error messages back to client instead of throwing exceptions from this function
 	const auto entry = scuff::os::find_clap_entry(plugfile_path);
 	if (!entry) {
-		app->msg_sender.enqueue(scuff::msg::out::device_create_fail{dev_id.value, callback});
 		throw std::runtime_error("Couldn't resolve clap_entry");
 	}
 	if (!entry->init(plugfile_path.data())) {
-		app->msg_sender.enqueue(scuff::msg::out::device_create_fail{dev_id.value, callback});
 		throw std::runtime_error("clap_plugin_entry.init failed");
 	}
 	const auto factory = reinterpret_cast<const clap_plugin_factory_t*>(entry->get_factory(CLAP_PLUGIN_FACTORY_ID));
 	if (!factory) {
 		entry->deinit();
-		app->msg_sender.enqueue(scuff::msg::out::device_create_fail{dev_id.value, callback});
 		throw std::runtime_error("clap_plugin_entry.get_factory failed");
 	}
 	auto ext_data = make_ext_data(app, dev_id);
@@ -849,11 +845,9 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	iface.plugin.plugin = factory->create_plugin(factory, &ext_data->host_data.iface.host, plugin_id.data());
 	if (!iface.plugin.plugin) {
 		entry->deinit();
-		app->msg_sender.enqueue(scuff::msg::out::device_create_fail{dev_id.value, callback});
 		throw std::runtime_error("clap_plugin_factory.create_plugin failed");
 	}
 	if (!iface.plugin.plugin->init(iface.plugin.plugin)) {
-		app->msg_sender.enqueue(scuff::msg::out::device_create_fail{dev_id.value, callback});
 		throw std::runtime_error("clap_plugin.init failed");
 	}
 	get_extensions(&iface.plugin);
@@ -861,7 +855,7 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	auto clap_dev                    = clap::device{};
 	dev.id                           = dev_id;
 	dev.type                         = plugin_type::clap;
-	dev.service->shm                 = make_shm_device(app->shm_sbox.id(), dev_id);
+	dev.service->shm                 = make_shm_device(app->shm_sbox.seg.id, dev_id);
 	clap_dev.service.audio_port_info = retrieve_audio_port_info(iface.plugin);
 	const auto audio_in_count    = clap_dev.service.audio_port_info->inputs.size();
 	const auto audio_out_count   = clap_dev.service.audio_port_info->outputs.size();
@@ -881,7 +875,6 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 		m.clap_devices = m.clap_devices.insert(clap_dev);
 		return m;
 	});
-	app->msg_sender.enqueue(scuff::msg::out::device_create_success{dev.id.value, dev.service->shm.id().data(), callback});
 }
 
 [[nodiscard]] static

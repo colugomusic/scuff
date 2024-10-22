@@ -26,56 +26,59 @@ static constexpr auto OBJECT_AUDIO_IN  = "+audio+in";
 static constexpr auto OBJECT_AUDIO_OUT = "+audio+out";
 static constexpr auto OBJECT_DATA      = "+data";
 
-struct segment {
-	struct remove_when_done_t {};
-	static constexpr auto remove_when_done = remove_when_done_t{};
-	segment() = default;
-	segment(const segment&) = delete;
-	segment& operator=(const segment&) = delete;
-	segment(std::string_view id) : segment{id, false} {}
-	segment(remove_when_done_t, std::string_view id) : segment{id, true} {}
-	segment(std::string_view id, size_t segment_size) : segment{id, segment_size, false} {}
-	segment(remove_when_done_t, std::string_view id, size_t segment_size) : segment{id, segment_size, true} {}
-	segment(segment&& rhs) noexcept
-		: seg_{std::move(rhs.seg_)}
-		, id_{std::move(rhs.id_)}
-		, remove_when_done_{rhs.remove_when_done_}
+struct segment_raii {
+	bip::managed_shared_memory seg;
+	std::string id;
+	bool remove_when_done = false;
+	segment_raii() = default;
+	segment_raii(const segment_raii&) = delete;
+	segment_raii& operator=(const segment_raii&) = delete;
+	segment_raii(segment_raii&& rhs) noexcept
+		: seg{std::move(rhs.seg)}
+		, id{std::move(rhs.id)}
+		, remove_when_done{rhs.remove_when_done}
 	{
-		rhs.remove_when_done_ = false;
+		rhs.remove_when_done = false;
 	}
-	segment& operator=(segment&& rhs) noexcept {
+	segment_raii& operator=(segment_raii&& rhs) noexcept {
 		if (this != &rhs) {
-			seg_              = std::move(rhs.seg_);
-			id_               = std::move(rhs.id_);
-			remove_when_done_ = rhs.remove_when_done_;
-			rhs.remove_when_done_ = false;
+			seg              = std::move(rhs.seg);
+			id               = std::move(rhs.id);
+			remove_when_done = rhs.remove_when_done;
+			rhs.remove_when_done = false;
 		}
 		return *this;
 	}
-	~segment() {
-		if (remove_when_done_) {
-			bip::shared_memory_object::remove(id_.c_str());
+	~segment_raii() {
+		if (remove_when_done) {
+			bip::shared_memory_object::remove(id.c_str());
 		}
 	}
-	[[nodiscard]] auto seg() -> bip::managed_shared_memory& { return seg_; }
-	[[nodiscard]] auto id() const -> std::string_view { return id_; }
-	[[nodiscard]] auto is_valid() const -> bool { return !id_.empty(); }
-private:
-	segment(std::string_view id, size_t segment_size, bool remove_when_done)
-		: id_{id}
-		, seg_{bip::create_only, id.data(), segment_size}
-		, remove_when_done_{remove_when_done}
-	{}
-	segment(std::string_view id, bool remove_when_done)
-		: id_{id}
-		, seg_{bip::open_only, id.data()}
-		, remove_when_done_{remove_when_done}
-	{
-	}
-	bip::managed_shared_memory seg_;
-	std::string id_;
-	bool remove_when_done_ = false;
 };
+
+struct open_or_create_segment_result {
+	bip::managed_shared_memory seg;
+	bool was_created;
+};
+
+[[nodiscard]] static
+auto is_valid(const segment_raii& seg) -> bool {
+	return !seg.id.empty();
+}
+
+[[nodiscard]] static
+auto open_or_create_segment(std::string_view id, size_t segment_size) -> open_or_create_segment_result {
+	open_or_create_segment_result result;
+	try {
+		result.seg         = bip::managed_shared_memory{bip::open_only, id.data()};
+		result.was_created = false;
+	}
+	catch (const bip::interprocess_exception&) {
+		result.seg         = bip::managed_shared_memory{bip::create_only, id.data(), segment_size};
+		result.was_created = true;
+	}
+	return result;
+}
 
 struct msg_buffer {
 	[[nodiscard]]
@@ -160,77 +163,136 @@ auto require_shm_obj(bip::managed_shared_memory* seg, std::string_view id, size_
 	}
 }
 
-struct group : segment {
-	static constexpr auto SEGMENT_SIZE = sizeof(group_data) + SEGMENT_OVERHEAD;
+struct group {
+	segment_raii seg;
 	group_data* data = nullptr;
 	signaling::group_local_data signaling;
-	group() = default;
-	group(bip::create_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id, SEGMENT_SIZE} { create(); }
-	group(bip::open_only_t, std::string_view id) : segment{id} { open(); }
-	[[nodiscard]] static
-	auto make_id(std::string_view instance_id, id::group group_id) -> std::string {
-		return std::format("{}+group+{}", instance_id, group_id.value);
-	}
-private:
-	auto create() -> void {
-		data      = seg().construct<group_data>(OBJECT_DATA)();
-		signaling = signaling::group_local_data{signaling::client{&data->signaling}};
-	}
-	auto open() -> void {
-		require_shm_obj<group_data>(&seg(), OBJECT_DATA, 1, &data);
-		signaling = signaling::group_local_data{signaling::sandbox{&data->signaling}};
-	}
 };
 
-struct sandbox : segment {
-	static constexpr auto SEGMENT_SIZE = sizeof(sandbox_data) + SEGMENT_OVERHEAD;
+struct sandbox {
+	segment_raii seg;
 	sandbox_data* data = nullptr;
-	sandbox() = default;
-	sandbox(bip::create_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id, SEGMENT_SIZE} { create(); }
-	sandbox(bip::open_only_t, std::string_view id) : segment{id} { open(); }
-	[[nodiscard]] auto send_bytes_to_client(const std::byte* bytes, size_t count) const -> size_t {
-		return data->msgs_out.write(bytes, count);
-	}
-	[[nodiscard]] auto send_bytes_to_sandbox(const std::byte* bytes, size_t count) const -> size_t {
-		return data->msgs_in.write(bytes, count);
-	}
-	[[nodiscard]] auto receive_bytes_from_client(std::byte* bytes, size_t count) const -> size_t {
-		return data->msgs_in.read(bytes, count);
-	}
-	[[nodiscard]] auto receive_bytes_from_sandbox(std::byte* bytes, size_t count) const -> size_t {
-		return data->msgs_out.read(bytes, count);
-	}
-	[[nodiscard]] static
-	auto make_id(std::string_view instance_id, id::sandbox sbox_id) -> std::string {
-		return std::format("{}+sbox+{}", instance_id, sbox_id.value);
-	}
-private:
-	auto create() -> void {
-		data = seg().construct<sandbox_data>(OBJECT_DATA)();
-	}
-	auto open() -> void {
-		require_shm_obj<sandbox_data>(&seg(), OBJECT_DATA, 1, &data);
-	}
 };
 
-struct device : segment {
-	static constexpr auto SEGMENT_SIZE = sizeof(device_data) + SEGMENT_OVERHEAD;
+struct device {
+	segment_raii seg;
 	device_data* data = nullptr;
-	device() = default;
-	device(bip::create_only_t, std::string_view id) : segment{id, SEGMENT_SIZE} { create(); }
-	device(bip::open_only_t, segment::remove_when_done_t, std::string_view id) : segment{segment::remove_when_done, id} { open(); }
-	[[nodiscard]] static
-	auto make_id(std::string_view sbox_shmid, id::device dev_id) -> std::string {
-		return std::format("{}+dev+{}", sbox_shmid, dev_id.value);
-	}
-private:
-	auto create() -> void {
-		data = seg().construct<device_data>(OBJECT_DATA)();
-	}
-	auto open() -> void {
-		require_shm_obj<device_data>(&seg(), OBJECT_DATA, 1, &data);
-	}
 };
+
+static constexpr auto GROUP_SEGMENT_SIZE   = sizeof(group_data) + SEGMENT_OVERHEAD;
+static constexpr auto SANDBOX_SEGMENT_SIZE = sizeof(sandbox_data) + SEGMENT_OVERHEAD;
+static constexpr auto DEVICE_SEGMENT_SIZE  = sizeof(device_data) + SEGMENT_OVERHEAD;
+
+[[nodiscard]] static
+auto create_group(std::string_view id, bool remove_when_done) -> group {
+	group shm;
+	shm.seg.seg              = bip::managed_shared_memory{bip::create_only, id.data(), GROUP_SEGMENT_SIZE};
+	shm.seg.id               = id;
+	shm.seg.remove_when_done = remove_when_done;
+	shm.data                 = shm.seg.seg.construct<group_data>(OBJECT_DATA)();
+	shm.signaling            = signaling::group_local_data{signaling::client{&shm.data->signaling}};
+	return shm;
+}
+
+[[nodiscard]] static
+auto open_group(std::string_view id) -> group {
+	group shm;
+	shm.seg.seg             = bip::managed_shared_memory{bip::open_only, id.data()};
+	shm.seg.id              = id;
+	require_shm_obj<group_data>(&shm.seg.seg, OBJECT_DATA, 1, &shm.data);
+	shm.signaling = signaling::group_local_data{signaling::sandbox{&shm.data->signaling}};
+	return shm;
+}
+
+[[nodiscard]] static
+auto make_group_id(std::string_view instance_id, id::group group_id) -> std::string {
+	return std::format("{}+group+{}", instance_id, group_id.value);
+}
+
+[[nodiscard]] static
+auto create_sandbox(std::string_view id, bool remove_when_done) -> sandbox {
+	sandbox shm;
+	shm.seg.seg              = bip::managed_shared_memory{bip::create_only, id.data(), SANDBOX_SEGMENT_SIZE};
+	shm.seg.id               = id;
+	shm.seg.remove_when_done = remove_when_done;
+	shm.data = shm.seg.seg.construct<sandbox_data>(OBJECT_DATA)();
+	return shm;
+}
+
+[[nodiscard]] static
+auto open_sandbox(std::string_view id) -> sandbox {
+	sandbox shm;
+	shm.seg.seg             = bip::managed_shared_memory{bip::open_only, id.data()};
+	shm.seg.id              = id;
+	require_shm_obj<sandbox_data>(&shm.seg.seg, OBJECT_DATA, 1, &shm.data);
+	return shm;
+}
+
+[[nodiscard]] static
+auto make_sandbox_id(std::string_view instance_id, id::sandbox sbox_id) -> std::string {
+	return std::format("{}+sbox+{}", instance_id, sbox_id.value);
+}
+
+[[nodiscard]] static
+auto send_bytes_to_client(const sandbox& shm, const std::byte* bytes, size_t count) -> size_t {
+	return shm.data->msgs_out.write(bytes, count);
+}
+
+[[nodiscard]] static
+auto send_bytes_to_sandbox(const sandbox& shm, const std::byte* bytes, size_t count) -> size_t {
+	return shm.data->msgs_in.write(bytes, count);
+}
+
+[[nodiscard]] static
+auto receive_bytes_from_client(const sandbox& shm, std::byte* bytes, size_t count) -> size_t {
+	return shm.data->msgs_in.read(bytes, count);
+}
+
+[[nodiscard]] static
+auto receive_bytes_from_sandbox(const sandbox& shm, std::byte* bytes, size_t count) -> size_t {
+	return shm.data->msgs_out.read(bytes, count);
+}
+
+static
+auto on_device_created(device* shm) -> void {
+	shm->data = shm->seg.seg.construct<device_data>(OBJECT_DATA)();
+}
+
+static
+auto on_device_opened(device* shm) -> void {
+	require_shm_obj<device_data>(&shm->seg.seg, OBJECT_DATA, 1, &shm->data);
+}
+
+[[nodiscard]] static
+auto open_device(std::string_view id, bool remove_when_done) -> device {
+	device shm;
+	shm.seg.seg              = bip::managed_shared_memory{bip::open_only, id.data()};
+	shm.seg.id               = id;
+	shm.seg.remove_when_done = remove_when_done;
+	on_device_opened(&shm);
+	return shm;
+}
+
+[[nodiscard]] static
+auto open_or_create_device(std::string_view id, bool remove_when_done) -> device {
+	device shm;
+	auto result              = open_or_create_segment(id, DEVICE_SEGMENT_SIZE);
+	shm.seg.seg              = std::move(result.seg);
+	shm.seg.id               = id;
+	shm.seg.remove_when_done = remove_when_done;
+	if (result.was_created) {
+		on_device_created(&shm);
+	}
+	else {
+		on_device_opened(&shm);
+	}
+	return shm;
+}
+
+[[nodiscard]] static
+auto make_device_id(std::string_view sbox_shmid, id::device dev_id) -> std::string {
+	return std::format("{}+dev+{}", sbox_shmid, dev_id.value);
+}
 
 /* For less memory usage, could do something like this.
  * Not doing this at the moment because it complicates things a lot.

@@ -19,18 +19,18 @@ namespace basio = boost::asio;
 
 namespace scuff {
 
-using return_device_fns = slot_buffer<return_device>;
-using return_double_fns = slot_buffer<return_double>;
-using return_state_fns  = slot_buffer<return_bytes>;
-using return_string_fns = slot_buffer<return_string>;
-using return_void_fns   = slot_buffer<return_void>;
+using return_device_create_result_fns = slot_buffer<return_create_device_result>;
+using return_device_load_result_fns   = slot_buffer<return_load_device_result>;
+using return_double_fns               = slot_buffer<return_double>;
+using return_state_fns                = slot_buffer<return_bytes>;
+using return_string_fns               = slot_buffer<return_string>;
 
 struct return_buffers {
-	return_device_fns devices;
-	return_double_fns doubles;
-	return_state_fns states;
-	return_string_fns strings;
-	return_void_fns voids;
+	return_device_create_result_fns device_create_results;
+	return_device_load_result_fns   device_load_results;
+	return_double_fns               doubles;
+	return_state_fns                states;
+	return_string_fns               strings;
 };
 
 struct sandbox_services {
@@ -39,25 +39,25 @@ struct sandbox_services {
 	std::atomic_int ref_count = 0;
 	sandbox_services(bp::child&& proc, std::string_view shmid)
 		: proc{std::move(proc)}
-		, shm_{bip::create_only, shm::segment::remove_when_done, shmid}
+		, shm_{shm::create_sandbox(shmid, true)}
 	{}
 	auto enqueue(msg::in::msg msg) -> void {
 		msg_sender_.enqueue(std::move(msg));
 	}
 	[[nodiscard]]
 	auto get_shmid() const -> std::string_view {
-		return shm_.id();
+		return shm_.seg.id;
 	}
 	[[nodiscard]]
 	auto receive_msgs_from_sandbox() -> std::vector<msg::out::msg> {
 		auto fn = [&shm = shm_](std::byte* bytes, size_t count) -> size_t {
-			return shm.receive_bytes_from_sandbox(bytes, count);
+			return shm::receive_bytes_from_sandbox(shm, bytes, count);
 		};
 		return msg_receiver_.receive(fn);
 	}
 	auto send_msgs_to_sandbox() -> void {
 		auto fn = [&shm = shm_](const std::byte* bytes, size_t count) -> size_t {
-			return shm.send_bytes_to_sandbox(bytes, count);
+			return shm::send_bytes_to_sandbox(shm, bytes, count);
 		};
 		msg_sender_.send(fn);
 	}

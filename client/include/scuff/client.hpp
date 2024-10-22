@@ -87,10 +87,10 @@ using on_scan_error                    = std::function<void(std::string_view err
 using on_scan_started                  = std::function<void()>;
 using on_scan_warning                  = std::function<void(std::string_view warning)>;
 using return_bytes                     = std::function<void(const scuff::bytes& bytes)>;
-using return_device                    = std::function<void(create_device_result result)>;
+using return_create_device_result      = std::function<void(create_device_result result)>;
+using return_load_device_result        = std::function<void(load_device_result result)>;
 using return_double                    = std::function<void(double value)>;
 using return_string                    = std::function<void(std::string_view text)>;
-using return_void                      = std::function<void(void)>;
 
 struct general_ui {
 	scuff::on_error on_error;
@@ -184,7 +184,7 @@ auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id
 //  - When the operation is complete, the callback will be called on the next call to ui_update(group).
 //  - Before the operation is complete, the returned device ID will be valid, but the device will be in an unloaded state.
 [[nodiscard]]
-auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_device fn) -> id::device;
+auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_create_device_result fn) -> id::device;
 
 // Create a new group.
 // - Every sandbox has to belong to a group.
@@ -215,7 +215,7 @@ auto duplicate(id::device dev, id::sandbox sbox) -> create_device_result;
 // - When the operation is complete, the callback will be called on the next call to ui_update(group).
 // - Before the operation is complete, the returned device ID will be valid, but the device will be in an unloaded state.
 [[nodiscard]]
-auto duplicate_async(id::device dev, id::sandbox sbox, return_device fn) -> id::device;
+auto duplicate_async(id::device dev, id::sandbox sbox, return_create_device_result fn) -> id::device;
 
 // Erase a device.
 // It's OK to do this while the audio thread is processing. The internal device
@@ -371,12 +371,14 @@ auto is_running(id::sandbox sbox) -> bool;
 auto is_scanning(void) -> bool;
 
 // Load the device state and block until the operation is complete.
-auto load(id::device dev, const scuff::bytes& bytes) -> void;
+// Returns true if the device was loaded successfully.
+[[nodiscard]]
+auto load(id::device dev, const scuff::bytes& bytes) -> bool;
 
 // Load the device state, asynchronously.
 //  - When the operation is complete, call the given function,
 //    on the next call to ui_update(group).
-auto load_async(id::device dev, const scuff::bytes& bytes, return_void fn) -> void;
+auto load_async(id::device dev, const scuff::bytes& bytes, return_load_device_result fn) -> void;
 
 // Push a device event
 auto push_event(id::device dev, const scuff::event& event) -> void;

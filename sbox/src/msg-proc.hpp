@@ -110,6 +110,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 				activate(app, dev, app->sample_rate);
 			}
 			dev.service->window_listener = {app, dev_id};
+			app->msg_sender.enqueue(scuff::msg::out::device_create_success{dev_id.value, dev.service->shm.seg.id.data(), msg.callback});
 			return;
 		}
 		else {
@@ -118,7 +119,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 		}
 	}
 	catch (const std::exception& err) {
-		throw std::runtime_error(std::format("Failed to create device: {}", err.what()));
+		app->msg_sender.enqueue(scuff::msg::out::device_create_fail{dev_id.value, err.what(), msg.callback});
 	}
 }
 
@@ -312,10 +313,12 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_load& msg) 
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
-		if (!clap::main::load(app, dev_id, msg.state)) {
-			app->msg_sender.enqueue(scuff::msg::out::report_error{"Failed to load device state"});
+		if (clap::main::load(app, dev_id, msg.state)) {
+			app->msg_sender.enqueue(scuff::msg::out::device_load_success{dev_id.value});
 		}
-		app->msg_sender.enqueue(scuff::msg::out::return_void{msg.callback});
+		else {
+			app->msg_sender.enqueue(scuff::msg::out::device_load_fail{dev_id.value, "Failed to load device state for some unknown reason."});
+		}
 		return;
 	}
 }
@@ -385,7 +388,6 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::activate& msg) -> 
 		activate(app, dev, msg.sr);
 	}
 	app->msg_sender.enqueue(msg::out::confirm_activated{});
-	app->last_heartbeat = std::chrono::steady_clock::now();
 	app->sample_rate    = msg.sr;
 	app->active         = true;
 }
@@ -416,10 +418,10 @@ static
 auto process_messages(sbox::app* app) -> void {
 	try {
 		const auto receive = [app](std::byte* bytes, size_t count) -> size_t {
-			return app->shm_sbox.receive_bytes_from_client(bytes, count);
+			return shm::receive_bytes_from_client(app->shm_sbox, bytes, count);
 		};
 		const auto send = [app](const std::byte* bytes, size_t count) -> size_t {
-			return app->shm_sbox.send_bytes_to_client(bytes, count);
+			return shm::send_bytes_to_client(app->shm_sbox, bytes, count);
 		};
 		const auto input_msgs = app->msg_receiver.receive(receive);
 		for (const auto& msg : input_msgs) {

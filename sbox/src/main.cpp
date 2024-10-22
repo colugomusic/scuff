@@ -38,9 +38,10 @@ auto create() -> sbox::app* {
 		log(app, "group: %s", app->options.group_shmid.c_str());
 		log(app, "sandbox: %s", app->options.sbox_shmid.c_str());
 		log(app, "sample rate: %f", app->options.sample_rate);
-		app->shm_group      = shm::group{bip::open_only, app->options.group_shmid};
-		app->shm_sbox       = shm::sandbox{bip::open_only, app->options.sbox_shmid};
+		app->shm_group      = shm::open_group(app->options.group_shmid);
+		app->shm_sbox       = shm::open_sandbox(app->options.sbox_shmid);
 		app->main_thread_id = std::this_thread::get_id();
+		app->last_heartbeat = std::chrono::steady_clock::now();
 	}
 	catch (const std::exception& err) {
 		log(app, "Error: %s", err.what());
@@ -75,14 +76,12 @@ auto destroy(sbox::app** app) -> void {
 
 static
 auto check_heartbeat(sbox::app* app) -> void {
-	if (app->active) {
-		const auto now  = std::chrono::steady_clock::now();
-		const auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - app->last_heartbeat).count();
-		if (diff > HEARTBEAT_TIMEOUT_MS) {
-			log(app, "Heartbeat timeout");
-			app->msg_sender.enqueue(scuff::msg::out::report_error{"Heartbeat timeout"});
-			osapp_finish();
-		}
+	const auto now  = std::chrono::steady_clock::now();
+	const auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - app->last_heartbeat).count();
+	if (diff > HEARTBEAT_TIMEOUT_MS) {
+		log(app, "Heartbeat timeout");
+		app->msg_sender.enqueue(scuff::msg::out::report_error{"Heartbeat timeout"});
+		osapp_finish();
 	}
 }
 
