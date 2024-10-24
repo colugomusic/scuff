@@ -273,20 +273,17 @@ auto process_message_(const sandbox& sbox, const msg::out::report_warning& msg) 
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::return_param_value& msg) -> void {
-	const auto return_fn = sbox.services->return_buffers.doubles.take(msg.callback);
-	return_fn(msg.value);
+	ui::send(sbox, ui::msg::param_value{msg.value, sbox.services->return_buffers.doubles.take(msg.callback)});
 }
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::return_param_value_text& msg) -> void {
-	const auto return_fn = sbox.services->return_buffers.strings.take(msg.callback);
-	return_fn(msg.text.c_str());
+	ui::send(sbox, ui::msg::param_value_text{msg.text, sbox.services->return_buffers.strings.take(msg.callback)});
 }
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::return_state& msg) -> void {
-	const auto return_fn = sbox.services->return_buffers.states.take(msg.callback);
-	return_fn(msg.bytes);
+	ui::send(sbox, ui::msg::device_state{msg.bytes, sbox.services->return_buffers.states.take(msg.callback)});
 }
 
 static

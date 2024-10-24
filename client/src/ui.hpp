@@ -53,6 +53,9 @@ static auto cb_(const ui::msg::sbox_info& msg, const group_ui& ui) -> void      
 static auto cb_(const ui::msg::sbox_started& msg, const group_ui& ui) -> void                  { ui.on_sbox_started(msg.sbox); }
 static auto cb_(const ui::msg::sbox_warning& msg, const group_ui& ui) -> void                  { ui.on_sbox_warning(msg.sbox, msg.warning); }
 static auto cb_(const ui::msg::device_create& msg, const group_ui& ui) -> void                 { msg.callback(msg.result); }
+static auto cb_(const ui::msg::device_state& msg, const group_ui& ui) -> void                  { msg.callback(msg.state); }
+static auto cb_(const ui::msg::param_value& msg, const group_ui& ui) -> void                   { msg.callback(msg.value); }
+static auto cb_(const ui::msg::param_value_text& msg, const group_ui& ui) -> void              { msg.callback(msg.text); }
 
 static auto cb(const ui::msg::general& msg, const general_ui& ui) -> void { fast_visit([&ui](const auto& msg) { cb_(msg, ui); }, msg); } 
 static auto cb(const ui::msg::group& msg, const group_ui& ui) -> void { fast_visit([&ui](const auto& msg)     { cb_(msg, ui); }, msg); }

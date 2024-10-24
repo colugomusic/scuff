@@ -16,7 +16,10 @@ struct device_editor_visible_changed { id::device dev; bool visible; };
 struct device_create                 { create_device_result result; return_create_device_result callback; };
 struct device_load                   { load_device_result result; };
 struct device_params_changed         { id::device dev; };
+struct device_state                  { scuff::bytes state; return_bytes callback; };
 struct error                         { std::string error; };
+struct param_value                   { double value; return_double callback; };
+struct param_value_text              { std::string text; return_string callback; };
 struct plugfile_broken               { id::plugfile plugfile; };
 struct plugfile_scanned              { id::plugfile plugfile; };
 struct plugin_broken                 { id::plugin plugin; };
@@ -48,7 +51,10 @@ using group = std::variant<
 	device_create,
 	device_load,
 	device_params_changed,
+	device_state,
 	error,
+	param_value,
+	param_value_text,
 	sbox_crashed,
 	sbox_error,
 	sbox_info,

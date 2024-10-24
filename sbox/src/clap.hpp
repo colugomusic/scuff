@@ -974,6 +974,8 @@ auto activate(sbox::app* app, id::device dev_id, double sr) -> bool {
 		});
 		return m;
 	});
+	// TOODOO:
+	// clap_dev.service.data->atomic_flags.value |= device_atomic_flags::processing;
 	return true;
 }
 
@@ -993,6 +995,7 @@ auto deactivate(sbox::app* app, id::device dev_id) -> void {
 		return m;
 	});
 	clap_dev.iface->plugin.plugin->deactivate(clap_dev.iface->plugin.plugin);
+	clap_dev.service.data->atomic_flags.value &= ~device_atomic_flags::processing;
 }
 
 [[nodiscard]] static
