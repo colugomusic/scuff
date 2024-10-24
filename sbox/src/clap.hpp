@@ -349,6 +349,10 @@ auto process(const sbox::app& app, const sbox::device& dev) -> void {
 			process_audio_device(dev, clap_dev);
 			return;
 		}
+		else {
+			flush_device_events(dev, clap_dev);
+			return;
+		}
 	}
 	process_event_device(dev, clap_dev);
 }
@@ -471,17 +475,17 @@ auto initialize_process_struct_for_event_device(const clap::device& dev, clap::d
 
 [[nodiscard]] static
 auto init_audio(const sbox::device& dev, const clap::device& clap_dev) -> std::shared_ptr<const device_service_audio> {
-	auto out = device_service_audio{};
+	auto out = std::make_shared<device_service_audio>();
 	if (clap_dev.iface->plugin.audio_ports) {
 		// AUDIO PLUGIN
-		make_audio_buffers(dev.service->shm, clap_dev.service.audio_port_info, &out.buffers);
-		initialize_process_struct_for_audio_device(clap_dev, &out);
+		make_audio_buffers(dev.service->shm, clap_dev.service.audio_port_info, &out->buffers);
+		initialize_process_struct_for_audio_device(clap_dev, out.get());
 	}
 	else {
 		// EVENT-ONLY PLUGIN
-		initialize_process_struct_for_event_device(clap_dev, &out);
+		initialize_process_struct_for_event_device(clap_dev, out.get());
 	}
-	return std::make_shared<const device_service_audio>(std::move(out));
+	return out;
 }
 
 [[nodiscard]] static
@@ -975,8 +979,7 @@ auto activate(sbox::app* app, id::device dev_id, double sr) -> bool {
 		});
 		return m;
 	});
-	// TOODOO:
-	// clap_dev.service.data->atomic_flags.value |= device_atomic_flags::processing;
+	clap_dev.service.data->atomic_flags.value |= device_atomic_flags::processing;
 	return true;
 }
 
