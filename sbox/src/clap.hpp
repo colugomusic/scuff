@@ -535,6 +535,7 @@ auto init_params(clap::device&& dev) -> clap::device {
 	const auto& iface = dev.iface->plugin;
 	if (iface.params) {
 		const auto count = iface.params->count(iface.plugin);
+		dev.params = {};
 		for (const auto i : std::ranges::views::iota(0u, count)) {
 			clap_param_info_t info;
 			if (iface.params->get_info(iface.plugin, i, &info)) {

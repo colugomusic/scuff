@@ -299,37 +299,38 @@ private:
 template <typename MsgT>
 struct receiver {
 	template <typename ReceiveFn>
-	auto receive(ReceiveFn receive) -> std::vector<MsgT> {
-		std::vector<MsgT> msgs;
+	auto receive(ReceiveFn receive) -> const std::vector<MsgT>& {
+		msg_buffer_.clear();
 		for (;;) {
 			if (bytes_remaining_ > 0) {
 				const auto bytes_to_get = bytes_remaining_;
-				const auto offset       = buffer_.size() - bytes_remaining_;
-				const auto bytes_got    = receive(buffer_.data() + offset, bytes_to_get);
+				const auto offset       = byte_buffer_.size() - bytes_remaining_;
+				const auto bytes_got    = receive(byte_buffer_.data() + offset, bytes_to_get);
 				bytes_remaining_ -= bytes_got;
 				if (bytes_got < bytes_to_get) {
-					return msgs;
+					return msg_buffer_;
 				}
 			}
 			if (msg_size_ > 0) {
 				MsgT msg;
-				deserialize(buffer_, &msg);
-				msgs.push_back(msg);
+				deserialize(byte_buffer_, &msg);
+				msg_buffer_.push_back(msg);
 				msg_size_        = 0;
 				bytes_remaining_ = 0;
 				continue;
 			}
-			buffer_.resize(sizeof(size_t));
-			if (receive(buffer_.data(), sizeof(size_t)) < sizeof(size_t)) {
-				return msgs;
+			byte_buffer_.resize(sizeof(size_t));
+			if (receive(byte_buffer_.data(), sizeof(size_t)) < sizeof(size_t)) {
+				return msg_buffer_;
 			}
-			msg_size_        = *reinterpret_cast<size_t*>(buffer_.data());
+			msg_size_        = *reinterpret_cast<size_t*>(byte_buffer_.data());
 			bytes_remaining_ = msg_size_;
-			buffer_.resize(bytes_remaining_);
+			byte_buffer_.resize(bytes_remaining_);
 		}
 	}
 private:
-	std::vector<std::byte> buffer_;
+	std::vector<MsgT> msg_buffer_;
+	std::vector<std::byte> byte_buffer_;
 	size_t bytes_remaining_ = 0;
 	size_t msg_size_ = 0;
 };

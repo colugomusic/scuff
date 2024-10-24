@@ -29,6 +29,20 @@ auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id, 
 }
 
 static
+auto intercept_input_event(const scuff::device& dev, const scuff::event& event) -> void {
+	if (std::holds_alternative<scuff::events::param_value>(event)) {
+		dev.services->dirty_marker++;
+	}
+}
+
+static
+auto intercept_output_event(const scuff::device& dev, const scuff::event& event) -> void {
+	if (std::holds_alternative<scuff::events::param_value>(event)) {
+		dev.services->dirty_marker++;
+	}
+}
+
+static
 auto write_audio(const scuff::device& dev, const audio_writers& writers) -> void {
 	for (size_t j = 0; j < writers.size(); j++) {
 		const auto& writer = writers[j];
@@ -42,7 +56,9 @@ auto write_events(const scuff::device& dev, const event_writer& writer) -> void 
 	auto& buffer           = dev.services->shm.data->events_in;
 	const auto event_count = std::min(writer.count(), size_t(EVENT_PORT_SIZE));
 	for (size_t j = 0; j < event_count; j++) {
-		buffer.push_back(writer.get(j));
+		const auto event = writer.get(j);
+		intercept_input_event(dev, event);
+		buffer.push_back(event);
 	}
 }
 
@@ -73,13 +89,6 @@ auto read_zeros(const audio_readers& readers) -> void {
 	for (size_t j = 0; j < readers.size(); j++) {
 		const auto& reader = readers[j];
 		reader.read(zeros.data());
-	}
-}
-
-static
-auto intercept_output_event(const scuff::device& dev, const scuff::event& event) -> void {
-	if (std::holds_alternative<scuff::events::param_value>(event)) {
-		dev.services->dirty_marker++;
 	}
 }
 
@@ -312,7 +321,7 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 	}
 	if (sbox.services) {
 		sbox.services->send_msgs_to_sandbox();
-		const auto msgs = sbox.services->receive_msgs_from_sandbox();
+		const auto& msgs = sbox.services->receive_msgs_from_sandbox();
 		for (const auto& msg : msgs) {
 			process_message(sbox, msg);
 		}
@@ -910,6 +919,7 @@ auto push_event(id::device dev, const scuff::event& event) -> void {
 	const auto m       = DATA_->model.read();
 	const auto& device = m.devices.at({dev});
 	const auto& sbox   = m.sandboxes.at(device.sbox);
+	intercept_input_event(device, event);
 	sbox.services->enqueue(scuff::msg::in::event{dev.value, event});
 }
 

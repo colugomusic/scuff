@@ -423,7 +423,7 @@ auto process_messages(sbox::app* app) -> void {
 		const auto send = [app](const std::byte* bytes, size_t count) -> size_t {
 			return shm::send_bytes_to_client(app->shm_sbox, bytes, count);
 		};
-		const auto input_msgs = app->msg_receiver.receive(receive);
+		const auto& input_msgs = app->msg_receiver.receive(receive);
 		for (const auto& msg : input_msgs) {
 			process_input_msg(app, msg);
 		}

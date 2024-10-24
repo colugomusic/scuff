@@ -49,7 +49,7 @@ struct sandbox_services {
 		return shm_.seg.id;
 	}
 	[[nodiscard]]
-	auto receive_msgs_from_sandbox() -> std::vector<msg::out::msg> {
+	auto receive_msgs_from_sandbox() -> const std::vector<msg::out::msg>& {
 		auto fn = [&shm = shm_](std::byte* bytes, size_t count) -> size_t {
 			return shm::receive_bytes_from_sandbox(shm, bytes, count);
 		};

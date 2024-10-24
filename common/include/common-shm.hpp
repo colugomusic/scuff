@@ -95,6 +95,9 @@ struct msg_buffer {
 	[[nodiscard]]
 	auto write(const std::byte* bytes, size_t count) -> size_t {
 		const auto lock = std::unique_lock{mutex_};
+		if (bytes_.size() + count > bytes_.capacity()) {
+			__debugbreak();
+		}
 		count = std::min(count, bytes_.capacity() - bytes_.size());
 		bytes_.insert(bytes_.end(), bytes, bytes + count);
 		return count;
