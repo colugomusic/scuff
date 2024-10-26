@@ -297,41 +297,4 @@ auto make_device_id(std::string_view sbox_shmid, id::device dev_id) -> std::stri
 	return std::format("{}+dev+{}", sbox_shmid, dev_id.value);
 }
 
-/* For less memory usage, could do something like this.
- * Not doing this at the moment because it complicates things a lot.
-struct device_audio_ports : segment {
-	size_t input_count  = 0;
-	size_t output_count = 0;
-	audio_buffer* input_buffers  = nullptr;
-	audio_buffer* output_buffers = nullptr;
-	device_audio_ports() = default;
-	device_audio_ports(bip::create_only_t, std::string_view id, size_t input_port_count, size_t output_port_count)
-		: segment{id, sizeof(audio_buffer) * (input_port_count + output_port_count) + SEGMENT_OVERHEAD}
-	{
-		create(input_port_count, output_port_count);
-	}
-	device_audio_ports(bip::open_only_t, std::string_view id)
-		: segment{id}
-	{
-		open();
-	}
-	[[nodiscard]] static
-	auto make_id(std::string_view instance_id, id::sandbox sbox_id, id::device dev_id, uint64_t uid) -> std::string {
-		return std::format("{}+sbox+{}+dev+{}+ports+{}", instance_id, sbox_id.value, dev_id.value, uid);
-	}
-private:
-	auto create(size_t input_port_count, size_t output_port_count) -> void {
-		assert (input_port_count > 0 || output_port_count > 0);
-		input_count    = input_port_count;
-		output_count   = output_port_count;
-		if (input_port_count > 0)  { input_buffers  = seg().construct<audio_buffer>(OBJECT_AUDIO_IN)[input_port_count](); }
-		if (output_port_count > 0) { output_buffers = seg().construct<audio_buffer>(OBJECT_AUDIO_OUT)[output_port_count](); }
-	}
-	auto open() -> void {
-		input_count  = find_shm_obj<audio_buffer>(&seg(), OBJECT_AUDIO_IN, &input_buffers);
-		output_count = find_shm_obj<audio_buffer>(&seg(), OBJECT_AUDIO_OUT, &output_buffers);
-	}
-};
-*/
-
 } // scuff::shm

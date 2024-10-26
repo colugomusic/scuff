@@ -602,7 +602,7 @@ auto device_disconnect(id::device dev_out_id, size_t port_out, id::device dev_in
 
 [[nodiscard]] static
 auto debug__check_we_are_in_the_ui_thread() -> void {
-	// TOODOO:
+	assert (std::this_thread::get_id() == DATA_->ui_thread_id);
 }
 
 static
@@ -1260,10 +1260,11 @@ auto audio_process(const group_process& process) -> void {
 auto init(const scuff::on_error& on_error) -> bool {
 	if (scuff::initialized_) { return true; }
 	try {
-		scuff::DATA_              = std::make_unique<scuff::data>();
-		scuff::DATA_->instance_id = "scuff+" + std::to_string(scuff::os::get_process_id());
-		scuff::DATA_->poll_thread = std::jthread{impl::poll_thread};
-		scuff::initialized_       = true;
+		scuff::DATA_               = std::make_unique<scuff::data>();
+		scuff::DATA_->instance_id  = "scuff+" + std::to_string(scuff::os::get_process_id());
+		scuff::DATA_->poll_thread  = std::jthread{impl::poll_thread};
+		scuff::DATA_->ui_thread_id = std::this_thread::get_id();
+		scuff::initialized_        = true;
 		return true;
 	} catch (const std::exception& err) {
 		scuff::DATA_.reset();

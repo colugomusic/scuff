@@ -137,6 +137,8 @@ auto audio_process(const group_process& process) -> void;
 //  - If an error occurs during initialization then the error callback will be called.
 //  - Returns true if the initialization was successful, or if scuff was already
 //    initialized.
+//  - The thread this is called from is considered the "UI thread" until shudown() is
+//    called.
 [[nodiscard]]
 auto init(const scuff::on_error& on_error) -> bool;
 

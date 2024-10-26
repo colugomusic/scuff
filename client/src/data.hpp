@@ -169,6 +169,7 @@ struct data {
 	std::string              instance_id;
 	std::jthread             poll_thread;
 	std::jthread             scan_thread;
+	std::thread::id          ui_thread_id;
 	std::atomic_bool         scanning = false;
 	ui::msg::general_q       ui;
 	audio_sync<scuff::model> model;
