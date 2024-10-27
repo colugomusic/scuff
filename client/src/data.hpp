@@ -134,7 +134,7 @@ struct group {
 	double sample_rate = 0.0f;
 	int total_active_sandboxes = 0;
 	immer::set<id::sandbox> sandboxes;
-	immer::map<id::device, id::device> cross_sbox_conns;
+	immer::map<id::device, id::device> cross_sbox_conns; // TOODOO: implement this
 	std::shared_ptr<group_services> services;
 };
 

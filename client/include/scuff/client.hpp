@@ -32,65 +32,77 @@ struct load_device_result {
 	bool was_loaded_successfully = false;
 };
 
-struct audio_writer {
+using bytes = std::vector<std::byte>;
+
+struct input_event {
+	id::device device_id;
+	scuff::event event;
+};
+
+struct output_event {
+	id::device device_id;
+	scuff::event event;
+};
+
+using on_device_editor_visible_changed = std::function<auto (id::device dev, bool visible) -> void>;
+using on_device_load                   = std::function<auto (load_device_result result) -> void>;
+using on_device_params_changed         = std::function<auto (id::device dev) -> void>;
+using on_error                         = std::function<auto (std::string_view error) -> void>;
+using on_plugfile_broken               = std::function<auto (id::plugfile plugfile) -> void>;
+using on_plugfile_scanned              = std::function<auto (id::plugfile plugfile) -> void>;
+using on_plugin_broken                 = std::function<auto (id::plugin plugin) -> void>;
+using on_plugin_scanned                = std::function<auto (id::plugin plugin) -> void>;
+using on_sbox_crashed                  = std::function<auto (id::sandbox sbox, std::string_view error) -> void>;
+using on_sbox_error                    = std::function<auto (id::sandbox sbox, std::string_view error) -> void>;
+using on_sbox_info                     = std::function<auto (id::sandbox sbox, std::string_view info) -> void>;
+using on_sbox_started                  = std::function<auto (id::sandbox sbox) -> void>;
+using on_sbox_warning                  = std::function<auto (id::sandbox sbox, std::string_view warning) -> void>;
+using on_scan_complete                 = std::function<auto () -> void>;
+using on_scan_error                    = std::function<auto (std::string_view error) -> void>;
+using on_scan_started                  = std::function<auto () -> void>;
+using on_scan_warning                  = std::function<auto (std::string_view warning) -> void>;
+using return_bytes                     = std::function<auto (const scuff::bytes& bytes) -> void>;
+using return_create_device_result      = std::function<auto (create_device_result result) -> void>;
+using return_load_device_result        = std::function<auto (load_device_result result) -> void>;
+using return_double                    = std::function<auto (double value) -> void>;
+using return_string                    = std::function<auto (std::string_view text) -> void>;
+using write_audio                      = std::function<auto (float* floats) -> void>;
+using read_audio                       = std::function<auto (const float* floats) -> void>;
+using get_input_events_count           = std::function<auto () -> size_t>;
+using pop_input_events                 = std::function<auto (size_t count, scuff::input_event* buffer) -> size_t>;
+using push_output_event                = std::function<auto (const scuff::output_event& event) -> void>;
+
+struct audio_input {
+	id::device dev_id;
 	size_t port_index;
-	std::function<void(float* floats)> write;
+	write_audio write_to;
 };
 
-struct audio_reader {
+struct audio_output {
+	id::device dev_id;
 	size_t port_index;
-	std::function<void(const float* floats)> read;
+	read_audio read_from;
 };
 
-struct event_writer {
-	std::function<size_t()> count;
-	std::function<scuff::event(size_t index)> get;
+struct input_events {
+	get_input_events_count count;
+	pop_input_events pop;
 };
 
-struct event_reader {
-	// Must be able to push at least scuff::EVENT_PORT_SIZE events.
-	// Otherwise events will be dropped.
-	std::function<void(const scuff::event& event)> push;
+struct output_events {
+	push_output_event push;
 };
 
-using audio_writers  = std::vector<scuff::audio_writer>;
-using audio_readers  = std::vector<scuff::audio_reader>;
-
-struct input_device  { id::device dev; scuff::audio_writers audio_writers; scuff::event_writer event_writer; };
-struct output_device { id::device dev; scuff::audio_readers audio_readers; scuff::event_reader event_reader; };
-
-using input_devices  = std::vector<scuff::input_device>;
-using output_devices = std::vector<scuff::output_device>;
-using bytes          = std::vector<std::byte>;
+using audio_inputs  = std::vector<scuff::audio_input>;
+using audio_outputs = std::vector<scuff::audio_output>;
 
 struct group_process {
 	id::group group;
-	scuff::input_devices input_devices;
-	scuff::output_devices output_devices;
+	scuff::audio_inputs audio_inputs;
+	scuff::audio_outputs audio_outputs;
+	scuff::input_events input_events;
+	scuff::output_events output_events;
 };
-
-using on_device_editor_visible_changed = std::function<void(id::device dev, bool visible)>;
-using on_device_load                   = std::function<void(load_device_result result)>;
-using on_device_params_changed         = std::function<void(id::device dev)>;
-using on_error                         = std::function<void(std::string_view error)>;
-using on_plugfile_broken               = std::function<void(id::plugfile plugfile)>;
-using on_plugfile_scanned              = std::function<void(id::plugfile plugfile)>;
-using on_plugin_broken                 = std::function<void(id::plugin plugin)>;
-using on_plugin_scanned                = std::function<void(id::plugin plugin)>;
-using on_sbox_crashed                  = std::function<void(id::sandbox sbox, std::string_view error)>;
-using on_sbox_error                    = std::function<void(id::sandbox sbox, std::string_view error)>;
-using on_sbox_info                     = std::function<void(id::sandbox sbox, std::string_view info)>;
-using on_sbox_started                  = std::function<void(id::sandbox sbox)>;
-using on_sbox_warning                  = std::function<void(id::sandbox sbox, std::string_view warning)>;
-using on_scan_complete                 = std::function<void()>;
-using on_scan_error                    = std::function<void(std::string_view error)>;
-using on_scan_started                  = std::function<void()>;
-using on_scan_warning                  = std::function<void(std::string_view warning)>;
-using return_bytes                     = std::function<void(const scuff::bytes& bytes)>;
-using return_create_device_result      = std::function<void(create_device_result result)>;
-using return_load_device_result        = std::function<void(load_device_result result)>;
-using return_double                    = std::function<void(double value)>;
-using return_string                    = std::function<void(std::string_view text)>;
 
 struct general_ui {
 	scuff::on_error on_error;

@@ -43,83 +43,84 @@ auto intercept_output_event(const scuff::device& dev, const scuff::event& event)
 }
 
 static
-auto write_audio(const scuff::device& dev, const audio_writers& writers) -> void {
-	for (size_t j = 0; j < writers.size(); j++) {
-		const auto& writer = writers[j];
-		auto& buffer       = dev.services->shm.data->audio_in[writer.port_index];
-		writer.write(buffer.data());
+auto write_audio_input(const scuff::model& m, const scuff::audio_input& input) -> void {
+	if (const auto dev = m.devices.find(input.dev_id)) {
+		auto& buffer   = dev->services->shm.data->audio_in[input.port_index];
+		input.write_to(buffer.data());
 	}
 }
 
 static
-auto write_events(const scuff::device& dev, const event_writer& writer) -> void {
-	auto& buffer           = dev.services->shm.data->events_in;
-	const auto event_count = std::min(writer.count(), size_t(EVENT_PORT_SIZE));
-	for (size_t j = 0; j < event_count; j++) {
-		const auto event = writer.get(j);
-		intercept_input_event(dev, event);
-		buffer.push_back(event);
+auto write_audio_inputs(const scuff::model& m, const scuff::audio_inputs& inputs) -> void {
+	for (const auto& input : inputs) {
+		write_audio_input(m, input);
 	}
 }
 
 static
-auto write_entry_ports(const scuff::model& m, const input_devices& devices) -> void {
-	for (size_t i = 0; i < devices.size(); i++) {
-		const auto& item  = devices[i];
-		const auto dev_id = id::device{item.dev};
-		if (const auto dev = m.devices.find(dev_id)) {
-			write_audio(*dev, item.audio_writers);
-			write_events(*dev, item.event_writer);
+auto write_input_events(const scuff::model& m, const scuff::input_events& input_events) -> void {
+	bc::static_vector<scuff::input_event, EVENT_PORT_SIZE> event_buffer;
+	event_buffer.resize(input_events.count());
+	const auto events_to_pop = std::min(size_t(EVENT_PORT_SIZE), event_buffer.size());
+	const auto events_popped = input_events.pop(events_to_pop, event_buffer.data());
+	event_buffer.resize(events_popped);
+	for (const auto& event : event_buffer) {
+		if (const auto dev = m.devices.find(event.device_id)) {
+			intercept_input_event(*dev, event.event);
+			dev->services->shm.data->events_in.push_back(event.event);
 		}
 	}
 }
 
 static
-auto read_audio(const scuff::device& dev, const audio_readers& readers) -> void {
-	for (size_t j = 0; j < readers.size(); j++) {
-		const auto& reader = readers[j];
-		const auto& buffer = dev.services->shm.data->audio_out[reader.port_index];
-		reader.read(buffer.data());
+auto process_inputs(const scuff::model& m, const scuff::audio_inputs& audio_inputs, const scuff::input_events& input_events) -> void {
+	write_audio_inputs(m, audio_inputs);
+	write_input_events(m, input_events);
+}
+
+static
+auto read_audio_output(const scuff::model& m, const audio_output& output) -> void {
+	if (const auto dev = m.devices.find(output.dev_id)) {
+		const auto& buffer = dev->services->shm.data->audio_out[output.port_index];
+		output.read_from(buffer.data());
 	}
 }
 
 static
-auto read_zeros(const audio_readers& readers) -> void {
+auto read_audio_outputs(const scuff::model& m, const audio_outputs& output) -> void {
+	for (const auto& output : output) {
+		read_audio_output(m, output);
+	}
+}
+
+static
+auto read_zeros(const scuff::model& m, const audio_outputs& outputs) -> void {
 	std::array<float, CHANNEL_COUNT * VECTOR_SIZE> zeros = {0.0f};
-	for (size_t j = 0; j < readers.size(); j++) {
-		const auto& reader = readers[j];
-		reader.read(zeros.data());
+	for (const auto& output : outputs) {
+		output.read_from(zeros.data());
 	}
 }
 
 static
-auto read_events(const scuff::device& dev, const event_reader& reader) -> void {
-	auto& buffer           = dev.services->shm.data->events_out;
-	const auto event_count = buffer.size();
-	for (size_t j = 0; j < event_count; j++) {
-		intercept_output_event(dev, buffer[j]);
-		reader.push(buffer[j]);
-	}
-	buffer.clear();
-}
-
-static
-auto read_exit_ports(const scuff::model& m, const output_devices& devices) -> void {
-	for (size_t i = 0; i < devices.size(); i++) {
-		const auto& item  = devices[i];
-		const auto dev_id = id::device{item.dev};
-		if (const auto dev = m.devices.find(dev_id)) {
-			read_audio(*dev, item.audio_readers);
-			read_events(*dev, item.event_reader);
+auto read_output_events(const scuff::model& m, const scuff::group& group, const output_events& output_events) -> void {
+	for (const auto sbox_id : group.sandboxes) {
+		const auto& sbox = m.sandboxes.at(sbox_id);
+		for (const auto dev_id : sbox.devices) {
+			const auto& dev  = m.devices.at(dev_id);
+			auto& buffer     = dev.services->shm.data->events_out;
+			for (const auto& event : buffer) {
+				intercept_output_event(dev, event);
+				output_events.push({dev_id, event});
+			}
+			buffer.clear();
 		}
 	}
 }
 
 static
-auto read_zeros(const scuff::model& m, const output_devices& devices) -> void {
-	for (size_t i = 0; i < devices.size(); i++) {
-		read_zeros(devices[i].audio_readers);
-	}
+auto process_outputs(const scuff::model& m, const scuff::group& group, const scuff::audio_outputs& audio_outputs, const scuff::output_events& output_events) -> void {
+	read_audio_outputs(m, audio_outputs);
+	read_output_events(m, group, output_events);
 }
 
 [[nodiscard]] static
@@ -1248,12 +1249,12 @@ auto audio_process(const group_process& process) -> void {
 	const auto audio     = scuff::DATA_->model.rt_read();
 	const auto& group    = audio->groups.at({process.group});
 	const auto epoch     = ++group.services->epoch;
-	impl::write_entry_ports(*audio, process.input_devices);
+	impl::process_inputs(*audio, process.audio_inputs, process.input_events);
 	if (impl::do_sandbox_processing(audio, group, epoch)) {
-		impl::read_exit_ports(*audio, process.output_devices);
+		impl::process_outputs(*audio, group, process.audio_outputs, process.output_events);
 	}
 	else {
-		impl::read_zeros(*audio, process.output_devices);
+		impl::read_zeros(*audio, process.audio_outputs);
 	}
 }
 
