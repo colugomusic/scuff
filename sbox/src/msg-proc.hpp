@@ -81,6 +81,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors&
 	for (const auto& dev : devices) {
 		if (dev.ui.window) {
 			window_hide(dev.ui.window);
+			app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(os::get_editor_window_native_handle(dev))});
 		}
 	}
 }
@@ -200,6 +201,7 @@ auto gui_hide(sbox::app* app, sbox::device dev) -> void {
 		case plugin_type::vst3: { /* Not implemented yet. */ break; }
 	}
 	window_hide(dev.ui.window);
+	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(os::get_editor_window_native_handle(dev))});
 	app->model.update([dev](model&& m){
 		m.devices = m.devices.insert(dev);
 		return m;
@@ -227,7 +229,6 @@ static
 auto on_native_window_close(device_window_listener* dwl, Event* event) -> void {
 	const auto& device = dwl->app->model.read().devices.at(dwl->dev_id);
 	gui_hide(dwl->app, device);
-	dwl->app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dwl->dev_id.value, false});
 }
 
 static
@@ -298,6 +299,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& m
 		window_size(device.ui.window, S2Df(float(result.width), float(result.height)));
 	}
 	window_show(device.ui.window);
+	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{device.id.value, false, (int64_t)(os::get_editor_window_native_handle(device))});
 	if (!setup_editor_window(app, device)) {
 		log(app, "Failed to setup clap editor window");
 	}

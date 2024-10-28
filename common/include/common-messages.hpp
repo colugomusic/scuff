@@ -65,7 +65,7 @@ namespace scuff::msg::out {
 struct confirm_activated             {};
 struct device_create_fail            { id::device::type dev_id; std::string error; size_t callback; };
 struct device_create_success         { id::device::type dev_id; std::string ports_shmid; size_t callback; };
-struct device_editor_visible_changed { id::device::type dev_id; bool visible; };
+struct device_editor_visible_changed { id::device::type dev_id; bool visible; int64_t native_handle; };
 struct device_load_fail              { id::device::type dev_id; std::string error; };
 struct device_load_success           { id::device::type dev_id; };
 struct device_params_changed         { id::device::type dev_id; };

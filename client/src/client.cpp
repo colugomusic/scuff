@@ -260,7 +260,7 @@ auto process_message_(const sandbox& sbox, const msg::out::device_load_success& 
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::device_editor_visible_changed& msg) -> void {
-	ui::send(sbox, ui::msg::device_editor_visible_changed{{msg.dev_id}, msg.visible});
+	ui::send(sbox, ui::msg::device_editor_visible_changed{{msg.dev_id}, msg.visible, msg.native_handle});
 }
 
 static
@@ -313,6 +313,7 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 			m.sandboxes       = m.sandboxes.insert(sbox);
 			for (const auto dev_id : sbox.devices) {
 				m.devices = m.devices.update(dev_id, [](device dev) {
+					dev.editor_window_native_handle = nullptr;
 					dev.flags.value &= ~device_flags::created_successfully;
 					return dev;
 				});

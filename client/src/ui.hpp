@@ -43,7 +43,6 @@ static auto cb_(const ui::msg::scan_complete& msg, const general_ui& ui) -> void
 static auto cb_(const ui::msg::scan_error& msg, const general_ui& ui) -> void                  { ui.on_scan_error(msg.error); }
 static auto cb_(const ui::msg::scan_started& msg, const general_ui& ui) -> void                { ui.on_scan_started(); }
 static auto cb_(const ui::msg::scan_warning& msg, const general_ui& ui) -> void                { ui.on_scan_warning(msg.warning); }
-static auto cb_(const ui::msg::device_editor_visible_changed& msg, const group_ui& ui) -> void { ui.on_device_editor_visible_changed(msg.dev, msg.visible); }
 static auto cb_(const ui::msg::device_load& msg, const group_ui& ui) -> void                   { ui.on_device_load(msg.result); }
 static auto cb_(const ui::msg::device_params_changed& msg, const group_ui& ui) -> void         { ui.on_device_params_changed(msg.dev); }
 static auto cb_(const ui::msg::error& msg, const group_ui& ui) -> void                         { ui.on_error(msg.error); }
@@ -56,6 +55,16 @@ static auto cb_(const ui::msg::device_create& msg, const group_ui& ui) -> void  
 static auto cb_(const ui::msg::device_state& msg, const group_ui& ui) -> void                  { msg.callback(msg.state); }
 static auto cb_(const ui::msg::param_value& msg, const group_ui& ui) -> void                   { msg.callback(msg.value); }
 static auto cb_(const ui::msg::param_value_text& msg, const group_ui& ui) -> void              { msg.callback(msg.text); }
+
+static auto cb_(const ui::msg::device_editor_visible_changed& msg, const group_ui& ui) -> void {
+	DATA_->model.update([dev_id = msg.dev, native_handle = msg.native_handle](model&& m) {
+		auto dev = m.devices.at(dev_id);
+		dev.editor_window_native_handle = (void*)(native_handle);
+		m.devices = m.devices.insert(dev);
+		return m;
+	});
+	ui.on_device_editor_visible_changed(msg.dev, msg.visible, msg.native_handle);
+}
 
 static auto cb(const ui::msg::general& msg, const general_ui& ui) -> void { fast_visit([&ui](const auto& msg) { cb_(msg, ui); }, msg); } 
 static auto cb(const ui::msg::group& msg, const group_ui& ui) -> void { fast_visit([&ui](const auto& msg)     { cb_(msg, ui); }, msg); }

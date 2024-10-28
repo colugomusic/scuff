@@ -12,7 +12,7 @@ namespace scuff {
 namespace ui {
 namespace msg {
 
-struct device_editor_visible_changed { id::device dev; bool visible; };
+struct device_editor_visible_changed { id::device dev; bool visible; int64_t native_handle; };
 struct device_create                 { create_device_result result; return_create_device_result callback; };
 struct device_load                   { load_device_result result; };
 struct device_params_changed         { id::device dev; };

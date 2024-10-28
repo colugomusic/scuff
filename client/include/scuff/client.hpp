@@ -44,7 +44,7 @@ struct output_event {
 	scuff::event event;
 };
 
-using on_device_editor_visible_changed = std::function<auto (id::device dev, bool visible) -> void>;
+using on_device_editor_visible_changed = std::function<auto (id::device dev, bool visible, int64_t native_handle) -> void>;
 using on_device_load                   = std::function<auto (load_device_result result) -> void>;
 using on_device_params_changed         = std::function<auto (id::device dev) -> void>;
 using on_error                         = std::function<auto (std::string_view error) -> void>;
@@ -396,12 +396,6 @@ auto load_async(id::device dev, const scuff::bytes& bytes, return_load_device_re
 
 // Push a device event
 auto push_event(id::device dev, const scuff::event& event) -> void;
-
-// Put all editor windows above the native window.
-// Windows: HWND
-// macOS:   NSView
-// Linux:   X Window ID
-auto put_editors_above_native_window(void* native_window) -> void; // TOODOO: implement this
 
 // Restart the sandbox.
 [[nodiscard]]

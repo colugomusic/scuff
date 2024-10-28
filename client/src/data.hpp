@@ -105,6 +105,7 @@ struct device {
 	id::sandbox sbox;
 	device_flags flags;
 	plugin_type type;
+	void* editor_window_native_handle = nullptr;
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
 	immer::box<scuff::bytes> last_saved_state;

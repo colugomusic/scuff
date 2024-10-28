@@ -3,9 +3,10 @@
 
 namespace scuff::sbox::os {
 
-[[nodiscard]] static
-auto get_top_hwnd(HWND hwnd) -> HWND {
-	return GetAncestor(hwnd, GA_ROOT);
+[[nodiscard]]
+auto get_editor_window_native_handle(const sbox::device& dev) -> void* {
+	const auto view_hwnd = (HWND)(view_native(dev.ui.view));
+	return GetAncestor(view_hwnd, GA_ROOT);
 }
 
 auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> void {
