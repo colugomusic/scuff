@@ -118,9 +118,21 @@ auto read_output_events(const scuff::model& m, const scuff::group& group, const 
 }
 
 static
+auto process_cross_sbox_connections(const scuff::model& m, const scuff::group& group) -> void {
+	for (const auto& conn : group.cross_sbox_conns) {
+		const auto& dev_out = m.devices.at(conn.out_dev_id);
+		const auto& dev_in  = m.devices.at(conn.in_dev_id);
+		const auto& out_buf = dev_out.services->shm.data->audio_out[conn.out_port];
+		auto& in_buf        = dev_in.services->shm.data->audio_in[conn.in_port];
+		std::copy(out_buf.begin(), out_buf.end(), in_buf.begin());
+	}
+}
+
+static
 auto process_outputs(const scuff::model& m, const scuff::group& group, const scuff::audio_outputs& audio_outputs, const scuff::output_events& output_events) -> void {
 	read_audio_outputs(m, audio_outputs);
 	read_output_events(m, group, output_events);
+	process_cross_sbox_connections(m, group);
 }
 
 [[nodiscard]] static
@@ -262,16 +274,6 @@ auto process_message_(const sandbox& sbox, const msg::out::report_error& msg) ->
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::report_fatal_error& msg) -> void {
-	// This message could be received if the sandbox process
-	// manages to prematurely terminate itself in a "clean" way.
-	ui::send(sbox, ui::msg::sbox_crashed{sbox.id, msg.text});
-	if (sbox.services->proc.running()) {
-		sbox.services->proc.terminate();
-	}
-}
-
-static
 auto process_message_(const sandbox& sbox, const msg::out::report_info& msg) -> void {
 	ui::send(sbox, ui::msg::sbox_info{sbox.id, msg.text});
 }
@@ -309,6 +311,12 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 		DATA_->model.update_publish([sbox = sbox](model&& m) mutable {
 			sbox.flags.value &= ~sandbox_flags::launched;
 			m.sandboxes       = m.sandboxes.insert(sbox);
+			for (const auto dev_id : sbox.devices) {
+				m.devices = m.devices.update(dev_id, [](device dev) {
+					dev.flags.value &= ~device_flags::created_successfully;
+					return dev;
+				});
+			}
 			auto group                   = m.groups.at(sbox.group);
 			group.total_active_sandboxes = get_active_sandbox_count(m, group);
 			m.groups                     = m.groups.insert(group);
@@ -399,6 +407,7 @@ auto poll_thread(std::stop_token stop_token) -> void {
 	auto now     = std::chrono::steady_clock::now();
 	auto next_gc = now + std::chrono::milliseconds{GC_INTERVAL_MS};
 	auto next_hb = now + std::chrono::milliseconds{HEARTBEAT_INTERVAL_MS};
+	auto next_dd = now + std::chrono::milliseconds{DIRTY_DEVICE_MS};
 	while (!stop_token.stop_requested()) {
 		now = std::chrono::steady_clock::now();
 		if (now > next_gc) {
@@ -410,7 +419,10 @@ auto poll_thread(std::stop_token stop_token) -> void {
 			next_hb = now + std::chrono::milliseconds{HEARTBEAT_INTERVAL_MS};
 		}
 		process_sandbox_messages();
-		save_dirty_device_states();
+		if (now > next_dd) {
+			save_dirty_device_states();
+			next_dd = now + std::chrono::milliseconds{DIRTY_DEVICE_MS};
+		}
 		std::this_thread::sleep_for(std::chrono::milliseconds{POLL_SLEEP_MS});
 	}
 }
@@ -473,7 +485,12 @@ auto connect(id::device dev_out_id, size_t port_out, id::device dev_in_id, size_
 			throw std::runtime_error("Cannot connect devices that exist in different sandbox groups.");
 		}
 		auto group = m.groups.at(group_out_id);
-		group.cross_sbox_conns = group.cross_sbox_conns.set(id::device{dev_out_id}, id::device{dev_in_id});
+		cross_sbox_connection csc;
+		csc.in_dev_id  = dev_in_id;
+		csc.in_port    = port_in;
+		csc.out_dev_id = dev_out_id;
+		csc.out_port   = port_out;
+		group.cross_sbox_conns = group.cross_sbox_conns.insert(csc);
 		m.groups = m.groups.insert(group);
 		return m;
 	});
@@ -595,8 +612,13 @@ auto device_disconnect(id::device dev_out_id, size_t port_out, id::device dev_in
 			throw std::runtime_error("Connected devices somehow exist in different sandbox groups?!");
 		}
 		auto group             = m.groups.at(group_out_id);
-		group.cross_sbox_conns = group.cross_sbox_conns.erase(id::device{dev_out_id});
-		m.groups              = m.groups.insert(group);
+		cross_sbox_connection csc;
+		csc.in_dev_id  = dev_in_id;
+		csc.in_port    = port_in;
+		csc.out_dev_id = dev_out_id;
+		csc.out_port   = port_out;
+		group.cross_sbox_conns = group.cross_sbox_conns.erase(csc);
+		m.groups = m.groups.insert(group);
 		return m;
 	});
 }

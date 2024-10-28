@@ -85,7 +85,7 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 	}
 	catch (const std::exception& err) {
 		debug_log("Audio thread is stopping because there was a fatal error: %s", err.what());
-		app->msg_sender.enqueue(msg::out::report_fatal_error{err.what()});
+		app->msg_sender.enqueue(msg::out::report_error{err.what()});
 		app->schedule_terminate = true;
 	}
 }

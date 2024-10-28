@@ -70,7 +70,6 @@ struct device_load_fail              { id::device::type dev_id; std::string erro
 struct device_load_success           { id::device::type dev_id; };
 struct device_params_changed         { id::device::type dev_id; };
 struct report_error                  { std::string text; };
-struct report_fatal_error            { std::string text; };
 struct report_info                   { std::string text; };
 struct report_warning                { std::string text; };
 struct return_param_value            { double value; size_t callback; };
@@ -86,7 +85,6 @@ using msg = std::variant<
 	device_load_success,
 	device_params_changed,
 	report_error,
-	report_fatal_error,
 	report_info,
 	report_warning,
 	return_param_value,
@@ -143,11 +141,6 @@ auto deserialize<scuff::msg::out::device_load_success>(std::span<const std::byte
 
 template <> inline
 auto deserialize<scuff::msg::out::report_error>(std::span<const std::byte>* bytes, scuff::msg::out::report_error* msg) -> void {
-	deserialize(bytes, &msg->text);
-}
-
-template <> inline
-auto deserialize<scuff::msg::out::report_fatal_error>(std::span<const std::byte>* bytes, scuff::msg::out::report_fatal_error* msg) -> void {
 	deserialize(bytes, &msg->text);
 }
 
@@ -230,11 +223,6 @@ auto serialize<scuff::msg::out::device_load_success>(const scuff::msg::out::devi
 
 template <> inline
 auto serialize<scuff::msg::out::report_error>(const scuff::msg::out::report_error& msg, std::vector<std::byte>* bytes) -> void {
-	serialize(std::string_view{msg.text}, bytes);
-}
-
-template <> inline
-auto serialize<scuff::msg::out::report_fatal_error>(const scuff::msg::out::report_fatal_error& msg, std::vector<std::byte>* bytes) -> void {
 	serialize(std::string_view{msg.text}, bytes);
 }
 

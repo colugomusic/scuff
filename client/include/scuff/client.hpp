@@ -397,6 +397,12 @@ auto load_async(id::device dev, const scuff::bytes& bytes, return_load_device_re
 // Push a device event
 auto push_event(id::device dev, const scuff::event& event) -> void;
 
+// Put all editor windows above the native window.
+// Windows: HWND
+// macOS:   NSView
+// Linux:   X Window ID
+auto put_editors_above_native_window(void* native_window) -> void; // TOODOO: implement this
+
 // Restart the sandbox.
 [[nodiscard]]
 auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool;

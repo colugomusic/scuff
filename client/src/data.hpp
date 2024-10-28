@@ -128,13 +128,20 @@ struct sandbox {
 	std::shared_ptr<sandbox_services> services;
 };
 
+struct cross_sbox_connection {
+	id::device out_dev_id;
+	id::device in_dev_id;
+	size_t out_port;
+	size_t in_port;
+};
+
 struct group {
 	id::group id;
 	group_flags flags;
 	double sample_rate = 0.0f;
 	int total_active_sandboxes = 0;
 	immer::set<id::sandbox> sandboxes;
-	immer::map<id::device, id::device> cross_sbox_conns; // TOODOO: implement this
+	immer::set<cross_sbox_connection> cross_sbox_conns;
 	std::shared_ptr<group_services> services;
 };
 
@@ -180,6 +187,14 @@ static std::atomic_int       id_gen_      = 0;
 static std::unique_ptr<data> DATA_;
 
 [[nodiscard]] static
+auto operator==(const cross_sbox_connection& lhs, const cross_sbox_connection& rhs) -> bool {
+	return lhs.out_dev_id == rhs.out_dev_id
+	    && lhs.in_dev_id == rhs.in_dev_id
+	    && lhs.out_port == rhs.out_port
+	    && lhs.in_port == rhs.in_port;
+}
+
+[[nodiscard]] static
 auto add_device_to_sandbox(model&& m, id::sandbox sbox, id::device dev) -> model {
 	m.sandboxes = m.sandboxes.update_if_exists(sbox, [dev](scuff::sandbox s) {
 		s.devices = s.devices.insert(dev);
@@ -207,3 +222,18 @@ auto set_error(model&& m, id::device id, std::string_view error) -> model {
 }
 
 } // scuff
+
+namespace std {
+
+template <> struct hash<scuff::cross_sbox_connection> {
+	[[nodiscard]] auto operator()(const scuff::cross_sbox_connection& conn) const -> size_t {
+		size_t seed = 0;
+		boost::hash_combine(seed, conn.out_dev_id.value);
+		boost::hash_combine(seed, conn.in_dev_id.value);
+		boost::hash_combine(seed, conn.out_port);
+		boost::hash_combine(seed, conn.in_port);
+		return seed;
+	}
+};
+
+} // std

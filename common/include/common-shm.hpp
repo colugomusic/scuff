@@ -83,7 +83,11 @@ auto open_or_create_segment(std::string_view id, size_t segment_size) -> open_or
 struct msg_buffer {
 	[[nodiscard]]
 	auto read(std::byte* bytes, size_t count) -> size_t {
-		const auto lock = std::unique_lock{mutex_};
+		const auto time = std::chrono::steady_clock::now() + std::chrono::seconds{1};
+		const auto lock = bip::scoped_lock{mutex_, time};
+		if (!lock) {
+			return 0;
+		}
 		count = std::min(count, bytes_.size());
 		if (count <= 0) {
 			return 0;
@@ -94,7 +98,11 @@ struct msg_buffer {
 	}
 	[[nodiscard]]
 	auto write(const std::byte* bytes, size_t count) -> size_t {
-		const auto lock = std::unique_lock{mutex_};
+		const auto time = std::chrono::steady_clock::now() + std::chrono::seconds{1};
+		const auto lock = bip::scoped_lock{mutex_, time};
+		if (!lock) {
+			return 0;
+		}
 		if (bytes_.size() + count > bytes_.capacity()) {
 			__debugbreak();
 		}
