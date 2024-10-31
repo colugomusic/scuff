@@ -239,7 +239,7 @@ auto process_message_(const sandbox& sbox, const msg::out::device_create_success
 			// open.
 			device.services->shm = shm::open_device(device_shmid, true);
 		}
-		device.flags.value |= device_flags::created_successfully; // TOODOO: reset this flag if the sandbox crashes
+		device.flags.value |= device_flags::created_successfully;
 		m.devices = m.devices.insert(device);
 		return m;
 	});

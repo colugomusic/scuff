@@ -69,12 +69,6 @@ auto deactivate(sbox::app* app, const sbox::device& dev) -> void {
 }
 
 static
-auto process_input_msg_(sbox::app* app, const scuff::msg::in::clean_shutdown& msg) -> void {
-	log(app, "msg::in::clean_shutdown:");
-	// TOODOO: msg::in::clean_shutdown
-}
-
-static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors& msg) -> void {
 	log(&app->debug_ui, "msg::in::close_all_editors:");
 	const auto devices = app->model.read().devices;

@@ -17,7 +17,6 @@ namespace scuff::msg::in {
 // These messages are sent from the client to a sandbox process.
 
 struct activate               { double sr; };
-struct clean_shutdown         {};
 struct close_all_editors      {};
 struct crash                  {}; // Tell the sandbox process to crash. Important for testing.
 struct deactivate             {};
@@ -37,7 +36,6 @@ struct heartbeat              {}; // Sandbox shuts itself down if this isn't rec
 
 using msg = std::variant<
 	activate,
-	clean_shutdown,
 	close_all_editors,
 	crash,
 	deactivate,
