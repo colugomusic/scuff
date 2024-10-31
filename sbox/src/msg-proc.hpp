@@ -336,9 +336,9 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_save& msg) 
 }
 
 static
-auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_set_render_mode& msg) -> void {
-	log(app, "msg::in::device_set_render_mode:");
-	// TOODOO: msg::in::device_set_render_mode
+auto process_input_msg_(sbox::app* app, const scuff::msg::in::set_render_mode& msg) -> void {
+	log(app, "msg::in::set_render_mode:");
+	// TOODOO: msg::in::set_render_mode
 }
 
 static

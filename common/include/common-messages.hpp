@@ -28,11 +28,11 @@ struct device_gui_hide        { id::device::type dev_id; };
 struct device_gui_show        { id::device::type dev_id; };
 struct device_load            { id::device::type dev_id; std::vector<std::byte> state; size_t callback; };
 struct device_save            { id::device::type dev_id; size_t callback; };
-struct device_set_render_mode { id::device::type dev_id; render_mode mode; };
 struct event                  { id::device::type dev_id; scuff::event event; };
 struct get_param_value        { id::device::type dev_id; size_t param_idx; size_t callback; };
 struct get_param_value_text   { id::device::type dev_id; size_t param_idx; double value; size_t callback; };
 struct heartbeat              {}; // Sandbox shuts itself down if this isn't received within a certain time.
+struct set_render_mode        { render_mode mode; };
 
 using msg = std::variant<
 	activate,
@@ -47,11 +47,11 @@ using msg = std::variant<
 	device_gui_show,
 	device_load,
 	device_save,
-	device_set_render_mode,
 	event,
 	get_param_value,
 	get_param_value_text,
-	heartbeat
+	heartbeat,
+	set_render_mode
 >;
 
 } // scuff::msg::in

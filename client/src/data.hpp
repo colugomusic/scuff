@@ -141,6 +141,7 @@ struct group {
 	group_flags flags;
 	double sample_rate = 0.0f;
 	int total_active_sandboxes = 0;
+	scuff::render_mode render_mode = scuff::render_mode::realtime;
 	immer::set<id::sandbox> sandboxes;
 	immer::set<cross_sbox_connection> cross_sbox_conns;
 	std::shared_ptr<group_services> services;

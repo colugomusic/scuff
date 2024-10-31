@@ -436,7 +436,8 @@ auto activate(id::group group_id, double sr) -> void {
 		group.sample_rate = sr;
 		for (const auto sbox_id : group.sandboxes) {
 			const auto& sbox = m.sandboxes.at(sbox_id);
-			m.sandboxes.at(sbox_id).services->enqueue(scuff::msg::in::activate{sr});
+			sbox.services->enqueue(scuff::msg::in::activate{sr});
+			sbox.services->enqueue(scuff::msg::in::set_render_mode{group.render_mode});
 		}
 		m.groups = m.groups.insert(group);
 		return m;
@@ -798,11 +799,20 @@ auto has_rack_features(id::plugin id) -> bool {
 }
 
 static
-auto set_render_mode(id::device dev, render_mode mode) -> void {
-	const auto m       = DATA_->model.read();
-	const auto& device = m.devices.at(dev);
-	const auto& sbox   = m.sandboxes.at(device.sbox);
-	sbox.services->enqueue(scuff::msg::in::device_set_render_mode{dev.value, mode});
+auto set_render_mode(id::group group_id, render_mode mode) -> void {
+	const auto m = DATA_->model.read();
+	auto group   = m.groups.at(group_id);
+	group.render_mode = mode;
+	for (const auto sbox_id : group.sandboxes) {
+		const auto& sbox = m.sandboxes.at(sbox_id);
+		if (is_running(sbox)) {
+			sbox.services->enqueue(scuff::msg::in::set_render_mode{mode});
+		}
+	}
+	DATA_->model.update([group](model&& m){
+		m.groups = m.groups.insert(group);
+		return m;
+	});
 }
 
 [[nodiscard]] static
@@ -1055,6 +1065,7 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 		sandbox.services->enqueue(msg::in::device_create{dev.id.value, dev.type, plugfile.path, dev.plugin_ext_id.value, callback});
 	}
 	sandbox.services->enqueue(msg::in::activate{group.sample_rate});
+	sandbox.services->enqueue(msg::in::set_render_mode{group.render_mode});
 	DATA_->model.update([sandbox](model&& m){
 		m.sandboxes = m.sandboxes.insert(sandbox);
 		return m;
@@ -1587,8 +1598,8 @@ auto scan(std::string_view scan_exe_path, scan_flags flags) -> void {
 	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
-auto set_render_mode(id::device dev, render_mode mode) -> void {
-	try                               { impl::set_render_mode(dev, mode); }
+auto set_render_mode(id::group group, render_mode mode) -> void {
+	try                               { impl::set_render_mode(group, mode); }
 	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
