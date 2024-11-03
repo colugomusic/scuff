@@ -932,9 +932,21 @@ auto get_value_async(id::device dev, idx::param param, return_double fn) -> void
 }
 
 static
-auto get_value(id::device dev, idx::param param) -> double {
-	// TOODOO: impl::get_value
-	return {};
+auto get_value(id::device dev_id, idx::param param) -> double {
+	std::optional<double> result;
+	blocking_sandbox_operation bso;
+	auto fn = bso.make_fn([&result](double value) -> void {
+		result = value;
+	});
+	auto ready = [&result] {
+		return result.has_value();
+	};
+	get_value_async(dev_id, param, fn);
+	if (!bso.wait_for(ready)) {
+		ui::send(ui::msg::error{"Timed out waiting for value."});
+		return 0.0;
+	}
+	return *result;
 }
 
 [[nodiscard]] static

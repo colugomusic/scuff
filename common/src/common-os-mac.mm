@@ -13,6 +13,7 @@ auto could_be_a_vst2_file(const std::filesystem::path& path) -> bool {
 }
 
 auto find_clap_entry(const std::filesystem::path& path) -> const clap_plugin_entry_t* {
+	// TOODOO: don't re-open DSO every time
 	auto ps = path.u8string();
 	auto cs = CFStringCreateWithBytes(kCFAllocatorDefault, (uint8_t *)ps.c_str(), ps.size(), kCFStringEncodingUTF8, false);
 	auto bundleURL = CFURLCreateWithFileSystemPath(kCFAllocatorDefault, cs, kCFURLPOSIXPathStyle, true);

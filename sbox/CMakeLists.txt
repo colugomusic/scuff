@@ -11,6 +11,7 @@ list (APPEND scuff-sbox_SRCFILES
 	src/cmdline.hpp
 	src/data.hpp
 	src/debug-ui.hpp
+	src/gui.hpp
 	src/log.hpp
 	src/main.cpp
 	src/msg-proc.hpp

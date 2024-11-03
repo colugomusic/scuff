@@ -10,6 +10,38 @@ namespace scuff {
 namespace os {
 
 [[nodiscard]] static
+auto load_lib(const std::filesystem::path& path) -> HMODULE {
+	if (const auto handle = LoadLibrary((LPCSTR)(path.generic_string().c_str()))) {
+		return handle;
+	}
+	throw;
+}
+
+struct dso {
+	HMODULE handle;
+	dso(const std::filesystem::path& path) : handle{load_lib(path)} {}
+	~dso() { if (handle) { FreeLibrary(handle); } }
+};
+
+struct clap_entry {
+	std::filesystem::path path;
+	clap_plugin_entry_t* entry = nullptr;
+	std::shared_ptr<dso> dso;
+};
+
+struct model {
+	std::vector<clap_entry> clap_entries;
+};
+
+static model M_;
+
+[[nodiscard]] static
+auto load_dso(const std::filesystem::path& path) -> std::shared_ptr<dso> {
+	try         { return std::make_shared<dso>(path); }
+	catch (...) { return nullptr; }
+}
+
+[[nodiscard]] static
 auto get_known_folder(KNOWNFOLDERID id) -> std::optional<std::filesystem::path> {
 	PWSTR path;
 	if (SHGetKnownFolderPath(id, 0, nullptr, &path) == S_OK) {
@@ -26,8 +58,17 @@ auto could_be_a_vst2_file(const std::filesystem::path& path) -> bool {
 }
 
 auto find_clap_entry(const std::filesystem::path& path) -> const clap_plugin_entry_t* {
-	if (auto lib = LoadLibrary((LPCSTR)(path.generic_string().c_str()))) {
-		return reinterpret_cast<clap_plugin_entry_t*>(GetProcAddress(lib, CLAP_SYMBOL_ENTRY));
+	const auto match = [&path](const clap_entry& entry) { return entry.path == path; };
+	if (const auto pos = std::ranges::find_if(M_.clap_entries, match); pos != M_.clap_entries.end()) {
+		return pos->entry;
+	}
+	if (const auto dso = load_dso(path)) {
+		clap_entry entry;
+		entry.path  = path;
+		entry.dso   = dso;
+		entry.entry = reinterpret_cast<clap_plugin_entry_t*>(GetProcAddress(dso->handle, CLAP_SYMBOL_ENTRY));
+		M_.clap_entries.push_back(entry);
+		return entry.entry;
 	}
 	return nullptr;
 }

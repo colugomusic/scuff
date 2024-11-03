@@ -1,12 +1,19 @@
 #pragma once
 
-#include "data.hpp"
 #include "common-clap.hpp"
 #include "common-messages.hpp"
 #include "common-shm.hpp"
 #include "common-visit.hpp"
+#include "data.hpp"
 #include <optional>
 #include <ranges>
+
+namespace scuff::sbox::gui {
+
+static auto hide(sbox::app* app, sbox::device dev) -> void;
+static auto show(sbox::app* app, scuff::id::device dev_id) -> void;
+
+} // namespace scuff::sbox::gui
 
 namespace scuff::sbox::clap {
 
@@ -572,13 +579,16 @@ auto init_params_shm(const sbox::device& dev, const clap::device& clap_dev) -> v
 }
 
 static
-auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_closed& msg) -> void {
-	// TOODOO: process msg
+auto process_msg_(sbox::app* app, const device& clap_dev, const clap::device_msg::gui_closed& msg) -> void {
+	if (msg.destroyed) {
+		clap_dev.iface->plugin.gui->destroy(clap_dev.iface->plugin.plugin);
+	}
 }
 
 static
-auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_request_hide& msg) -> void {
-	// TOODOO: process msg
+auto process_msg_(sbox::app* app, const device& clap_dev, const clap::device_msg::gui_request_hide& msg) -> void {
+	const auto& dev = app->model.read().devices.at(clap_dev.id);
+	gui::hide(app, dev);
 }
 
 static
@@ -589,12 +599,13 @@ auto process_msg_(sbox::app* app, const device& clap_dev, const clap::device_msg
 
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_request_show& msg) -> void {
-	// TOODOO: process msg
+	gui::show(app, dev.id);
 }
 
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_resize_hints_changed& msg) -> void {
-	// TOODOO: process msg
+	// FIXME: Stop ignoring this
+	scuff::sbox::log(app, "warning: clap_host_gui.resize_hints_changed is currently ignored");
 }
 
 static
@@ -786,8 +797,8 @@ auto make_host_for_instance(device_host_data* host_data) -> void {
 	// TRACK INFO _______________________________________________________________
 	host_data->iface.track_info.get = [](const clap_host* host, clap_track_info_t* info) -> bool {
 		const auto& hd = get_host_data(host);
-		// TOODOO: track_info.get: sort this out
-		return true;
+		// TOODOO: implement this
+		return false;
 	};
 }
 
@@ -831,7 +842,6 @@ auto make_shm_device(std::string_view sbox_shmid, id::device dev_id) -> shm::dev
 
 static
 auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id, size_t callback) -> void {
-	// TOODOO: stop opening dylib multiple times?
 	const auto entry = scuff::os::find_clap_entry(plugfile_path);
 	if (!entry) {
 		throw std::runtime_error("Couldn't resolve clap_entry");
@@ -1048,7 +1058,6 @@ auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
 	// This return value is ignored because some Plugins return false
 	// even if the window is shown.
 	iface.gui->show(iface.plugin);
-	// TOODOO: More to do with resizing and stuff?
 	return true;
 }
 
