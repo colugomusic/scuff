@@ -14,7 +14,7 @@ auto load_lib(const std::filesystem::path& path) -> HMODULE {
 	if (const auto handle = LoadLibrary((LPCSTR)(path.generic_string().c_str()))) {
 		return handle;
 	}
-	throw;
+	throw 0;
 }
 
 struct dso {
