@@ -667,8 +667,20 @@ auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_crea
 
 static
 auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id) -> create_device_result {
-	// TOODOO: blocking duplicate
-	return {};
+	std::optional<create_device_result> result;
+	blocking_sandbox_operation bso;
+	auto fn = bso.make_fn([&result](create_device_result value) -> void {
+		result = value;
+	});
+	auto ready = [&result] {
+		return result.has_value();
+	};
+	duplicate_async(src_dev_id, dst_sbox_id, fn);
+	if (!bso.wait_for(ready)) {
+		ui::send(ui::msg::error{"Timed out waiting for value."});
+		return {};
+	}
+	return *result;
 }
 
 static
