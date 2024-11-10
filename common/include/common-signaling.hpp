@@ -4,7 +4,11 @@
 #include <mutex>
 #include <stop_token>
 
+#if defined(_WIN32)
 #define SCUFF_SIGNALING_MODE_WIN32_EVENT_OBJECTS
+#elif defined(__linux__)
+#define SCUFF_SIGNALING_MODE_LINUX_FUTEXES
+#endif
 
 namespace scuff::signaling {
 
@@ -21,7 +25,14 @@ enum class wait_for_signaled_result {
 	stop_requested,
 };
 
+// The client calls this to unblock itself in cases where it is waiting for a signal from
+// the sandbox processes but wants to abort the operation (e.g. if one of the sandboxes
+// crashed, in which case the signal would never come.)
               static auto client_signal_self(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void;
+
+// The sandbox process calls this to unblock itself in cases where it is waiting for a
+// signal from the client but wants to abort the operation (e.g. if the sandbox process
+// is shutting down.)
               static auto sandbox_signal_self(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void;
 
 // Signal all sandboxes in the group to begin processing.
@@ -125,7 +136,7 @@ struct group_shm_data {
 	std::atomic<uint64_t> epoch = 0;
 	// Each sandbox process decrements this
 	// counter when it is finished processing.
-	std::atomic<int> sandboxes_processing;
+	std::atomic<uint32_t> sandboxes_processing;
 	// Client process creates these handles.
 	// Sandbox processes need to duplicate them in order to use them.
 	DWORD client_process_id = 0;
@@ -219,6 +230,96 @@ auto notify_sandbox_finished_processing(signaling::group_shm_data* shm_data, sig
 
 } // scuff::signaling
 
+#elif defined(SCUFF_SIGNALING_MODE_LINUX_FUTEXES) //////////////////////////////////////////////
+
+#include <sys/syscall.h>
+#include <linux/fuxex.h>
+
+namespace scuff::signaling {
+
+struct group_local_data {
+	std::atomic<uint32_t> signal_client;
+	std::atomic<uint32_t> signal_sandboxes;
+};
+
+static
+auto futex_wait(std::atomic<uint32_t>* uaddr, uint32_t expected_value) -> void {
+	syscall(SYS_futex, uaddr, FUTEX_WAIT, expected_value, nullptr, nullptr, 0);
+}
+
+static
+auto futex_wake_one(std::atomic<uint32_t>* uaddr) -> void {
+	syscall(SYS_futex, uaddr, FUTEX_WAKE, 1, nullptr, nullptr, 0);
+}
+
+static
+auto futex_wake_all(std::atomic<uint32_t>* uaddr) -> void {
+	syscall(SYS_futex, uaddr, FUTEX_WAKE, INT_MAX, nullptr, nullptr, 0);
+}
+
+static
+auto client_signal_self(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void {
+	local_data->signal_client.store(1, std::memory_order_release);
+	futex_wake_all(&local_data->signal_client);
+}
+
+static
+auto sandbox_signal_self(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void {
+	local_data->signal_sandboxes.store(1, std::memory_order_release);
+	futex_wake_all(&local_data->signal_sandboxes);
+}
+
+[[nodiscard]] static
+auto signal_sandbox_processing(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data, int sandbox_count, uint64_t epoch) -> bool {
+	// Set the sandbox counter
+	shm_data->sandboxes_processing.store(sandbox_count);
+	// Set the epoch
+	shm_data->epoch.store(epoch);
+	// Signal sandboxes to start processing.
+	futex_wake_all(&local_data->signal_sandboxes);
+	return true;
+}
+
+[[nodiscard]] static
+auto wait_for_all_sandboxes_done(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> wait_for_sandboxes_done_result {
+	futex_wait(&local_data->signal_client, 0);
+	local_data->signal_client.store(0, std::memory_order_release);
+	if (shm_data->sandboxes_processing.load(std::memory_order_acquire) > 0) {
+		return wait_for_sandboxes_done_result::not_responding;
+	}
+	return wait_for_sandboxes_done_result::done;
+}
+
+[[nodiscard]] static
+auto wait_for_signaled(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data, std::stop_token stop_token, uint64_t* local_epoch) -> wait_for_signaled_result {
+	for (;;) {
+		futex_wait(&local_data->signal_sandboxes, 0);
+		local_data->signal_sandboxes.store(0, std::memory_order_release);
+		if (stop_token.stop_requested()) {
+			return wait_for_signaled_result::stop_requested;
+		}
+		if (shm_data->epoch > *local_epoch) {
+			*local_epoch = shm_data->epoch;
+			return wait_for_signaled_result::signaled;
+		}
+		// If we got here, it means another sandbox in the same group didn't receive a heartbeat from the
+		// client in time and so it's killing itself. In order to do that it needed to signal itself which
+		// also signals all other sandboxes in the group, including this one. So we're just going to loop
+		// back and wait again.
+	}
+}
+
+static
+auto notify_sandbox_finished_processing(signaling::group_shm_data* shm_data, signaling::group_local_data* local_data) -> void {
+	const auto prev_value = shm_data->sandboxes_processing.fetch_sub(1, std::memory_order_release);
+	if (prev_value == 1) {
+		// Notify the client that all sandboxes have finished their work.
+		futex_wake_all(&local_data->signal_client);
+	}
+}
+
+} // scuff::signaling
+
 #elif defined(SCUFF_SIGNALING_MODE_BOOST_IPC) //////////////////////////////////////////////////
 // This is the easiest to understand implementation but the performance is bad.
 // boost::interprocess_condition uses CreateSemaphore and WaitForSingleObject under the hood.
@@ -232,13 +333,7 @@ namespace bip = boost::interprocess;
 
 namespace scuff::signaling {
 
-struct group_data {
-	// This is incremented before signaling the
-	// sandboxes in the group to process.
-	std::atomic<uint64_t> epoch = 0;
-	// Each sandbox process decrements this
-	// counter when it is finished processing.
-	std::atomic<int> sandboxes_processing;
+struct group_local_data {
 	bip::interprocess_mutex mut;
 	bip::interprocess_condition cv;
 };
@@ -305,13 +400,7 @@ auto notify_sandbox_finished_processing(signaling::group_data* data) -> void {
 
 namespace scuff::signaling {
 
-struct group_data {
-	// This is incremented before signaling the
-	// sandboxes in the group to process.
-	std::atomic<uint64_t> epoch = 0;
-	// Each sandbox process decrements this
-	// counter when it is finished processing.
-	std::atomic<int> sandboxes_processing;
+struct group_local_data {
 };
 
 static
