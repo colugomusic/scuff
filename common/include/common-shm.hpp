@@ -201,7 +201,7 @@ auto create_group(std::string_view id, bool remove_when_done) -> group {
 	shm.seg.id               = id;
 	shm.seg.remove_when_done = remove_when_done;
 	shm.data                 = shm.seg.seg.construct<group_data>(OBJECT_DATA)();
-	shm.signaling            = signaling::group_local_data{signaling::client{&shm.data->signaling}};
+	signaling::init(signaling::client{&shm.data->signaling, id}, &shm.signaling);
 	return shm;
 }
 
@@ -211,7 +211,7 @@ auto open_group(std::string_view id) -> group {
 	shm.seg.seg             = bip::managed_shared_memory{bip::open_only, id.data()};
 	shm.seg.id              = id;
 	require_shm_obj<group_data>(&shm.seg.seg, OBJECT_DATA, 1, &shm.data);
-	shm.signaling = signaling::group_local_data{signaling::sandbox{&shm.data->signaling}};
+	signaling::init(signaling::sandbox{&shm.data->signaling, id}, &shm.signaling);
 	return shm;
 }
 
