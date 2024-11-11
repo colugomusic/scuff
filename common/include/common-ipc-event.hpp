@@ -47,6 +47,7 @@ static
 auto create_shared_event(shared_event* e) -> void {
 	if (const auto handle = CreateEventA(0, TRUE, 0, 0)) {
 		*e = {GetCurrentProcessId(), handle};
+		return;
 	}
 	throw std::runtime_error{std::format("CreateEvent failed: '{}'", win32_error_message(GetLastError()))};
 }
