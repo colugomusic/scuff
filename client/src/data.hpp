@@ -78,7 +78,7 @@ struct group_services {
 	ui::msg::group_q ui;
 	shm::group shm;
 	signaling::group_local_data signaling;
-	uint64_t epoch = 0;
+	signaling::client signaler;
 	std::atomic_int ref_count = 0;
 };
 

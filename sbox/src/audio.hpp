@@ -57,7 +57,9 @@ auto do_processing(sbox::app* app) -> void {
 		const auto dev = app->audio_model->devices.at(dev_id);
 		do_processing(*app, dev);
 	}
-	signaling::notify_sandbox_finished_processing(&app->shm_group.data->signaling, &app->shm_group.signaling);
+	if (!signaling::notify_sandbox_done(app->signaler)) {
+		throw std::runtime_error("Failed to signal sandbox processing complete!");
+	}
 	app->audio_model.reset();
 }
 
@@ -65,22 +67,21 @@ static
 auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 	try {
 		debug_log("Audio thread has started.");
-		uint64_t local_epoch = 0;
+		uint64_t local_counter = 0;
 		for (;;) {
-			auto result = signaling::wait_for_signaled(&app->shm_group.data->signaling, &app->shm_group.signaling, stop_token, &local_epoch);
-			switch (result) {
-				case signaling::wait_for_signaled_result::signaled: {
-					do_processing(app);
-					break;
-				}
-				case signaling::wait_for_signaled_result::stop_requested: {
-					debug_log("Audio thread is stopping because it was requested to.");
-					return;
-				}
-				default: {
-					throw std::runtime_error("Unknown result from signaling::wait_for_signaled()");
-				}
+			auto result = signaling::wait_for_work_begin(app->signaler, stop_token, &local_counter);
+			if (result == signaling::sandbox_wait_result::signaled) {
+				do_processing(app);
+				result = signaling::wait_for_work_finish(app->signaler, stop_token, &local_counter);
 			}
+			if (result == signaling::sandbox_wait_result::signaled) {
+				continue;
+			}
+			if (result == signaling::sandbox_wait_result::stop_requested) {
+				debug_log("Audio thread is stopping because it was requested to.");
+				return;
+			}
+			throw std::runtime_error("Unexpected sandbox_wait_result");
 		}
 	}
 	catch (const std::exception& err) {

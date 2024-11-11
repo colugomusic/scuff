@@ -195,23 +195,23 @@ static constexpr auto SANDBOX_SEGMENT_SIZE = sizeof(sandbox_data) + SEGMENT_OVER
 static constexpr auto DEVICE_SEGMENT_SIZE  = sizeof(device_data) + SEGMENT_OVERHEAD;
 
 [[nodiscard]] static
-auto create_group(std::string_view id, bool remove_when_done) -> group {
+auto create_group(std::string_view shmid, bool remove_when_done) -> group {
 	group shm;
-	shm.seg.seg              = bip::managed_shared_memory{bip::create_only, id.data(), GROUP_SEGMENT_SIZE};
-	shm.seg.id               = id;
+	shm.seg.seg              = bip::managed_shared_memory{bip::create_only, shmid.data(), GROUP_SEGMENT_SIZE};
+	shm.seg.id               = shmid;
 	shm.seg.remove_when_done = remove_when_done;
 	shm.data                 = shm.seg.seg.construct<group_data>(OBJECT_DATA)();
-	signaling::init(signaling::client{&shm.data->signaling, id}, &shm.signaling);
+	signaling::init(signaling::client_init{shmid, signaling::client{&shm.signaling, &shm.data->signaling}});
 	return shm;
 }
 
 [[nodiscard]] static
-auto open_group(std::string_view id) -> group {
+auto open_group(std::string_view shmid) -> group {
 	group shm;
-	shm.seg.seg             = bip::managed_shared_memory{bip::open_only, id.data()};
-	shm.seg.id              = id;
+	shm.seg.seg             = bip::managed_shared_memory{bip::open_only, shmid.data()};
+	shm.seg.id              = shmid;
 	require_shm_obj<group_data>(&shm.seg.seg, OBJECT_DATA, 1, &shm.data);
-	signaling::init(signaling::sandbox{&shm.data->signaling, id}, &shm.signaling);
+	signaling::init(signaling::sandbox_init{shmid, signaling::sandbox{&shm.signaling, &shm.data->signaling}});
 	return shm;
 }
 

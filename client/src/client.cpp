@@ -181,20 +181,20 @@ auto zero_inactive_device_outputs(const std::shared_ptr<const model>& audio, con
 }
 
 [[nodiscard]] static
-auto do_sandbox_processing(const std::shared_ptr<const model>& audio, const scuff::group& group, uint64_t epoch) -> bool {
-	if (!signaling::signal_sandbox_processing(&group.services->shm.data->signaling, &group.services->shm.signaling, group.total_active_sandboxes, epoch)) {
+auto do_sandbox_processing(const std::shared_ptr<const model>& audio, const scuff::group& group) -> bool {
+	if (!signaling::sandboxes_work_begin(group.services->signaler, group.total_active_sandboxes)) {
 		return false;
 	}
 	zero_inactive_device_outputs(audio, group);
 	if (group.total_active_sandboxes <= 0) {
 		return true;
 	}
-	const auto result = signaling::wait_for_all_sandboxes_done(&group.services->shm.data->signaling, &group.services->shm.signaling);
+	const auto result = signaling::wait_for_all_sandboxes_done(group.services->signaler);
 	switch (result) {
-		case signaling::wait_for_sandboxes_done_result::done: {
+		case signaling::client_wait_result::done: {
 			return true;
 		}
-		case signaling::wait_for_sandboxes_done_result::not_responding: {
+		case signaling::client_wait_result::not_responding: {
 			return false;
 		}
 		default: {
@@ -325,7 +325,7 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 		});
 		const auto m      = DATA_->model.read();
 		const auto& group = m.groups.at(sbox.group);
-		signaling::client_signal_self(&group.services->shm.data->signaling, &group.services->shm.signaling);
+		auto _            = signaling::unblock_self(group.services->signaler);
 		ui::send(sbox, ui::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
 		return;
 	}
@@ -894,6 +894,8 @@ auto create_group(double sample_rate) -> id::group {
 			const auto shmid    = shm::make_group_id(DATA_->instance_id, group.id);
 			group.services      = std::make_shared<group_services>();
 			group.services->shm = shm::create_group(shmid, true);
+			group.services->signaler.local_data = &group.services->shm.signaling;
+			group.services->signaler.shm_data   = &group.services->shm.data->signaling;
 		} catch (const std::exception& err) {
 			ui::send(ui::msg::error{err.what()});
 			return m;
@@ -1304,11 +1306,10 @@ auto unref(id::sandbox id) -> void {
 namespace scuff {
 
 auto audio_process(const group_process& process) -> void {
-	const auto audio     = scuff::DATA_->model.rt_read();
-	const auto& group    = audio->groups.at({process.group});
-	const auto epoch     = ++group.services->epoch;
+	const auto audio  = scuff::DATA_->model.rt_read();
+	const auto& group = audio->groups.at({process.group});
 	impl::process_inputs(*audio, process.audio_inputs, process.input_events);
-	if (impl::do_sandbox_processing(audio, group, epoch)) {
+	if (impl::do_sandbox_processing(audio, group)) {
 		impl::process_outputs(*audio, group, process.audio_outputs, process.output_events);
 	}
 	else {

@@ -38,10 +38,12 @@ auto create() -> sbox::app* {
 		log(app, "group: %s", app->options.group_shmid.c_str());
 		log(app, "sandbox: %s", app->options.sbox_shmid.c_str());
 		log(app, "sample rate: %f", app->options.sample_rate);
-		app->shm_group      = shm::open_group(app->options.group_shmid);
-		app->shm_sbox       = shm::open_sandbox(app->options.sbox_shmid);
-		app->main_thread_id = std::this_thread::get_id();
-		app->last_heartbeat = std::chrono::steady_clock::now();
+		app->shm_group           = shm::open_group(app->options.group_shmid);
+		app->shm_sbox            = shm::open_sandbox(app->options.sbox_shmid);
+		app->signaler.local_data = &app->shm_group.signaling;
+		app->signaler.shm_data   = &app->shm_group.data->signaling;
+		app->main_thread_id      = std::this_thread::get_id();
+		app->last_heartbeat      = std::chrono::steady_clock::now();
 	}
 	catch (const std::exception& err) {
 		log(app, "Error: %s", err.what());
@@ -65,9 +67,8 @@ auto destroy(sbox::app** app) -> void {
 	debug_log("scuff::sbox::main::destroy");
 	debug_ui::destroy(&(*app)->debug_ui);
 	if ((*app)->audio_thread.joinable()) {
-		auto& group_shm = (*app)->shm_group;
 		(*app)->audio_thread.request_stop();
-		signaling::sandbox_signal_self(&group_shm.data->signaling, &group_shm.signaling);
+		auto _ = signaling::unblock_self((*app)->signaler);
 		(*app)->audio_thread.join();
 	}
 	destroy_all_editor_windows(**app);
