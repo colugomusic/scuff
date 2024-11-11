@@ -103,7 +103,7 @@ static auto init(local_event_impl* impl, local_event_open open) -> void     { im
 #elif define(__linux__) ////////////////////////////////////////////////////////////////
 
 #include <sys/syscall.h>
-#include <linux/fuxex.h>
+#include <linux/futex.h>
 
 namespace scuff::ipc {
 
@@ -111,15 +111,15 @@ struct shared_event {
 	std::atomic<uint32_t> word;
 };
 
-struct event_create{ shared_event* shared };
-struct event_open{ shared_event* shared };
+struct local_event_create{ shared_event* shared };
+struct local_event_open{ shared_event* shared };
 
 static
 auto create_shared_event(shared_event* e) -> void {
 	// Nothing to do.
 }
 
-struct event_impl {
+struct local_event_impl {
 	shared_event* shared;
 };
 
@@ -133,24 +133,24 @@ auto futex_wake_all(std::atomic<uint32_t>* word) -> void {
 	syscall(SYS_futex, word, FUTEX_WAKE, INT_MAX, nullptr, nullptr, 0);
 }
 
-static auto init(event_impl* impl, event_create create) -> void { impl->shared = create.shared; } 
-static auto init(event_impl* impl, event_open open) -> void     { impl->shared = open.shared; } 
+static auto init(local_event_impl* impl, local_event_create create) -> void { impl->shared = create.shared; } 
+static auto init(local_event_impl* impl, local_event_open open) -> void     { impl->shared = open.shared; } 
 
 [[nodiscard]] static
-auto reset(const event_impl* impl) -> bool {
+auto reset(const local_event_impl* impl) -> bool {
 	impl->shared->word.store(0, std::memory_order_release);
 	return true;
 } 
 
 [[nodiscard]] static
-auto set(const event_impl* impl) -> bool {
+auto set(const local_event_impl* impl) -> bool {
 	impl->shared->word.store(1, std::memory_order_release);
 	futex_wake_all(impl->word);
 	return true;
 } 
 
 [[nodiscard]] static
-auto wait(const event_impl* impl) -> bool {
+auto wait(const local_event_impl* impl) -> bool {
 	futex_wait(impl->word, 0);
 	return true;
 } 
