@@ -84,7 +84,8 @@ struct app {
 	sbox::options                      options;
 	shm::group                         shm_group;
 	shm::sandbox                       shm_sbox;
-	signaling::sandbox                 signaler;
+	signaling::sandboxside_group       group_signaler;
+	signaling::sandboxside_sandbox     sandbox_signaler;
 	std::jthread                       audio_thread;
 	msg::sender<msg::out::msg>         msg_sender;
 	msg::receiver<msg::in::msg>        msg_receiver;

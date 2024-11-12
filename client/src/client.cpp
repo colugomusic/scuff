@@ -182,7 +182,13 @@ auto zero_inactive_device_outputs(const std::shared_ptr<const model>& audio, con
 
 [[nodiscard]] static
 auto do_sandbox_processing(const std::shared_ptr<const model>& audio, const scuff::group& group) -> bool {
-	if (!signaling::sandboxes_work_begin(group.services->signaler, group.total_active_sandboxes)) {
+	auto sandbox_iterator = group.sandboxes.begin();
+	auto next_sandbox_signal = [&sandbox_iterator, &audio]() -> const ipc::local_event& {
+		const auto sandbox_id = *sandbox_iterator;
+		const auto& sandbox = audio->sandboxes.at(sandbox_id);
+		return sandbox.services->shm.signaling.work_begin;
+	};
+	if (!signaling::sandboxes_work_begin(group.services->signaler, group.total_active_sandboxes, next_sandbox_signal)) {
 		return false;
 	}
 	zero_inactive_device_outputs(audio, group);
@@ -894,8 +900,8 @@ auto create_group(double sample_rate) -> id::group {
 			const auto shmid    = shm::make_group_id(DATA_->instance_id, group.id);
 			group.services      = std::make_shared<group_services>();
 			group.services->shm = shm::create_group(shmid, true);
-			group.services->signaler.local_data = &group.services->shm.signaling;
-			group.services->signaler.shm_data   = &group.services->shm.data->signaling;
+			group.services->signaler.local = &group.services->shm.signaling;
+			group.services->signaler.shm   = &group.services->shm.data->signaling;
 		} catch (const std::exception& err) {
 			ui::send(ui::msg::error{err.what()});
 			return m;

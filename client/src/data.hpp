@@ -37,32 +37,32 @@ struct sandbox_services {
 	bp::child proc;
 	scuff::return_buffers return_buffers;
 	std::atomic_int ref_count = 0;
+	shm::sandbox shm;
 	sandbox_services(bp::child&& proc, std::string_view shmid)
 		: proc{std::move(proc)}
-		, shm_{shm::create_sandbox(shmid, true)}
+		, shm{shm::create_sandbox(shmid, true)}
 	{}
 	auto enqueue(msg::in::msg msg) -> void {
 		msg_sender_.enqueue(std::move(msg));
 	}
 	[[nodiscard]]
 	auto get_shmid() const -> std::string_view {
-		return shm_.seg.id;
+		return shm.seg.id;
 	}
 	[[nodiscard]]
 	auto receive_msgs_from_sandbox() -> const std::vector<msg::out::msg>& {
-		auto fn = [&shm = shm_](std::byte* bytes, size_t count) -> size_t {
+		auto fn = [&shm = this->shm](std::byte* bytes, size_t count) -> size_t {
 			return shm::receive_bytes_from_sandbox(shm, bytes, count);
 		};
 		return msg_receiver_.receive(fn);
 	}
 	auto send_msgs_to_sandbox() -> void {
-		auto fn = [&shm = shm_](const std::byte* bytes, size_t count) -> size_t {
+		auto fn = [&shm = this->shm](const std::byte* bytes, size_t count) -> size_t {
 			return shm::send_bytes_to_sandbox(shm, bytes, count);
 		};
 		msg_sender_.send(fn);
 	}
 private:
-	shm::sandbox shm_;
 	msg::sender<msg::in::msg> msg_sender_;
 	msg::receiver<msg::out::msg> msg_receiver_;
 };
@@ -78,7 +78,7 @@ struct group_services {
 	ui::msg::group_q ui;
 	shm::group shm;
 	signaling::group_local_data signaling;
-	signaling::client signaler;
+	signaling::clientside_group signaler;
 	std::atomic_int ref_count = 0;
 };
 

@@ -57,7 +57,7 @@ auto do_processing(sbox::app* app) -> void {
 		const auto dev = app->audio_model->devices.at(dev_id);
 		do_processing(*app, dev);
 	}
-	if (!signaling::notify_sandbox_done(app->signaler)) {
+	if (!signaling::notify_sandbox_done(app->group_signaler)) {
 		throw std::runtime_error("Failed to signal sandbox processing complete!");
 	}
 	app->audio_model.reset();
@@ -67,14 +67,10 @@ static
 auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 	try {
 		debug_log("Audio thread has started.");
-		uint64_t local_counter = 0;
 		for (;;) {
-			auto result = signaling::wait_for_work_begin(app->signaler, stop_token, &local_counter);
+			auto result = signaling::wait_for_work_begin(app->sandbox_signaler, stop_token);
 			if (result == signaling::sandbox_wait_result::signaled) {
 				do_processing(app);
-				result = signaling::wait_for_work_finish(app->signaler, stop_token, &local_counter);
-			}
-			if (result == signaling::sandbox_wait_result::signaled) {
 				continue;
 			}
 			if (result == signaling::sandbox_wait_result::stop_requested) {

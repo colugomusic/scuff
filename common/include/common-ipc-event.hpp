@@ -92,11 +92,31 @@ struct local_event_impl {
 	win32_local_event event;
 };
 
-static auto init(local_event_impl* impl, local_event_create create) -> void { impl->event = win32_local_event{create}; } 
-static auto init(local_event_impl* impl, local_event_open open) -> void     { impl->event = win32_local_event{open}; } 
-[[nodiscard]] static auto reset(const local_event_impl* impl) -> bool         { return ResetEvent(impl->event.h); } 
-[[nodiscard]] static auto set(const local_event_impl* impl) -> bool           { return SetEvent(impl->event.h); } 
-[[nodiscard]] static auto wait(const local_event_impl* impl) -> bool          { return WaitForSingleObject(impl->event.h, INFINITE) == WAIT_OBJECT_0; } 
+static
+auto init(local_event_impl* impl, local_event_create create) -> void {
+	impl->event = win32_local_event{create};
+} 
+
+static
+auto init(local_event_impl* impl, local_event_open open) -> void {
+	impl->event = win32_local_event{open};
+} 
+
+[[nodiscard]] static
+auto set(const local_event_impl* impl) -> bool {
+	return SetEvent(impl->event.h);
+} 
+
+[[nodiscard]] static
+auto wait(const local_event_impl* impl) -> bool        {
+	if (WaitForSingleObject(impl->event.h, INFINITE) != WAIT_OBJECT_0) {
+		return false;
+	}
+	if (!ResetEvent(impl->event.h)) {
+		return false;
+	}
+	return true;
+} 
 
 } // scuff::ipc
 
@@ -136,11 +156,11 @@ auto futex_wake_all(std::atomic<uint32_t>* word) -> void {
 static auto init(local_event_impl* impl, local_event_create create) -> void { impl->shared = create.shared; } 
 static auto init(local_event_impl* impl, local_event_open open) -> void     { impl->shared = open.shared; } 
 
-[[nodiscard]] static
-auto reset(const local_event_impl* impl) -> bool {
-	impl->shared->word.store(0, std::memory_order_release);
-	return true;
-} 
+//[[nodiscard]] static
+//auto reset(const local_event_impl* impl) -> bool {
+//	impl->shared->word.store(0, std::memory_order_release);
+//	return true;
+//} 
 
 [[nodiscard]] static
 auto set(const local_event_impl* impl) -> bool {
@@ -152,6 +172,7 @@ auto set(const local_event_impl* impl) -> bool {
 [[nodiscard]] static
 auto wait(const local_event_impl* impl) -> bool {
 	futex_wait(impl->word, 0);
+	impl->shared->word.store(0, std::memory_order_release);
 	return true;
 } 
 
@@ -169,11 +190,10 @@ namespace scuff::ipc {
 
 struct local_event {
 	local_event() = default;
-	local_event(local_event_create create) { ipc::init(&impl, create); }
-	local_event(local_event_open open)     { ipc::init(&impl, open); }
-	[[nodiscard]] auto reset() const -> bool { return ipc::reset(&impl); }
-	[[nodiscard]] auto set() const -> bool   { return ipc::set(&impl); }
-	[[nodiscard]] auto wait() const -> bool  { return ipc::wait(&impl); }
+	local_event(local_event_create create)  { ipc::init(&impl, create); }
+	local_event(local_event_open open)      { ipc::init(&impl, open); }
+	auto set() const -> bool                { return ipc::set(&impl); }
+	[[nodiscard]] auto wait() const -> bool { return ipc::wait(&impl); }
 private:
 	local_event_impl impl;
 };

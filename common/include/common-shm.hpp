@@ -146,6 +146,7 @@ struct device_data {
 struct sandbox_data {
 	msg_buffer msgs_in;
 	msg_buffer msgs_out;
+	signaling::sandbox_shm_data signaling;
 };
 
 struct group_data {
@@ -183,6 +184,7 @@ struct group {
 struct sandbox {
 	segment_raii seg;
 	sandbox_data* data = nullptr;
+	signaling::sandbox_local_data signaling;
 };
 
 struct device {
@@ -201,7 +203,7 @@ auto create_group(std::string_view shmid, bool remove_when_done) -> group {
 	shm.seg.id               = shmid;
 	shm.seg.remove_when_done = remove_when_done;
 	shm.data                 = shm.seg.seg.construct<group_data>(OBJECT_DATA)();
-	signaling::init(signaling::client_init{shmid, signaling::client{&shm.signaling, &shm.data->signaling}});
+	signaling::init(signaling::clientside_group_init{shmid, {&shm.signaling, &shm.data->signaling}});
 	return shm;
 }
 
@@ -211,7 +213,7 @@ auto open_group(std::string_view shmid) -> group {
 	shm.seg.seg             = bip::managed_shared_memory{bip::open_only, shmid.data()};
 	shm.seg.id              = shmid;
 	require_shm_obj<group_data>(&shm.seg.seg, OBJECT_DATA, 1, &shm.data);
-	signaling::init(signaling::sandbox_init{shmid, signaling::sandbox{&shm.signaling, &shm.data->signaling}});
+	signaling::init(signaling::sandboxside_group_init{shmid, {&shm.signaling, &shm.data->signaling}});
 	return shm;
 }
 
@@ -221,21 +223,23 @@ auto make_group_id(std::string_view instance_id, id::group group_id) -> std::str
 }
 
 [[nodiscard]] static
-auto create_sandbox(std::string_view id, bool remove_when_done) -> sandbox {
+auto create_sandbox(std::string_view shmid, bool remove_when_done) -> sandbox {
 	sandbox shm;
-	shm.seg.seg              = bip::managed_shared_memory{bip::create_only, id.data(), SANDBOX_SEGMENT_SIZE};
-	shm.seg.id               = id;
+	shm.seg.seg              = bip::managed_shared_memory{bip::create_only, shmid.data(), SANDBOX_SEGMENT_SIZE};
+	shm.seg.id               = shmid;
 	shm.seg.remove_when_done = remove_when_done;
 	shm.data = shm.seg.seg.construct<sandbox_data>(OBJECT_DATA)();
+	signaling::init(signaling::clientside_sandbox_init{shmid, {&shm.signaling, &shm.data->signaling}});
 	return shm;
 }
 
 [[nodiscard]] static
-auto open_sandbox(std::string_view id) -> sandbox {
+auto open_sandbox(std::string_view shmid) -> sandbox {
 	sandbox shm;
-	shm.seg.seg             = bip::managed_shared_memory{bip::open_only, id.data()};
-	shm.seg.id              = id;
+	shm.seg.seg             = bip::managed_shared_memory{bip::open_only, shmid.data()};
+	shm.seg.id              = shmid;
 	require_shm_obj<sandbox_data>(&shm.seg.seg, OBJECT_DATA, 1, &shm.data);
+	signaling::init(signaling::sandboxside_sandbox_init{shmid, {&shm.signaling, &shm.data->signaling}});
 	return shm;
 }
 
