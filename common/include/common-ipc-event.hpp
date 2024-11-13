@@ -9,7 +9,7 @@
 // scuff::ipc::shared_event can be created in shared memory, allowing other
 // processes to create a scuff::ipc::local_event from it.
 
-// scuff::ipc::local_event is local to each process.
+// scuff::ipc::local_event is the process's local view of the event.
 
 // Implementation:
 //  - Windows: Event objects
@@ -35,6 +35,7 @@ struct shared_event_create { shared_event* shared; std::string_view name; };
 #include <boost/asio.hpp> // Included to resolve header conflicts
 #include <format>
 #include <Windows.h>
+#include <cwctype>
 
 namespace scuff::ipc::detail {
 
@@ -52,14 +53,15 @@ auto shorten(std::wstring_view s) -> std::string {
 
 [[nodiscard]] static
 auto win32_error_message(int err) -> std::string {
-	wchar_t buf[1000];
+	auto buf      = std::array<wchar_t, 1000>{};
+	auto buf_size = static_cast<DWORD>(std::size(buf));
 	buf[0] = 0;
-	auto size = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, 1000, NULL);
-	auto ptr = buf + size - 1;
-	while (size-- && (*ptr == '\r' || *ptr == '\n')) {
-		*ptr-- = '\0';
+	auto size = FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf.data(), buf_size, NULL);
+	// Removing trailing whitespace characters
+	for (auto pos = buf.rbegin(); pos != buf.rend() && std::iswspace(*pos); pos++) {
+		*pos = '\0';
 	}
-	return std::format("{} [{}]", shorten(buf), err);
+	return std::format("{} [{}]", shorten(buf.data()), err);
 }
 
 } // scuff::ipc::detail
