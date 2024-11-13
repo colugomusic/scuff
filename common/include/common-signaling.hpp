@@ -2,6 +2,7 @@
 
 #include "common-ipc-event.hpp"
 #include <atomic>
+#include <format>
 #include <mutex>
 #include <stop_token>
 
@@ -53,14 +54,16 @@ struct sandbox_shm_data {
 static
 // Initialize client-side group signalling
 auto init(signaling::clientside_group_init init) -> void {
-	ipc::create_shared_event(&init.group.shm->all_sandboxes_done);
+	const auto name = std::format("scuff-signal-group-{}", init.group_shmid);
+	ipc::init(ipc::shared_event_create{&init.group.shm->all_sandboxes_done, name});
 	init.group.local->all_sandboxes_done = ipc::local_event{ipc::local_event_create{&init.group.shm->all_sandboxes_done}};
 }
 
 static
 // Initialize client-side sandbox signalling
 auto init(signaling::clientside_sandbox_init init) -> void {
-	ipc::create_shared_event(&init.sandbox.shm->work_begin);
+	const auto name = std::format("scuff-signal-sandbox-{}", init.sbox_shmid);
+	ipc::init(ipc::shared_event_create{&init.sandbox.shm->work_begin, name});
 	init.sandbox.local->work_begin = ipc::local_event{ipc::local_event_create{&init.sandbox.shm->work_begin}};
 }
 
@@ -141,9 +144,6 @@ auto notify_sandbox_done(signaling::sandboxside_group group) -> bool {
 } // scuff::signaling
 
 #if defined(SCUFF_SIGNALING_MODE_POSIX_SEMAPHORES) ///////////////////////////////////////////
-
-#include <semaphore.h>
-#include <sys/stat.h>
 
 namespace scuff::signaling {
 

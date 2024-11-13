@@ -1,23 +1,42 @@
 #pragma once
 
+#include <string_view>
+
+// Cross-platform IPC signaling.
+// Assumes that at most one thread will be waiting on an event at any time.
+// Events are reset by the waiting thread after being signaled.
+
+// scuff::ipc::shared_event can be created in shared memory, allowing other
+// processes to create a scuff::ipc::local_event from it.
+
+// scuff::ipc::local_event is local to each process.
+
+// Implementation:
+//  - Windows: Event objects
+//  - Linux:   Futexes
+//  - macOS:   POSIX Semaphores
+
+namespace scuff::ipc {
+
+struct shared_event;
+
+struct local_event_create { shared_event* shared; };
+struct local_event_open   { shared_event* shared; };
+
+// Name is only required for macOS.
+struct shared_event_create { shared_event* shared; std::string_view name; };
+
+} // scuff::ipc
+
 #if defined(_WIN32) ////////////////////////////////////////////////////////////////////
 
 #define NOMINMAX
 #include <SDKDDKVer.h>
 #include <boost/asio.hpp> // Included to resolve header conflicts
 #include <format>
-#include <string_view>
 #include <Windows.h>
 
-namespace scuff::ipc {
-
-struct shared_event {
-	DWORD process;
-	HANDLE handle;
-};
-
-struct local_event_create { shared_event* shared; };
-struct local_event_open { shared_event* shared; };
+namespace scuff::ipc::detail {
 
 [[nodiscard]] static
 auto shorten(std::wstring_view s) -> std::string {
@@ -43,14 +62,27 @@ auto win32_error_message(int err) -> std::string {
 	return std::format("{} [{}]", shorten(buf), err);
 }
 
+} // scuff::ipc::detail
+
+namespace scuff::ipc {
+
+struct shared_event {
+	DWORD process;
+	HANDLE handle;
+};
+
 static
-auto create_shared_event(shared_event* e) -> void {
+auto init(shared_event_create create) -> void {
 	if (const auto handle = CreateEventA(0, TRUE, 0, 0)) {
-		*e = {GetCurrentProcessId(), handle};
+		*create.shared = {GetCurrentProcessId(), handle};
 		return;
 	}
-	throw std::runtime_error{std::format("CreateEvent failed: '{}'", win32_error_message(GetLastError()))};
+	throw std::runtime_error{std::format("CreateEvent failed: '{}'", detail::win32_error_message(GetLastError()))};
 }
+
+} // scuff::ipc
+
+namespace scuff::ipc::detail {
 
 struct win32_local_event {
 	win32_local_event() = default;
@@ -92,16 +124,6 @@ struct local_event_impl {
 	win32_local_event event;
 };
 
-static
-auto init(local_event_impl* impl, local_event_create create) -> void {
-	impl->event = win32_local_event{create};
-} 
-
-static
-auto init(local_event_impl* impl, local_event_open open) -> void {
-	impl->event = win32_local_event{open};
-} 
-
 [[nodiscard]] static
 auto set(const local_event_impl* impl) -> bool {
 	return SetEvent(impl->event.h);
@@ -118,7 +140,10 @@ auto wait(const local_event_impl* impl) -> bool        {
 	return true;
 } 
 
-} // scuff::ipc
+static auto init(local_event_impl* impl, local_event_create create) -> void { impl->event = win32_local_event{create}; } 
+static auto init(local_event_impl* impl, local_event_open open) -> void     { impl->event = win32_local_event{open}; } 
+
+} // scuff::ipc::detail
 
 #elif define(__linux__) ////////////////////////////////////////////////////////////////
 
@@ -131,13 +156,11 @@ struct shared_event {
 	std::atomic<uint32_t> word;
 };
 
-struct local_event_create{ shared_event* shared };
-struct local_event_open{ shared_event* shared };
+static auto init(shared_event_create create) -> void {} 
 
-static
-auto create_shared_event(shared_event* e) -> void {
-	// Nothing to do.
-}
+} // scuff::ipc
+
+namespace scuff::ipc::detail {
 
 struct local_event_impl {
 	shared_event* shared;
@@ -153,15 +176,6 @@ auto futex_wake_all(std::atomic<uint32_t>* word) -> void {
 	syscall(SYS_futex, word, FUTEX_WAKE, INT_MAX, nullptr, nullptr, 0);
 }
 
-static auto init(local_event_impl* impl, local_event_create create) -> void { impl->shared = create.shared; } 
-static auto init(local_event_impl* impl, local_event_open open) -> void     { impl->shared = open.shared; } 
-
-//[[nodiscard]] static
-//auto reset(const local_event_impl* impl) -> bool {
-//	impl->shared->word.store(0, std::memory_order_release);
-//	return true;
-//} 
-
 [[nodiscard]] static
 auto set(const local_event_impl* impl) -> bool {
 	impl->shared->word.store(1, std::memory_order_release);
@@ -176,13 +190,77 @@ auto wait(const local_event_impl* impl) -> bool {
 	return true;
 } 
 
-} // scuff::ipc
+static auto init(local_event_impl* impl, local_event_create create) -> void { impl->shared = create.shared; } 
+static auto init(local_event_impl* impl, local_event_open open) -> void     { impl->shared = open.shared; } 
+
+} // scuff::ipc::detail
 
 #elif defined(__APPLE__) ///////////////////////////////////////////////////////////////
 
+#include <semaphore.h>
+
 namespace scuff::ipc {
 
+struct shared_event {
+	char name[100];
+};
+
+static
+auto init(shared_event_create create) -> void {
+	const auto name = std::format("/{}", create.shared->name);
+	std::strncpy(create.shared->name, name.c_str(), sizeof(create.shared->name));
+}
+
 } // scuff::ipc
+
+namespace scuff::ipc::detail {
+
+struct posix_local_event {
+	posix_local_event() = default;
+	posix_local_event(local_event_create c)
+		: sem{sem_open(c.shared->name.c_str(), O_CREAT, S_IRUSR | S_IWUSR, 0)}
+	{
+		sem_unlink(c.shared->name.c_str());
+	}
+	posix_local_event(local_event_open o)
+		: sem{sem_open(o.shared->name.c_str(), 0)}
+	{
+	}
+	posix_local_event(posix_local_event&& other) noexcept
+		: sem{other.sem}
+	{
+		other.sem = nullptr;
+	}
+	posix_local_event& operator=(posix_local_event&& other) noexcept {
+		if (sem) { sem_close(sem); }
+		sem = other.sem;
+		other.sem = nullptr;
+		return *this;
+	}
+	~posix_local_event() {
+		if (sem) { sem_close(sem); }
+	}
+	sem_t* sem = nullptr;
+};
+
+struct local_event_impl {
+	posix_local_event event;
+};
+
+[[nodiscard]] static
+auto set(const local_event_impl* impl) -> bool {
+	return sem_post(impl->event.sem) == 0;
+} 
+
+[[nodiscard]] static
+auto wait(const local_event_impl* impl) -> bool {
+	return sem_wait(impl->event.sem) == 0;
+} 
+
+static auto init(local_event_impl* impl, local_event_create create) -> void { impl->event = posix_local_event{create}; } 
+static auto init(local_event_impl* impl, local_event_open open) -> void     { impl->event = posix_local_event{open}; } 
+
+} // scuff::ipc::detail
 
 #endif
 
@@ -190,12 +268,12 @@ namespace scuff::ipc {
 
 struct local_event {
 	local_event() = default;
-	local_event(local_event_create create)  { ipc::init(&impl, create); }
-	local_event(local_event_open open)      { ipc::init(&impl, open); }
-	auto set() const -> bool                { return ipc::set(&impl); }
-	[[nodiscard]] auto wait() const -> bool { return ipc::wait(&impl); }
+	local_event(local_event_create create)  { ipc::detail::init(&impl, create); }
+	local_event(local_event_open open)      { ipc::detail::init(&impl, open); }
+	auto set() const -> bool                { return ipc::detail::set(&impl); }
+	[[nodiscard]] auto wait() const -> bool { return ipc::detail::wait(&impl); }
 private:
-	local_event_impl impl;
+	detail::local_event_impl impl;
 };
 
 } // scuff::ipc
