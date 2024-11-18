@@ -896,23 +896,14 @@ auto create_group(double sample_rate) -> id::group {
 		scuff::group group;
 		group.id          = group_id;
 		group.sample_rate = sample_rate;
-		try {
-			const auto shmid    = shm::make_group_id(DATA_->instance_id, group.id);
-			group.services      = std::make_shared<group_services>();
-			group.services->shm = shm::create_group(shmid, true);
-			group.services->signaler.local = &group.services->shm.signaling;
-			group.services->signaler.shm   = &group.services->shm.data->signaling;
-		} catch (const std::exception& err) {
-			ui::send(ui::msg::error{err.what()});
-			return m;
-		}
+		const auto shmid    = shm::make_group_id(DATA_->instance_id, group.id);
+		group.services      = std::make_shared<group_services>();
+		group.services->shm = shm::create_group(shmid, true);
+		group.services->signaler.local = &group.services->shm.signaling;
+		group.services->signaler.shm   = &group.services->shm.data->signaling;
 		m.groups = m.groups.insert(group);
 		return m;
 	});
-	if (DATA_->model.read().groups.count(group_id) == 0) {
-		// Failed to create the group.
-		return {};
-	}
 	return group_id;
 }
 
@@ -1225,10 +1216,6 @@ auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::s
 		}
 		return m;
 	});
-	if (DATA_->model.read().sandboxes.count(sbox_id) == 0) {
-		// Failed to create the sandbox.
-		return {};
-	}
 	return sbox_id;
 }
 
@@ -1449,9 +1436,9 @@ auto gui_show(id::device dev) -> void {
 	catch (const std::exception& err) { ui::send(api_error(err.what())); }
 }
 
-auto create_group(double sample_rate) -> id::group {
+auto create_group(double sample_rate) -> tl::expected<id::group, std::string> {
 	try                               { return impl::create_group(sample_rate); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	catch (const std::exception& err) { return tl::make_unexpected(err.what()); }
 }
 
 auto erase(id::group group) -> void {
