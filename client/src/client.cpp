@@ -45,8 +45,10 @@ auto intercept_output_event(const scuff::device& dev, const scuff::event& event)
 static
 auto write_audio_input(const scuff::model& m, const scuff::audio_input& input) -> void {
 	if (const auto dev = m.devices.find(input.dev_id)) {
-		auto& buffer   = dev->services->shm.data->audio_in[input.port_index];
-		input.write_to(buffer.data());
+		if (dev->flags.value & device_flags::created_successfully) {
+			auto& buffer   = dev->services->shm.data->audio_in[input.port_index];
+			input.write_to(buffer.data());
+		}
 	}
 }
 
@@ -81,8 +83,10 @@ auto process_inputs(const scuff::model& m, const scuff::audio_inputs& audio_inpu
 static
 auto read_audio_output(const scuff::model& m, const audio_output& output) -> void {
 	if (const auto dev = m.devices.find(output.dev_id)) {
-		const auto& buffer = dev->services->shm.data->audio_out[output.port_index];
-		output.read_from(buffer.data());
+		if (dev->flags.value & device_flags::created_successfully) {
+			const auto& buffer = dev->services->shm.data->audio_out[output.port_index];
+			output.read_from(buffer.data());
+		}
 	}
 }
 
@@ -106,13 +110,15 @@ auto read_output_events(const scuff::model& m, const scuff::group& group, const 
 	for (const auto sbox_id : group.sandboxes) {
 		const auto& sbox = m.sandboxes.at(sbox_id);
 		for (const auto dev_id : sbox.devices) {
-			const auto& dev  = m.devices.at(dev_id);
-			auto& buffer     = dev.services->shm.data->events_out;
-			for (const auto& event : buffer) {
-				intercept_output_event(dev, event);
-				output_events.push({dev_id, event});
+			const auto& dev = m.devices.at(dev_id);
+			if (dev.flags.value & device_flags::created_successfully) {
+				auto& buffer = dev.services->shm.data->events_out;
+				for (const auto& event : buffer) {
+					intercept_output_event(dev, event);
+					output_events.push({dev_id, event});
+				}
+				buffer.clear();
 			}
-			buffer.clear();
 		}
 	}
 }
@@ -122,9 +128,11 @@ auto process_cross_sbox_connections(const scuff::model& m, const scuff::group& g
 	for (const auto& conn : group.cross_sbox_conns) {
 		const auto& dev_out = m.devices.at(conn.out_dev_id);
 		const auto& dev_in  = m.devices.at(conn.in_dev_id);
-		const auto& out_buf = dev_out.services->shm.data->audio_out[conn.out_port];
-		auto& in_buf        = dev_in.services->shm.data->audio_in[conn.in_port];
-		std::copy(out_buf.begin(), out_buf.end(), in_buf.begin());
+		if ((dev_out.flags.value & dev_in.flags.value) & device_flags::created_successfully) {
+			const auto& out_buf = dev_out.services->shm.data->audio_out[conn.out_port];
+			auto& in_buf        = dev_in.services->shm.data->audio_in[conn.in_port];
+			std::copy(out_buf.begin(), out_buf.end(), in_buf.begin());
+		}
 	}
 }
 
@@ -1299,14 +1307,15 @@ auto unref(id::sandbox id) -> void {
 namespace scuff {
 
 auto audio_process(const group_process& process) -> void {
-	const auto audio  = scuff::DATA_->model.rt_read();
-	const auto& group = audio->groups.at({process.group});
-	impl::process_inputs(*audio, process.audio_inputs, process.input_events);
-	if (impl::do_sandbox_processing(audio, group)) {
-		impl::process_outputs(*audio, group, process.audio_outputs, process.output_events);
-	}
-	else {
-		impl::read_zeros(*audio, process.audio_outputs);
+	const auto audio = scuff::DATA_->model.rt_read();
+	if (const auto group = audio->groups.find({process.group})) {
+		impl::process_inputs(*audio, process.audio_inputs, process.input_events);
+		if (impl::do_sandbox_processing(audio, *group)) {
+			impl::process_outputs(*audio, *group, process.audio_outputs, process.output_events);
+		}
+		else {
+			impl::read_zeros(*audio, process.audio_outputs);
+		}
 	}
 }
 

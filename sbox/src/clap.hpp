@@ -383,13 +383,13 @@ auto make_audio_buffers(bc::static_vector<shm::audio_buffer, MAX_AUDIO_PORTS>* s
 		auto& buf = out->buffers[port_index];
 		for (uint32_t c = 0; c < info.channel_count; c++) {
 			auto& vec = (*shm_buffers)[port_index];
-			arr[c] = vec.data() + (scuff::VECTOR_SIZE * c);// + c;
+			arr[c] = vec.data() + (scuff::VECTOR_SIZE * c);
 		}
 		buf.channel_count = info.channel_count;
 		buf.constant_mask = 0;
 		buf.data32        = arr.data();
 		buf.data64        = nullptr;
-		buf.latency       = 0;
+		buf.latency       = scuff::VECTOR_SIZE;
 	}
 }
 
