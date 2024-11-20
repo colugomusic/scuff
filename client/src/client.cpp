@@ -1256,17 +1256,17 @@ auto get_working_plugins() -> std::vector<id::plugin> {
 
 auto managed(id::device id) -> managed_device {
 	ref(id);
-	return {id};
+	return managed_device{id};
 }
 
 auto managed(id::group id) -> managed_group {
 	ref(id);
-	return {id};
+	return managed_group{id};
 }
 
 auto managed(id::sandbox id) -> managed_sandbox {
 	ref(id);
-	return {id};
+	return managed_sandbox{id};
 }
 
 auto ref(id::device id) -> void {

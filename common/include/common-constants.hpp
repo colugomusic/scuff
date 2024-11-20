@@ -20,7 +20,7 @@ static constexpr auto PARAM_ID_MAX          = 32;
 static constexpr auto PARAM_NAME_MAX        = 64;
 static constexpr auto POLL_SLEEP_MS         = 10;
 static constexpr auto STACK_FN_CAPACITY     = 32;
-static constexpr auto VECTOR_SIZE           = 64;          // Hard-coded for now just to make things easier.
+static constexpr auto VECTOR_SIZE           = 256;          // Hard-coded for now just to make things easier.
 static constexpr auto VST3_EXT              = ".vst3";
 
 } // scuff

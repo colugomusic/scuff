@@ -389,7 +389,7 @@ auto make_audio_buffers(bc::static_vector<shm::audio_buffer, MAX_AUDIO_PORTS>* s
 		buf.constant_mask = 0;
 		buf.data32        = arr.data();
 		buf.data64        = nullptr;
-		buf.latency       = scuff::VECTOR_SIZE;
+		buf.latency       = 0;
 	}
 }
 

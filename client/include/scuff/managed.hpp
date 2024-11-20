@@ -55,7 +55,7 @@ private:
 template <typename ID>
 struct ref_counter {
 	ref_counter() = default;
-	ref_counter(ID id) : id_{id} {}
+	explicit ref_counter(ID id) : id_{id} {}
 	auto ref_() const -> void { if (id_) { ref(id_); } }
 	auto unref_() const -> void { if (id_) { unref(id_); } }
 	[[nodiscard]] auto id() const -> ID { return id_; }
@@ -67,7 +67,7 @@ private:
 template <typename ID, typename RefCounter = ref_counter<ID>>
 struct managed_t {
 	managed_t() = default;
-	managed_t(ID id) : deleter_{RefCounter{id}} {}
+	explicit managed_t(ID id) : deleter_{RefCounter{id}} {}
 	[[nodiscard]] auto id() const -> ID { return deleter_.get_counter().id(); }
 	explicit operator bool() const { return bool(deleter_.get_counter()); }
 private:
