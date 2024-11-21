@@ -1,4 +1,4 @@
-#include "os.hpp"
+#include "common-os.hpp"
 #include <CoreFoundation/CoreFoundation.h>
 #include <Foundation/Foundation.h>
 #include <pthread.h>
@@ -8,21 +8,64 @@
 namespace scuff {
 namespace os {
 
+[[nodiscard]] static
+auto load_db(const std::filesystem::path& path) -> CFTypeRef {
+	auto ps = path.u8string();
+	auto cs = CFStringCreateWithBytes(kCFAllocatorDefault, (uint8_t *)ps.c_str(), ps.size(), kCFStringEncodingUTF8, false);
+	auto bundleURL = CFURLCreateWithFileSystemPath(kCFAllocatorDefault, cs, kCFURLPOSIXPathStyle, true);
+	auto bundle = CFBundleCreate(kCFAllocatorDefault, bundleURL);
+	auto db = CFBundleGetDataPointerForName(bundle, CFSTR("clap_entry")); 
+	CFRelease(bundle);
+	CFRelease(bundleURL);
+	CFRelease(cs); 
+	if (!db) {
+		throw 0;
+	}
+	return db;
+}
+
+struct db_handle {
+	CFTypeRef db;
+	db_handle(const std::filesystem::path& path) : db{load_db(path)} {}
+	~db_handle() { if (db) { CFRelease(db); } }
+};
+
+struct clap_entry {
+	std::filesystem::path path;
+	clap_plugin_entry_t* entry = nullptr;
+	std::shared_ptr<db_handle> db;
+};
+
+struct model {
+	std::vector<clap_entry> clap_entries;
+};
+
+static model M_;
+
+[[nodiscard]] static
+auto load_db(const std::filesystem::path& path) -> std::shared_ptr<db_handle> {
+	try         { return std::make_shared<db_handle>(path); }
+	catch (...) { return nullptr; }
+}
+
 auto could_be_a_vst2_file(const std::filesystem::path& path) -> bool {
 	return path.extension() == ".dylib";
 }
 
 auto find_clap_entry(const std::filesystem::path& path) -> const clap_plugin_entry_t* {
-	// TOODOO: don't re-open DSO every time
-	auto ps = path.u8string();
-	auto cs = CFStringCreateWithBytes(kCFAllocatorDefault, (uint8_t *)ps.c_str(), ps.size(), kCFStringEncodingUTF8, false);
-	auto bundleURL = CFURLCreateWithFileSystemPath(kCFAllocatorDefault, cs, kCFURLPOSIXPathStyle, true);
-	auto bundle = CFBundleCreate(kCFAllocatorDefault, bundleURL); 
-	auto db = CFBundleGetDataPointerForName(bundle, CFSTR("clap_entry")); 
-	CFRelease(bundle);
-	CFRelease(bundleURL);
-	CFRelease(cs); 
-	return (clap_plugin_entry_t *)db;
+	const auto match = [&path](const clap_entry& entry) { return entry.path == path; };
+	if (const auto pos = std::ranges::find_if(M_.clap_entries, match); pos != M_.clap_entries.end()) {
+		return pos->entry;
+	}
+	if (const auto db = load_db(path)) {
+		clap_entry entry;
+		entry.path = path;
+		entry.db   = db;
+		entry.entry = reinterpret_cast<clap_plugin_entry_t*>(db->db);
+		M_.clap_entries.push_back(entry);
+		return entry.entry;
+	}
+	return nullptr;
 }
 
 auto get_env_search_paths(char path_delimiter) -> std::vector<std::filesystem::path> {
