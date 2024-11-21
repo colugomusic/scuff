@@ -147,7 +147,7 @@ static auto init(local_event_impl* impl, local_event_open open) -> void     { im
 
 } // scuff::ipc::detail
 
-#elif define(__linux__) ////////////////////////////////////////////////////////////////
+#elif defined(__linux__) ///////////////////////////////////////////////////////////////
 
 #include <sys/syscall.h>
 #include <linux/futex.h>
