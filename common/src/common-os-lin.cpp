@@ -10,14 +10,54 @@
 namespace scuff {
 namespace os {
 
+[[nodiscard]] static
+auto load_lib(const std::filesystem::path& path) -> void* {
+	if (const auto handle = dlopen((const char*)(path.u8string().c_str()), RTLD_LOCAL | RTLD_LAZY)) {
+		return handle;
+	}
+	throw 0;
+}
+
+struct dso {
+	void* handle;
+	dso(const std::filesystem::path& path) : handle{load_lib(path)} {}
+	~dso() { if (handle) { dlclose(handle); } }
+};
+
+struct clap_entry {
+	std::filesystem::path path;
+	clap_plugin_entry_t* entry = nullptr;
+	std::shared_ptr<dso> dso;
+};
+
+struct model {
+	std::vector<clap_entry> clap_entries;
+};
+
+static model M_;
+
+[[nodiscard]] static
+auto load_dso(const std::filesystem::path& path) -> std::shared_ptr<dso> {
+	try         { return std::make_shared<dso>(path); }
+	catch (...) { return nullptr; }
+}
+
 auto could_be_a_vst2_file(const std::filesystem::path& path) -> bool {
 	return path.extension() == ".so";
 }
 
 auto find_clap_entry(const std::filesystem::path& path) -> const clap_plugin_entry_t* {
-	// TOODOO: don't re-open DSO every time
-	if (auto handle = dlopen((const char*)(path.u8string().c_str()), RTLD_LOCAL | RTLD_LAZY)) {
-		return reinterpret_cast<clap_plugin_entry_t*>(dlsym(handle, "clap_entry"));
+	const auto match = [&path](const clap_entry& entry) { return entry.path == path; };
+	if (const auto pos = std::ranges::find_if(M_.clap_entries, match); pos != M_.clap_entries.end()) {
+		return pos->entry;
+	}
+	if (const auto dso = load_dso(path)) {
+		clap_entry entry;
+		entry.path  = path;
+		entry.dso   = dso;
+		entry.entry = reinterpret_cast<clap_plugin_entry_t*>(dlsym(dso->handle, CLAP_SYMBOL_ENTRY));
+		M_.clap_entries.push_back(entry);
+		return entry.entry;
 	}
 	return nullptr;
 }
