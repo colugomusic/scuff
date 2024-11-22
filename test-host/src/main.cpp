@@ -1,4 +1,6 @@
+#define DOCTEST_CONFIG_IMPLEMENT
 #include "common-os.hpp"
+#include "doctest.h"
 #include <algorithm>
 #include <cs_plain_guarded.h>
 #include <deque>
@@ -11,9 +13,7 @@
 
 namespace lg = libguarded;
 
-namespace host {
-
-namespace ui {
+namespace host::ui {
 
 static constexpr auto MARGIN       = 10.0f;
 static constexpr auto MARGIN_SMALL = 5.0f;
@@ -58,16 +58,21 @@ struct main {
 	Layout* vbox;
 	Layout* table_area;
 	Layout* top_area;
+	Layout* buttons;
 	Panel* panel;
 	Window* window;
 	Button* btn_rescan;
+	Button* btn_run_tests;
+	Button* chk_break_on_assert_fail = nullptr;
 	ui::log log;
 	ui::plugfile_table plugfile_table;
 	ui::plugin_table plugin_table;
 	ui::paths paths;
 };
 
-} // ui
+} // host::ui
+
+namespace host {
 
 struct plugfile {
 	std::string path;
@@ -95,6 +100,25 @@ struct app {
 	//lg::plain_guarded<std::deque<to_main::msg>> to_main;
 };
 
+struct reporter : public doctest::IReporter {
+	static inline host::app* app = nullptr;
+	const doctest::ContextOptions& opt;
+	const doctest::TestCaseData* tc = nullptr;
+	reporter(const doctest::ContextOptions& in) : opt(in) {}
+	auto report_query(const doctest::QueryData& in) -> void override;
+	auto test_run_start() -> void override;
+	auto test_run_end(const doctest::TestRunStats& in) -> void override;
+	auto test_case_start(const doctest::TestCaseData& in) -> void override;
+	auto test_case_reenter(const doctest::TestCaseData& in) -> void override;
+	auto test_case_end(const doctest::CurrentTestCaseStats& in) -> void override;
+	auto test_case_exception(const doctest::TestCaseException& in) -> void override;
+	auto subcase_start(const doctest::SubcaseSignature& in) -> void override;
+	auto subcase_end() -> void override;
+	auto log_assert(const doctest::AssertData& in) -> void override;
+	auto log_message(const doctest::MessageData& in) -> void override;
+	auto test_case_skipped(const doctest::TestCaseData& in) -> void override;
+};
+
 static
 auto on_window_close(host::app* app, Event* e) -> void {
 	const auto p     = event_params(e, EvWinClose);
@@ -114,6 +138,17 @@ auto on_window_close(host::app* app, Event* e) -> void {
 static
 auto on_btn_rescan_clicked(host::app* app, Event* e) -> void {
 	scuff::scan(edit_get_text(app->ui.paths.path_edit_scan_exe.edit), {});
+}
+
+static
+auto on_btn_run_tests_clicked(host::app* app, Event* e) -> void {
+	doctest::Context ctx;
+	if (app->ui.chk_break_on_assert_fail) {
+		if (button_get_state(app->ui.chk_break_on_assert_fail) == ekGUI_OFF) {
+			ctx.setOption("no-breaks", true);
+		}
+	}
+	ctx.run();
 }
 
 static
@@ -230,7 +265,13 @@ auto setup_layouts(host::app* app) -> void {
 	layout_layout(app->ui.vbox, app->ui.table_area, 0, 1);
 	layout_layout(app->ui.vbox, app->ui.log.vbox, 0, 2);
 	layout_layout(app->ui.top_area, app->ui.paths.vbox, 0, 0);
-	layout_button(app->ui.top_area, app->ui.btn_rescan, 1, 0);
+	layout_layout(app->ui.top_area, app->ui.buttons, 1, 0);
+	layout_button(app->ui.buttons, app->ui.btn_rescan, 0, 0);
+	layout_button(app->ui.buttons, app->ui.btn_run_tests, 0, 1);
+	if (app->ui.chk_break_on_assert_fail) {
+		layout_button(app->ui.buttons, app->ui.chk_break_on_assert_fail, 0, 2);
+		layout_halign(app->ui.buttons, 0, 2, ekRIGHT);
+	}
 	layout_halign(app->ui.vbox, 0, 0, ekJUSTIFY);
 	layout_vexpand(app->ui.vbox, 1);
 	layout_layout(app->ui.table_area, app->ui.plugfile_table.layout, 0, 0);
@@ -261,18 +302,32 @@ auto setup_window(host::app* app) -> void {
 static
 auto setup_buttons(host::app* app) -> void {
 	button_text(app->ui.btn_rescan, "Scan system for installed plugins");
+	button_text(app->ui.btn_run_tests, "Run tests");
 	button_OnClick(app->ui.btn_rescan, listener(app, on_btn_rescan_clicked, host::app));
+	button_OnClick(app->ui.btn_run_tests, listener(app, on_btn_run_tests_clicked, host::app));
+	if (app->ui.chk_break_on_assert_fail) {
+		button_text(app->ui.chk_break_on_assert_fail, "Break on assertion failure");
+	}
 }
 
 static
 auto create_window(host::app* app) -> void {
-	app->ui.window      = window_create(ekWINDOW_STDRES);
-	app->ui.panel       = panel_create();
-	app->ui.vbox        = layout_create(1, 3);
-	app->ui.top_area    = layout_create(2, 1);
-	app->ui.paths.vbox  = layout_create(1, 2);
-	app->ui.table_area  = layout_create(2, 1);
-	app->ui.btn_rescan  = button_push();
+	auto num_buttons = 2;
+	if (IsDebuggerPresent()) {
+		num_buttons += 1;
+	}
+	app->ui.window                   = window_create(ekWINDOW_STDRES);
+	app->ui.panel                    = panel_create();
+	app->ui.vbox                     = layout_create(1, 3);
+	app->ui.top_area                 = layout_create(2, 1);
+	app->ui.paths.vbox               = layout_create(1, 2);
+	app->ui.table_area               = layout_create(2, 1);
+	app->ui.buttons                  = layout_create(1, num_buttons);
+	app->ui.btn_rescan               = button_push();
+	app->ui.btn_run_tests            = button_push();
+	if (IsDebuggerPresent()) {
+		app->ui.chk_break_on_assert_fail = button_check();
+	}
 	create_log(&app->ui.log);
 	create_table(&app->ui.plugfile_table, "Plugin Files");
 	create_table(&app->ui.plugin_table, "Plugins");
@@ -363,6 +418,11 @@ auto on_scuff_scan_error(host::app* app, std::string_view error) -> void {
 }
 
 static
+auto on_scuff_scan_warning(host::app* app, std::string_view error) -> void {
+	textview_printf(app->ui.log.view, "%s\n", error.data());
+}
+
+static
 auto on_scuff_scan_started(host::app* app) -> void {
 	textview_writef(app->ui.log.view, "Scan started\n");
 	app->plugfiles.clear();
@@ -380,6 +440,7 @@ auto initialize_scuff(host::app* app) -> void {
 [[nodiscard]] static
 auto create() -> host::app* {
 	const auto app = new host::app;
+	host::reporter::app = app;
 	create_window(app);
 	initialize_scuff(app);
 	return app;
@@ -387,6 +448,7 @@ auto create() -> host::app* {
 
 static
 auto destroy(host::app** app) -> void {
+	host::reporter::app = nullptr;
 	scuff::shutdown();
 	window_destroy(&(*app)->ui.window);
 	delete *app;
@@ -415,6 +477,7 @@ auto update(host::app* app, double prtime, double ctime) -> void {
 	ui.on_scan_complete    = [app](auto... args) { on_scuff_scan_complete(app); };
 	ui.on_scan_error       = [app](auto... args) { on_scuff_scan_error(app, args...); };
 	ui.on_scan_started     = [app](auto... args) { on_scuff_scan_started(app); };
+	ui.on_scan_warning     = [app](auto... args) { on_scuff_scan_warning(app, args...); };
 	scuff::ui_update(ui);
 	if (app->plugfiles.dirty) {
 		std::sort(app->plugfiles.begin(), app->plugfiles.end());
@@ -428,7 +491,66 @@ auto update(host::app* app, double prtime, double ctime) -> void {
 	}
 }
 
+auto reporter::report_query(const doctest::QueryData& in) -> void {
+}
+
+auto reporter::test_run_start() -> void {
+	textview_printf(app->ui.log.view, "----------------------------------------\n");
+}
+
+auto reporter::test_run_end(const doctest::TestRunStats& in) -> void {
+	if (in.numTestCasesFailed > 0) {
+		textview_printf(app->ui.log.view, "\nTests failed: %d/%d\n", in.numTestCasesFailed, in.numTestCases);
+	}
+	else {
+		textview_printf(app->ui.log.view, "\nAll tests passed. (%d)\n", in.numTestCases);
+	}
+	textview_printf(app->ui.log.view, "----------------------------------------\n");
+}
+
+auto reporter::test_case_start(const doctest::TestCaseData& in) -> void {
+	tc = &in;
+}
+
+auto reporter::test_case_reenter(const doctest::TestCaseData& in) -> void {
+	// called when a test case is reentered because of unfinished subcases
+}
+
+auto reporter::test_case_end(const doctest::CurrentTestCaseStats& in) -> void {
+}
+
+auto reporter::test_case_exception(const doctest::TestCaseException& in) -> void {
+}
+
+auto reporter::subcase_start(const doctest::SubcaseSignature& in) -> void {
+}
+
+auto reporter::subcase_end() -> void {
+}
+
+auto reporter::log_assert(const doctest::AssertData& in) -> void {
+	if (!in.m_failed && !opt.success) {
+		return;
+	}
+	textview_printf(app->ui.log.view, "'%s':\n", tc->m_name);
+	textview_printf(app->ui.log.view, "\t%s:%d: ", in.m_file, in.m_line);
+	textview_printf(app->ui.log.view, "Assertion failed: '%s'\n", in.m_expr);
+}
+
+auto reporter::log_message(const doctest::MessageData& in) -> void {
+	textview_printf(app->ui.log.view, "%s:%d: %s\n", in.m_file, in.m_line, in.m_string);
+}
+
+auto reporter::test_case_skipped(const doctest::TestCaseData& in) -> void {
+	textview_printf(app->ui.log.view, "Test case skipped: %s\n", in.m_name);
+}
+
 } // host
 
+TEST_CASE("blah") {
+	CHECK(1==2);
+}
+
 #include <osmain.h>
+REGISTER_LISTENER("host::reporter", 1, host::reporter);
 osmain_sync(0.1f, host::create, host::destroy, host::update, "", host::app)

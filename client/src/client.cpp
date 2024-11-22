@@ -1338,9 +1338,13 @@ auto init(const scuff::on_error& on_error) -> bool {
 auto shutdown() -> void {
 	if (!scuff::initialized_) { return; }
 	scuff::DATA_->poll_thread.request_stop();
-	scuff::DATA_->poll_thread.join();
 	scuff::DATA_->scan_thread.request_stop();
-	scuff::DATA_->scan_thread.join();
+	if (scuff::DATA_->poll_thread.joinable()) {
+		scuff::DATA_->poll_thread.join();
+	}
+	if (scuff::DATA_->scan_thread.joinable()) {
+		scuff::DATA_->scan_thread.join();
+	}
 	scuff::DATA_.reset();
 	scuff::initialized_ = false;
 }
