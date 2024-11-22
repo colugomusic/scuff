@@ -124,7 +124,6 @@ struct sandbox {
 	id::sandbox id;
 	id::group group;
 	sandbox_flags flags;
-	immer::box<std::string> error;
 	immer::set<id::device> devices;
 	std::shared_ptr<sandbox_services> services;
 };
