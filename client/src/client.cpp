@@ -12,6 +12,22 @@
 #include <string>
 #include <variant>
 
+#define SCUFF_NOEXCEPT
+
+#if defined(SCUFF_NOEXCEPT)
+#	define SCUFF_CATCH_VOID \
+	catch (const std::exception& err) { ui::send(api_error(err.what())); } \
+	catch (...)                       { ui::send(api_error("Unknown exception")); }
+#	define SCUFF_CATCH_RETURN \
+	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; } \
+	catch (...)                       { ui::send(api_error("Unknown exception")); return {}; }
+#else
+#	define SCUFF_CATCH_VOID \
+	catch (const std::exception& err) { throw err; }
+#	define SCUFF_CATCH_VOID_RETURN \
+	catch (const std::exception& err) { throw err; }
+#endif
+
 namespace bip = boost::interprocess;
 
 namespace scuff::impl {
@@ -1204,24 +1220,17 @@ auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::s
 	DATA_->model.update_publish([=](model&& m){
 		sandbox sbox;
 		sbox.id = sbox_id;
-		try {
-			const auto& group        = m.groups.at({group_id});
-			const auto group_shmid   = group.services->shm.seg.id;
-			const auto sandbox_shmid = shm::make_sandbox_id(DATA_->instance_id, sbox.id);
-			const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, group.sample_rate);
-			auto proc                = bp::child{std::string{sbox_exe_path}, exe_args};
-			sbox.flags.value        |= sandbox_flags::launched;
-			sbox.group               = {group_id};
-			sbox.services            = std::make_shared<sandbox_services>(std::move(proc), sandbox_shmid);
-			m.sandboxes              = m.sandboxes.insert(sbox);
-			m = add_sandbox_to_group(m, {group_id}, sbox.id);
-		}
-		catch (const std::exception& err) {
-			sbox.error = err.what();
-			m.sandboxes = m.sandboxes.insert(sbox);
-			ui::send(ui::msg::error{err.what()});
-			return m;
-		}
+		const auto& group        = m.groups.at({group_id});
+		const auto group_shmid   = group.services->shm.seg.id;
+		const auto sandbox_shmid = shm::make_sandbox_id(DATA_->instance_id, sbox.id);
+		const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, group.sample_rate);
+		auto proc                = bp::child{std::string{sbox_exe_path}, exe_args};
+		sbox.flags.value        |= sandbox_flags::launched;
+		sbox.group               = {group_id};
+		sbox.services            = std::make_shared<sandbox_services>(std::move(proc), sandbox_shmid);
+		m.sandboxes              = m.sandboxes.insert(sbox);
+		m = add_sandbox_to_group(m, {group_id}, sbox.id);
+		m.sandboxes = m.sandboxes.insert(sbox);
 		return m;
 	});
 	return sbox_id;
@@ -1235,11 +1244,6 @@ auto erase(id::sandbox sbox) -> void {
 		m.sandboxes = m.sandboxes.erase({sbox});
 		return m;
 	});
-}
-
-[[nodiscard]] static
-auto get_error(id::sandbox sbox) -> const char* {
-	return DATA_->model.read().sandboxes.at(sbox).error->c_str();
 }
 
 [[nodiscard]] static
@@ -1319,34 +1323,45 @@ auto audio_process(const group_process& process) -> void {
 	}
 }
 
-auto init(const scuff::on_error& on_error) -> bool {
-	if (scuff::initialized_) { return true; }
+auto init() -> void {
+	if (scuff::initialized_) { return; }
 	try {
 		scuff::DATA_               = std::make_unique<scuff::data>();
 		scuff::DATA_->instance_id  = "scuff+" + std::to_string(scuff::os::get_process_id());
 		scuff::DATA_->poll_thread  = std::jthread{impl::poll_thread};
 		scuff::DATA_->ui_thread_id = std::this_thread::get_id();
 		scuff::initialized_        = true;
-		return true;
 	} catch (const std::exception& err) {
 		scuff::DATA_.reset();
+		throw err;
+	} catch (...) {
+		scuff::DATA_.reset();
+		throw std::runtime_error("Unknown error during initialization");
+	}
+}
+
+auto init(const scuff::on_error& on_error) -> void {
+	try {
+		init();
+	} catch (const std::exception& err) {
 		on_error(err.what());
-		return false;
 	}
 }
 
 auto shutdown() -> void {
 	if (!scuff::initialized_) { return; }
-	scuff::DATA_->poll_thread.request_stop();
-	scuff::DATA_->scan_thread.request_stop();
-	if (scuff::DATA_->poll_thread.joinable()) {
-		scuff::DATA_->poll_thread.join();
-	}
-	if (scuff::DATA_->scan_thread.joinable()) {
-		scuff::DATA_->scan_thread.join();
-	}
-	scuff::DATA_.reset();
-	scuff::initialized_ = false;
+	try {
+		scuff::DATA_->poll_thread.request_stop();
+		scuff::DATA_->scan_thread.request_stop();
+		if (scuff::DATA_->poll_thread.joinable()) {
+			scuff::DATA_->poll_thread.join();
+		}
+		if (scuff::DATA_->scan_thread.joinable()) {
+			scuff::DATA_->scan_thread.join();
+		}
+		scuff::DATA_.reset();
+		scuff::initialized_ = false;
+	} SCUFF_CATCH_VOID;
 }
 
 [[nodiscard]] static
@@ -1355,333 +1370,263 @@ auto api_error(std::string_view what, const std::source_location& location = std
 }
 
 auto activate(id::group group, double sr) -> void {
-	try                               { impl::activate(group, sr); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::activate(group, sr); } SCUFF_CATCH_VOID;
 }
 
 auto close_all_editors() -> void {
-	try                               { impl::close_all_editors(); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::close_all_editors(); } SCUFF_CATCH_VOID;
 }
 
 auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void {
-	try                               { impl::connect(dev_out, port_out, dev_in, port_in); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::connect(dev_out, port_out, dev_in, port_in); } SCUFF_CATCH_VOID;
 }
 
 auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id) -> create_device_result {
-	try                               { return impl::create_device(sbox, type, plugin_id); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::create_device(sbox, type, plugin_id); } SCUFF_CATCH_RETURN;
 }
 
 auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_create_device_result fn) -> id::device {
-	try                               { return impl::create_device_async(sbox, type, plugin_id, fn); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::create_device_async(sbox, type, plugin_id, fn); } SCUFF_CATCH_RETURN;
 }
 
 auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::sandbox {
-	try                               { return impl::create_sandbox(group_id, sbox_exe_path); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::create_sandbox(group_id, sbox_exe_path); } SCUFF_CATCH_RETURN;
 }
 
 auto deactivate(id::group group) -> void {
-	try                               { impl::deactivate(group); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::deactivate(group); } SCUFF_CATCH_VOID;
 }
 
 auto disconnect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void {
-	try                               { impl::device_disconnect(dev_out, port_out, dev_in, port_in); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::device_disconnect(dev_out, port_out, dev_in, port_in); } SCUFF_CATCH_VOID;
 }
 
 auto duplicate(id::device dev, id::sandbox sbox) -> create_device_result {
-	try                               { return impl::duplicate(dev, sbox); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::duplicate(dev, sbox); } SCUFF_CATCH_RETURN;
 }
 
 auto duplicate_async(id::device dev, id::sandbox sbox, return_create_device_result fn) -> id::device {
-	try                               { return impl::duplicate_async(dev, sbox, fn); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::duplicate_async(dev, sbox, fn); } SCUFF_CATCH_RETURN;
 }
 
 auto erase(id::device dev) -> void {
-	try                               { impl::erase({dev}); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::erase({dev}); } SCUFF_CATCH_VOID;
 }
 
 auto erase(id::sandbox sbox) -> void {
-	try                               { impl::erase(sbox); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::erase(sbox); } SCUFF_CATCH_VOID;
 }
 
 auto find(id::device dev, ext::id::param param_id) -> idx::param {
-	try                               { return impl::find(dev, param_id); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::find(dev, param_id); } SCUFF_CATCH_RETURN;
 }
 
 auto find(ext::id::plugin plugin_id) -> id::plugin {
-	try                               { return impl::find(plugin_id); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::find(plugin_id); } SCUFF_CATCH_RETURN;
 }
 
 auto get_error(id::device device) -> const char* {
-	try                               { return impl::get_error(device); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
+	try { return impl::get_error(device); } SCUFF_CATCH_RETURN;
 }
 
 auto get_param_count(id::device dev) -> size_t {
-	try                               { return impl::get_param_count(dev); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return 0; }
+	try { return impl::get_param_count(dev); } SCUFF_CATCH_RETURN;
 }
 
 auto get_plugin(id::device dev) -> id::plugin {
-	try                               { return impl::get_plugin(dev); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::get_plugin(dev); } SCUFF_CATCH_RETURN;
 }
 
 auto gui_hide(id::device dev) -> void {
-	try                               { impl::gui_hide(dev); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::gui_hide(dev); } SCUFF_CATCH_VOID;
 }
 
 auto gui_show(id::device dev) -> void {
-	try                               { impl::gui_show(dev); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::gui_show(dev); } SCUFF_CATCH_VOID;
 }
 
-auto create_group(double sample_rate) -> tl::expected<id::group, std::string> {
-	try                               { return impl::create_group(sample_rate); }
-	catch (const std::exception& err) { return tl::make_unexpected(err.what()); }
+auto create_group(double sample_rate) -> id::group {
+	try { return impl::create_group(sample_rate); } SCUFF_CATCH_RETURN;
 }
 
 auto erase(id::group group) -> void {
-	try                               { impl::erase({group}); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::erase({group}); } SCUFF_CATCH_VOID;
 }
 
 auto get_broken_plugfiles() -> std::vector<id::plugfile> {
-	try                               { return impl::get_broken_plugfiles(); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::get_broken_plugfiles(); } SCUFF_CATCH_RETURN;
 }
 
 auto get_broken_plugins() -> std::vector<id::plugin> {
-	try                               { return impl::get_broken_plugins(); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::get_broken_plugins(); } SCUFF_CATCH_RETURN;
 }
 
 auto get_devices(id::sandbox sbox) -> std::vector<id::device> {
-	try                               { return impl::get_devices(sbox); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::get_devices(sbox); } SCUFF_CATCH_RETURN;
 }
 
 auto get_error(id::plugfile plugfile) -> const char* {
-	try                               { return impl::get_error(plugfile); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
+	try { return impl::get_error(plugfile); } SCUFF_CATCH_RETURN;
 }
 
 auto get_error(id::plugin plugin) -> const char* {
-	try                               { return impl::get_error(plugin); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
-}
-
-auto get_error(id::sandbox sbox) -> const char* {
-	try                               { return impl::get_error(sbox); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
+	try { return impl::get_error(plugin); } SCUFF_CATCH_RETURN;
 }
 
 auto get_ext_id(id::plugin plugin) -> ext::id::plugin {
-	try                               { return impl::get_ext_id(plugin); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::get_ext_id(plugin); } SCUFF_CATCH_RETURN;
 }
 
 auto get_features(id::plugin plugin) -> std::vector<std::string> {
-	try                               { return impl::get_features(plugin); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::get_features(plugin); } SCUFF_CATCH_RETURN;
 }
 
 auto get_info(id::device dev, idx::param param) -> param_info {
-	try                               { return impl::get_info({dev}, param); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::get_info({dev}, param); } SCUFF_CATCH_RETURN;
 }
 
 auto get_name(id::plugin plugin) -> const char* {
-	try                               { return impl::get_name(plugin); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
+	try { return impl::get_name(plugin); } SCUFF_CATCH_RETURN;
 }
 
 auto get_path(id::plugfile plugfile) -> const char* {
-	try                               { return impl::get_path(plugfile); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
+	try { return impl::get_path(plugfile); } SCUFF_CATCH_RETURN;
 }
 
 auto get_plugin_ext_id(id::device dev) -> ext::id::plugin {
-	try                               { return impl::get_plugin_ext_id(dev); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::get_plugin_ext_id(dev); } SCUFF_CATCH_RETURN;
 }
 
 auto get_type(id::plugin plugin) -> plugin_type {
-	try                               { return impl::get_type(plugin); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return plugin_type::unknown; }
+	try { return impl::get_type(plugin); } SCUFF_CATCH_RETURN;
 }
 
 auto get_value(id::device dev, idx::param param) -> double {
-	try                               { return impl::get_value(dev, param); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return 0.0; }
+	try { return impl::get_value(dev, param); } SCUFF_CATCH_RETURN;
 }
 
 auto get_value_async(id::device dev, idx::param param, return_double fn) -> void {
-	try                               { impl::get_value_async(dev, param, fn); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::get_value_async(dev, param, fn); } SCUFF_CATCH_VOID;
 }
 
 auto get_value_text(id::device dev, idx::param param, double value) -> std::string {
-	try                               { return impl::get_value_text(dev, param, value); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
+	try { return impl::get_value_text(dev, param, value); } SCUFF_CATCH_RETURN;
 }
 
 auto get_value_text_async(id::device dev, idx::param param, double value, return_string fn) -> void {
-	try                               { impl::get_value_text_async(dev, param, value, fn); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::get_value_text_async(dev, param, value, fn); } SCUFF_CATCH_VOID;
 }
 
 auto get_vendor(id::plugin plugin) -> const char* {
-	try                               { return impl::get_vendor(plugin); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
+	try { return impl::get_vendor(plugin); } SCUFF_CATCH_RETURN;
 }
 
 auto get_version(id::plugin plugin) -> const char* {
-	try                               { return impl::get_version(plugin); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return ""; }
+	try { return impl::get_version(plugin); } SCUFF_CATCH_RETURN;
 }
 
 auto get_working_plugins() -> std::vector<id::plugin> {
-	try                               { return impl::get_working_plugins(); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::get_working_plugins(); } SCUFF_CATCH_RETURN;
 }
 
 auto has_gui(id::device dev) -> bool {
-	try                               { return impl::has_gui(dev); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
+	try { return impl::has_gui(dev); } SCUFF_CATCH_RETURN;
 }
 
 auto has_params(id::device dev) -> bool {
-	try                               { return impl::has_params(dev); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
+	try { return impl::has_params(dev); } SCUFF_CATCH_RETURN;
 }
 
 auto has_rack_features(id::plugin plugin) -> bool {
-	try                               { return impl::has_rack_features(plugin); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
+	try { return impl::has_rack_features(plugin); } SCUFF_CATCH_RETURN;
 }
 
 auto is_running(id::sandbox sbox) -> bool {
-	try                               { return impl::is_running(sbox); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
+	try { return impl::is_running(sbox); } SCUFF_CATCH_RETURN;
 }
 
 auto is_scanning() -> bool {
-	try                               { return impl::is_scanning(); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
+	try { return impl::is_scanning(); } SCUFF_CATCH_RETURN;
 }
 
 auto load(id::device dev, const scuff::bytes& bytes) -> bool {
-	try                               { return impl::load(dev, bytes); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
+	try { return impl::load(dev, bytes); } SCUFF_CATCH_RETURN;
 }
 
 auto load_async(id::device dev, const scuff::bytes& bytes, return_load_device_result fn) -> void {
-	try                               { impl::load_async(dev, bytes, fn); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::load_async(dev, bytes, fn); } SCUFF_CATCH_VOID;
 }
 
 auto push_event(id::device dev, const scuff::event& event) -> void {
-	try                               { impl::push_event(dev, event); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::push_event(dev, event); } SCUFF_CATCH_VOID;
 }
 
 auto ui_update(const general_ui& ui) -> void {
-	try                               { ui::call_callbacks(ui); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { ui::call_callbacks(ui); } SCUFF_CATCH_VOID;
 }
 
 auto ui_update(id::group group_id, const group_ui& ui) -> void {
-	try                               { ui::call_callbacks(group_id, ui); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { ui::call_callbacks(group_id, ui); } SCUFF_CATCH_VOID;
 }
 
 auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool {
-	try                               { impl::restart(sbox, sbox_exe_path); return true; }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
+	try { impl::restart(sbox, sbox_exe_path); return true; } SCUFF_CATCH_RETURN;
 }
 
 auto save(id::device dev) -> scuff::bytes {
-	try                               { return impl::save(dev); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::save(dev); } SCUFF_CATCH_RETURN;
 }
 
 auto save_async(id::device dev, return_bytes fn) -> void {
-	try                               { impl::save_async(dev, fn); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::save_async(dev, fn); } SCUFF_CATCH_VOID;
 }
 
 auto scan(std::string_view scan_exe_path, scan_flags flags) -> void {
-	try                               { impl::do_scan(scan_exe_path, flags); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::do_scan(scan_exe_path, flags); } SCUFF_CATCH_VOID;
 }
 
 auto set_render_mode(id::group group, render_mode mode) -> void {
-	try                               { impl::set_render_mode(group, mode); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::set_render_mode(group, mode); } SCUFF_CATCH_VOID;
 }
 
 auto was_loaded_successfully(id::device dev) -> bool {
-	try                               { return impl::was_loaded_successfully(dev); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return false; }
+	try { return impl::was_loaded_successfully(dev); } SCUFF_CATCH_RETURN;
 }
 
 auto managed(id::device id) -> managed_device {
-	try                               { return impl::managed(id); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::managed(id); } SCUFF_CATCH_RETURN;
 }
 
 auto managed(id::group id) -> managed_group {
-	try                               { return impl::managed(id); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::managed(id); } SCUFF_CATCH_RETURN;
 }
 
 auto managed(id::sandbox id) -> managed_sandbox {
-	try                               { return impl::managed(id); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; }
+	try { return impl::managed(id); } SCUFF_CATCH_RETURN;
 }
 
 auto ref(id::device id) -> void {
-	try                               { impl::ref(id); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::ref(id); } SCUFF_CATCH_VOID;
 }
 
 auto ref(id::group id) -> void {
-	try                               { impl::ref(id); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::ref(id); } SCUFF_CATCH_VOID;
 }
 
 auto ref(id::sandbox id) -> void {
-	try                               { impl::ref(id); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::ref(id); } SCUFF_CATCH_VOID;
 }
 
 auto unref(id::device id) -> void {
-	try                               { impl::unref(id); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::unref(id); } SCUFF_CATCH_VOID;
 }
 
 auto unref(id::group id) -> void {
-	try                               { impl::unref(id); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::unref(id); } SCUFF_CATCH_VOID;
 }
 
 auto unref(id::sandbox id) -> void {
-	try                               { impl::unref(id); }
-	catch (const std::exception& err) { ui::send(api_error(err.what())); }
+	try { impl::unref(id); } SCUFF_CATCH_VOID;
 }
 
 } // scuff

@@ -6,7 +6,6 @@
 #include "common-plugin-type.hpp"
 #include "common-render-mode.hpp"
 #include "common-types.hpp"
-#include "expected.hpp"
 #include <functional>
 #include <string_view>
 #include <vector>
@@ -144,16 +143,22 @@ auto audio_process(const group_process& process) -> void;
 // In a UI processing thread, it is recommended to use the asynchronous functions over
 // their blocking variants when possible because these operations require a
 // back-and-forth between the client and sandbox processes in order to do their work.
+// 
+// If SCUFF_NOEXCEPT is defined when building the client library then instead of throwing
+// exceptions, errors will be reported via the general_ui::on_error callback.
+//
+// If SCUFF_NOEXCEPT is not defined then any of these functions may throw, but they all
+// guarantee "strong exception safety": https://en.wikipedia.org/wiki/Exception_safety
 /////////////////////////////////////////////////////////////////////////////////////////
 
 // Call this before anything else.
-//  - If an error occurs during initialization then the error callback will be called.
-//  - Returns true if the initialization was successful, or if scuff was already
-//    initialized.
-//  - The thread this is called from is considered the "UI thread" until shudown() is
+//  - The thread this is called from is considered the "UI thread" until shutdown() is
 //    called.
-[[nodiscard]]
-auto init(const scuff::on_error& on_error) -> bool;
+#if defined(SCUFF_NOEXCEPT)
+auto init(const scuff::on_error& on_error) -> void;
+#else
+auto init() -> void;
+#endif
 
 // Call this when you're done with the sandboxing system.
 //  - Don't call anything else after this, except for init() to reinitialize.
@@ -206,13 +211,11 @@ auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plu
 // - This is what allows data to travel between sandboxes.
 // - On failure, returns an invalid id
 [[nodiscard]]
-auto create_group(double sample_rate) -> tl::expected<id::group, std::string>;
+auto create_group(double sample_rate) -> id::group;
 
 // Create a new sandbox.
 // - Every sandbox has to belong to a group.
 // - Data can travel between sandboxes in the same group.
-// - If starting the sandbox process fails, the sandbox will still be created,
-//   but it will be in an error state.
 [[nodiscard]]
 auto create_sandbox(id::group group, std::string_view sbox_exe_path) -> id::sandbox;
 
@@ -276,10 +279,6 @@ auto get_error(id::plugfile plugfile) -> const char*;
 // If the plugin failed to load, return the error string.
 [[nodiscard]]
 auto get_error(id::plugin plugin) -> const char*;
-
-// If the sandbox failed to start, return the error string.
-[[nodiscard]]
-auto get_error(id::sandbox sbox) -> const char*;
 
 // Returns the plugin ID string.
 [[nodiscard]]
