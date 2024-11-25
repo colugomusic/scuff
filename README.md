@@ -1,6 +1,6 @@
 # scuff (work in progress)
  
-I am working on a cross-platform CLAP/VST audio plugin sandboxing system. Since this is not an easy problem to solve, I am trying to design the system to be generic enough that nobody has to figure it out ever again. They can just use this instead. The project consists of:
+I am working on a cross-platform CLAP/VST3 audio plugin sandboxing system. Since this is not an easy problem to solve, I am trying to design the system to be generic enough that nobody has to figure it out ever again. They can just use this instead. The project consists of:
 - [A sandbox executable](sbox) responsible for hosting one or more plugin instances.
 - [A scanner executable](scan) which can scan the system for installed plugins.
 - [A static library](client) which encapsulates the sandboxing system and allows us to use it within our audio applications.
@@ -8,7 +8,7 @@ I am working on a cross-platform CLAP/VST audio plugin sandboxing system. Since 
 
 If you have expertise in this area and want to help then please get in touch.
 
-I am targeting Windows, macOS and Linux. My immediate plan is to start by implementing CLAP support only and then add VST support later. I am planning to use [nappgui](https://github.com/frang75/nappgui_src) to handle opening editor windows within the sandbox processes.
+I am targeting Windows, macOS and Linux. My immediate plan is to start by implementing CLAP support only and then add VST3 support later. I am planning to use [nappgui](https://github.com/frang75/nappgui_src) to handle opening editor windows within the sandbox processes.
 
 Here is a blog post about this project: https://www.patreon.com/posts/plugin-110821252
 
@@ -17,7 +17,7 @@ Here is the interface of the client library in its current state: [client/includ
 ## Glossary
 
 ### Device
-An instance of a CLAP or VST plugin. A device can be connected to other devices, even if they are in different sandbox processes, as long as they exist within the same **sandbox group**.
+An instance of a CLAP or VST3 plugin. A device can be connected to other devices, even if they are in different sandbox processes, as long as they exist within the same **sandbox group**.
 
 ### Sandbox
 A process consisting of one or more **devices**. The hairy problem of communicating with the sandbox processes is encapsulated by the client library. A sandbox is always part of a **sandbox group**.
