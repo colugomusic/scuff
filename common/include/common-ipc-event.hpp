@@ -181,13 +181,13 @@ auto futex_wake_all(std::atomic<uint32_t>* word) -> void {
 [[nodiscard]] static
 auto set(const local_event_impl* impl) -> bool {
 	impl->shared->word.store(1, std::memory_order_release);
-	futex_wake_all(impl->word);
+	futex_wake_all(impl->shared->word);
 	return true;
 } 
 
 [[nodiscard]] static
 auto wait(const local_event_impl* impl) -> bool {
-	futex_wait(impl->word, 0);
+	futex_wait(impl->shared->word, 0);
 	impl->shared->word.store(0, std::memory_order_release);
 	return true;
 } 

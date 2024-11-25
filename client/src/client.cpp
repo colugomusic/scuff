@@ -654,7 +654,7 @@ auto device_disconnect(id::device dev_out_id, size_t port_out, id::device dev_in
 	});
 }
 
-[[nodiscard]] static
+static
 auto debug__check_we_are_in_the_ui_thread() -> void {
 	assert (std::this_thread::get_id() == DATA_->ui_thread_id);
 }

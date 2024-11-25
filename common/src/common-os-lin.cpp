@@ -15,7 +15,7 @@ auto find_fn(void* lib, const dso::fn_name& fn_name) -> void* {
 }
 
 auto open_lib(const dso::path& path) -> void* {
-	return dlopen(path.value.u8string().c_str(), RTLD_LOCAL | RTLD_LAZY);
+	return dlopen(path.value.c_str(), RTLD_LOCAL | RTLD_LAZY);
 }
 
 auto release_lib(void* lib) -> void {
