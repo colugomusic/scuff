@@ -14,6 +14,9 @@
 #include <immer/table.hpp>
 #include <immer/vector.hpp>
 #pragma warning(pop)
+#if defined(__APPLE__)
+#include "third-party/jthread.hpp"
+#endif
 
 namespace basio = boost::asio;
 

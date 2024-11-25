@@ -6,6 +6,9 @@
 #include <filesystem>
 #include <thread>
 #include <vector>
+#if defined(__APPLE__)
+#include "third-party/jthread.hpp"
+#endif
 
 namespace scuff::os {
 

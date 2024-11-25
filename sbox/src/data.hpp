@@ -17,6 +17,9 @@
 #include <immer/flex_vector.hpp>
 #include <immer/table.hpp>
 #pragma warning(pop)
+#if defined(__APPLE__)
+#include "third-party/jthread.hpp"
+#endif
 
 namespace scuff::sbox {
 
