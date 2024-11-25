@@ -27,7 +27,7 @@ struct dso {
 struct clap_entry {
 	std::filesystem::path path;
 	clap_plugin_entry_t* entry = nullptr;
-	std::shared_ptr<dso> dso;
+	std::shared_ptr<os::dso> dso;
 };
 
 struct model {
