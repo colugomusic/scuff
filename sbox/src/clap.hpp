@@ -2,6 +2,7 @@
 
 #include "common-clap.hpp"
 #include "common-messages.hpp"
+#include "common-os-dso.hpp"
 #include "common-shm.hpp"
 #include "common-visit.hpp"
 #include "data.hpp"
@@ -842,7 +843,7 @@ auto make_shm_device(std::string_view sbox_shmid, id::device dev_id) -> shm::dev
 
 static
 auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id, size_t callback) -> void {
-	const auto entry = scuff::os::find_clap_entry(plugfile_path);
+	const auto entry = scuff::os::dso::find_fn<clap_plugin_entry_t>({plugfile_path}, {CLAP_SYMBOL_ENTRY});
 	if (!entry) {
 		throw std::runtime_error("Couldn't resolve clap_entry");
 	}

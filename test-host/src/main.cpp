@@ -434,7 +434,7 @@ auto on_scuff_scan_started(host::app* app) -> void {
 static
 auto initialize_scuff(host::app* app) -> void {
 	auto on_error = [app](auto... args) { on_scuff_error(app, args...); };
-	auto _ = scuff::init(on_error);
+	scuff::init(on_error);
 }
 
 [[nodiscard]] static

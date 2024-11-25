@@ -1,4 +1,5 @@
 #include "client.hpp"
+#include "common-os.hpp"
 #include "common-signaling.hpp"
 #include "common-speen.hpp"
 #include "common-types.hpp"
@@ -11,8 +12,6 @@
 #include <source_location>
 #include <string>
 #include <variant>
-
-#define SCUFF_NOEXCEPT
 
 #if defined(SCUFF_NOEXCEPT)
 #	define SCUFF_CATCH_VOID \
@@ -1323,6 +1322,11 @@ auto audio_process(const group_process& process) -> void {
 	}
 }
 
+[[nodiscard]] static
+auto api_error(std::string_view what, const std::source_location& location = std::source_location::current()) -> ui::msg::error {
+	return ui::msg::error{std::format("Scuff API error in {}: {}", location.function_name(), what)};
+}
+
 auto init() -> void {
 	if (scuff::initialized_) { return; }
 	try {
@@ -1362,11 +1366,6 @@ auto shutdown() -> void {
 		scuff::DATA_.reset();
 		scuff::initialized_ = false;
 	} SCUFF_CATCH_VOID;
-}
-
-[[nodiscard]] static
-auto api_error(std::string_view what, const std::source_location& location = std::source_location::current()) -> ui::msg::error {
-	return ui::msg::error{std::format("Scuff API error in {}: {}", location.function_name(), what)};
 }
 
 auto activate(id::group group, double sr) -> void {

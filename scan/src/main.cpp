@@ -1,4 +1,6 @@
 #include "common-clap.hpp"
+#include "common-constants.hpp"
+#include "common-os-dso.hpp"
 #include "common-plugin-type.hpp"
 #include "common-util.hpp"
 #include <clap/factory/plugin-factory.h>
@@ -178,7 +180,7 @@ auto report_plugin(const plugfile& pf, const clap_plugin_descriptor& desc, bool 
 
 static
 auto scan_clap_plugfile_safe(const plugfile& pf) -> void {
-	const auto entry = scuff::os::find_clap_entry(pf.path);
+	const auto entry = scuff::os::dso::find_fn<clap_plugin_entry_t>({pf.path}, {scuff::CLAP_SYMBOL_ENTRY});
 	if (!entry) {
 		report_broken_plugfile(pf, "Couldn't resolve clap_entry");
 		return;
@@ -236,7 +238,7 @@ auto scan_clap_plugin(const plugfile& pf, const clap_plugin_factory_t& factory, 
 
 static
 auto scan_clap_plugfile_full(const plugfile& pf) -> void {
-	const auto entry = scuff::os::find_clap_entry(pf.path);
+	const auto entry = scuff::os::dso::find_fn<clap_plugin_entry_t>({pf.path}, {scuff::CLAP_SYMBOL_ENTRY});
 	if (!entry) {
 		report_broken_plugfile(pf, "Couldn't resolve clap_entry");
 		return;

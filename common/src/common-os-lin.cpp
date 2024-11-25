@@ -7,59 +7,34 @@
 #include <sched.h>
 #include <unistd.h>
 
-namespace scuff {
-namespace os {
+namespace scuff::os::dso {
 
-[[nodiscard]] static
-auto load_lib(const std::filesystem::path& path) -> void* {
-	if (const auto handle = dlopen((const char*)(path.u8string().c_str()), RTLD_LOCAL | RTLD_LAZY)) {
-		return handle;
-	}
-	throw 0;
+auto find_fn(void* lib, const dso::fn_name& fn_name) -> void* {
+	return dlsym(lib, fn_name.value.c_str());
 }
 
-struct dso {
-	void* handle;
-	dso(const std::filesystem::path& path) : handle{load_lib(path)} {}
-	~dso() { if (handle) { dlclose(handle); } }
-};
-
-struct clap_entry {
-	std::filesystem::path path;
-	clap_plugin_entry_t* entry = nullptr;
-	std::shared_ptr<os::dso> dso;
-};
-
-struct model {
-	std::vector<clap_entry> clap_entries;
-};
-
-static model M_;
-
-[[nodiscard]] static
-auto load_dso(const std::filesystem::path& path) -> std::shared_ptr<dso> {
-	try         { return std::make_shared<dso>(path); }
-	catch (...) { return nullptr; }
+auto open_lib(const dso::path& path) -> void* {
+	return dlopen(path.value.u8string().c_str(), RTLD_LOCAL | RTLD_LAZY);
 }
+
+auto release_lib(void* lib) -> void {
+	dlclose(lib);
+}
+
+} // scuff::os::dso
+
+namespace scuff::os {
 
 auto could_be_a_vst2_file(const std::filesystem::path& path) -> bool {
 	return path.extension() == ".so";
 }
 
-auto find_clap_entry(const std::filesystem::path& path) -> const clap_plugin_entry_t* {
-	const auto match = [&path](const clap_entry& entry) { return entry.path == path; };
-	if (const auto pos = std::ranges::find_if(M_.clap_entries, match); pos != M_.clap_entries.end()) {
-		return pos->entry;
-	}
-	if (const auto dso = load_dso(path)) {
-		clap_entry entry;
-		entry.path  = path;
-		entry.dso   = dso;
-		entry.entry = reinterpret_cast<clap_plugin_entry_t*>(dlsym(dso->handle, CLAP_SYMBOL_ENTRY));
-		M_.clap_entries.push_back(entry);
-		return entry.entry;
-	}
-	return nullptr;
+auto get_process_id() -> int {
+	return getpid();
+}
+
+auto get_clap_window_api() -> const char* {
+	return CLAP_WINDOW_API_X11;
 }
 
 auto get_env_search_paths(char path_delimiter) -> std::vector<std::filesystem::path> {
@@ -115,5 +90,4 @@ auto set_realtime_priority(std::jthread* thread) -> void {
 	pthread_setschedparam(handle, SCHED_FIFO, &param);
 }
 
-} // os
-} // scuff
+} // scuff::os

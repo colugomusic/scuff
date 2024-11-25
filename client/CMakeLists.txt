@@ -14,6 +14,7 @@ list (APPEND src
 	src/ui.hpp
 	src/ui-types.hpp
 )
+option(SCUFF_NOEXCEPT "Don't allow exceptions to escape the client API" OFF)
 set(immer_BUILD_TESTS OFF)
 set(immer_BUILD_EXAMPLES OFF)
 set(immer_BUILD_DOCS OFF)
@@ -49,4 +50,7 @@ target_compile_features(scuff-client PUBLIC
 )
 target_compile_options(scuff-client PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
+)
+target_compile_definitions(scuff-client PUBLIC
+	$<$<BOOL:${SCUFF_NOEXCEPT}>:SCUFF_NOEXCEPT>
 )
