@@ -103,9 +103,6 @@ struct msg_buffer {
 		if (!lock) {
 			return 0;
 		}
-		if (bytes_.size() + count > bytes_.capacity()) {
-			__debugbreak();
-		}
 		count = std::min(count, bytes_.capacity() - bytes_.size());
 		bytes_.insert(bytes_.end(), bytes, bytes + count);
 		return count;
