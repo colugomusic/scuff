@@ -54,3 +54,6 @@ target_compile_options(scuff-client PRIVATE
 target_compile_definitions(scuff-client PUBLIC
 	$<$<BOOL:${SCUFF_NOEXCEPT}>:SCUFF_NOEXCEPT>
 )
+set_target_properties(scuff-client PROPERTIES
+	CXX_STANDARD 20
+)
