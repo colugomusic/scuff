@@ -7,7 +7,7 @@ else()
 	set(LINUX FALSE)
 endif()
 list (APPEND sources
-	$<$<BOOL:${APPLE}>:${CMAKE_CURRENT_LIST_DIR}/src/common-os-mac.cpp>
+	$<$<BOOL:${APPLE}>:${CMAKE_CURRENT_LIST_DIR}/src/common-os-mac.mm>
 	$<$<BOOL:${LINUX}>:${CMAKE_CURRENT_LIST_DIR}/src/common-os-lin.cpp>
 	$<$<BOOL:${WIN32}>:${CMAKE_CURRENT_LIST_DIR}/src/common-os-win.cpp>
 )
