@@ -47,3 +47,6 @@ target_link_libraries(scuff-sbox
 target_compile_options(scuff-sbox PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
+set_target_properties(scuff-sbox PROPERTIES
+	CXX_STANDARD 20
+)
