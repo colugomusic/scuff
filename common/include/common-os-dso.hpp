@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <filesystem>
 #include <ranges>
 #include <string>
@@ -31,7 +32,7 @@ static model M_;
 template <typename FnT>
 auto find_fn(const dso::path& path, const dso::fn_name& fn_name) -> const FnT* {
 	const auto match = [&path, &fn_name](const dso::entry& entry) { return entry.path == path && entry.fn_name == fn_name; };
-	if (const auto pos = std::ranges::find_if(M_.entries, match); pos != M_.entries.end()) {
+	if (const auto pos = std::find_if(M_.entries.begin(), M_.entries.end(), match); pos != M_.entries.end()) {
 		return reinterpret_cast<FnT*>(pos->fn_ptr);
 	}
 	if (const auto lib = open_lib(path)) {
