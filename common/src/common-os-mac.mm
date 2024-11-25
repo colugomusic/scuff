@@ -1,5 +1,6 @@
 #include "common-os.hpp"
 #include "common-os-dso.hpp"
+#include <flux.hpp>
 #include <CoreFoundation/CoreFoundation.h>
 #include <Foundation/Foundation.h>
 #include <pthread.h>
@@ -10,7 +11,7 @@ namespace scuff::os::dso {
 
 auto find_fn(void* lib, const dso::fn_name& fn_name) -> void* {
 	auto cs = CFStringCreateWithBytes(kCFAllocatorDefault, (uint8_t*)fn_name.value.c_str(), fn_name.value.size(), kCFStringEncodingUTF8, false);
-	auto db = CFBundleGetDataPointerForName(bundle, cs);
+	auto db = CFBundleGetDataPointerForName((CFBundleRef)(lib), cs);
 	CFRelease(cs);
 	return db;
 }
