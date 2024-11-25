@@ -1,25 +1,23 @@
 #include "common-os.hpp"
 #include "os.hpp"
-#include <Windows.h>
+#include <Cocoa/Cocoa.h>
 
 namespace scuff::sbox::os {
 
 auto get_editor_window_native_handle(const sbox::device& dev) -> void* {
-	const auto view_hwnd = (HWND)(view_native(dev.ui.view));
-	return GetAncestor(view_hwnd, GA_ROOT);
+	const auto nsview = (NSView*)(view_native(dev.ui.view));
+	return nsview.window;
 }
 
 auto make_clap_window_ref(View* view) -> clap_window_t {
 	clap_window_t ref;
 	ref.api   = scuff::os::get_clap_window_api();
-	ref.win32 = view_native(view);
+	ref.cocoa = view_native(view);
 	return ref;
 }
 
 auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> void {
-	const auto view_hwnd = (HWND)(view_native(dev.ui.view));
-	const auto top_hwnd  = GetAncestor(view_hwnd, GA_ROOT);
-	SetWindowPos(top_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+	// Nothing to do.
 }
 
 auto shutdown_editor_window(sbox::app* app, const sbox::device& dev) -> void {

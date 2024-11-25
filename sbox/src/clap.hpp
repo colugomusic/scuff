@@ -6,6 +6,7 @@
 #include "common-shm.hpp"
 #include "common-visit.hpp"
 #include "data.hpp"
+#include "os.hpp"
 #include <optional>
 #include <ranges>
 
@@ -1044,18 +1045,15 @@ auto create_gui(sbox::app* app, const sbox::device& dev) -> sbox::create_gui_res
 [[nodiscard]] static
 auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
 	log(app, "clap::main::setup_editor_window");
-	const auto m         = app->model.read();
-	const auto clap_dev  = m.clap_devices.at(dev.id);
-	const auto iface     = clap_dev.iface->plugin;
-	clap_window_t cw;
-	cw.api = scuff::os::get_clap_window_api();
-	// TOODOO: cross platform stuff
-	cw.win32 = view_native(dev.ui.view);
-	if (!iface.gui->set_parent(iface.plugin, &cw)) {
-		log(app, "iface.gui->set_parent(%d) failed", int64_t(cw.win32));
+	const auto m          = app->model.read();
+	const auto clap_dev   = m.clap_devices.at(dev.id);
+	const auto iface      = clap_dev.iface->plugin;
+	const auto window_ref = os::make_clap_window_ref(dev.ui.view);
+	if (!iface.gui->set_parent(iface.plugin, &window_ref)) {
+		log(app, "iface.gui->set_parent() failed");
 		return false;
 	}
-	log(app, "iface.gui->set_parent(%d) succeeded", int64_t(cw.win32));
+	log(app, "iface.gui->set_parent() succeeded");
 	// This return value is ignored because some Plugins return false
 	// even if the window is shown.
 	iface.gui->show(iface.plugin);

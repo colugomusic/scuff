@@ -17,7 +17,7 @@ list (APPEND scuff-sbox_SRCFILES
 	src/msg-proc.hpp
 	src/os.hpp
 	src/options.hpp
-	$<$<BOOL:${APPLE}>:src/os-mac.cpp>
+	$<$<BOOL:${APPLE}>:src/os-mac.mm>
 	$<$<BOOL:${LINUX}>:src/os-lin.cpp>
 	$<$<BOOL:${WIN32}>:src/os-win.cpp>
 )
