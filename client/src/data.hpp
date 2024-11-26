@@ -4,6 +4,7 @@
 #include "common-audio-sync.hpp"
 #include "common-shm.hpp"
 #include "common-slot-buffer.hpp"
+#include "jthread.hpp"
 #include "ui-types.hpp"
 #include <atomic>
 #include <boost/asio.hpp>
@@ -14,9 +15,6 @@
 #include <immer/table.hpp>
 #include <immer/vector.hpp>
 #pragma warning(pop)
-#if defined(__APPLE__)
-#include "third-party/jthread.hpp"
-#endif
 
 namespace basio = boost::asio;
 

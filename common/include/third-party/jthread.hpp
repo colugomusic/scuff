@@ -11,7 +11,7 @@
 #include <functional>  // for invoke()
 #include <iostream>    // for debugging output
 
-namespace std {
+namespace nonstd {
 
 //***************************************** 
 //* class jthread
@@ -169,6 +169,6 @@ inline void jthread::swap(jthread& t) noexcept {
 }
 
 
-} // std
+} // nonstd
 
 #endif // JTHREAD_HPP

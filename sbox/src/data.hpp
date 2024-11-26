@@ -7,6 +7,7 @@
 #include "common-shm.hpp"
 #include "common-slot-buffer.hpp"
 #include "debug-ui.hpp"
+#include "jthread.hpp"
 #include "options.hpp"
 #include "window-size.hpp"
 #include <boost/static_string.hpp>
@@ -17,9 +18,6 @@
 #include <immer/flex_vector.hpp>
 #include <immer/table.hpp>
 #pragma warning(pop)
-#if defined(__APPLE__)
-#include "third-party/jthread.hpp"
-#endif
 
 namespace scuff::sbox {
 

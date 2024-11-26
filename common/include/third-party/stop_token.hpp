@@ -13,7 +13,7 @@
 #include <immintrin.h>
 #endif
 
-namespace std {
+namespace nonstd {
 inline void __spin_yield() noexcept {
   // TODO: Platform-specific code here
 #if defined(__x86_64__) || defined(_M_X64)
@@ -563,4 +563,4 @@ class [[nodiscard]] stop_callback : private __stop_callback_base {
 template<typename _Callback>
   stop_callback(stop_token, _Callback) -> stop_callback<_Callback>;
 
-} // namespace std
+} // namespace nonstd

@@ -1,0 +1,1 @@
+On macOS, I'm currently using a modified version of nico josuttis' reference implementation for jthread, licensed under the Creative Commons Attribution 4.0 International License, because Apple still, inexplicably, have not added jthread support to their c++20 compiler, as of December 2024.
