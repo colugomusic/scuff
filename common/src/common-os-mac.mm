@@ -1,5 +1,7 @@
+#include "common-constants.hpp"
 #include "common-os.hpp"
 #include "common-os-dso.hpp"
+#include "common-util.hpp"
 #include <flux.hpp>
 #include <CoreFoundation/CoreFoundation.h>
 #include <Foundation/Foundation.h>

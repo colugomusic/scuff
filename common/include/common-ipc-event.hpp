@@ -220,12 +220,12 @@ namespace scuff::ipc::detail {
 struct posix_local_event {
 	posix_local_event() = default;
 	posix_local_event(local_event_create c)
-		: sem{sem_open(c.shared->name.c_str(), O_CREAT, S_IRUSR | S_IWUSR, 0)}
+		: sem{sem_open(c.shared->name, O_CREAT, S_IRUSR | S_IWUSR, 0)}
 	{
-		sem_unlink(c.shared->name.c_str());
+		sem_unlink(c.shared->name);
 	}
 	posix_local_event(local_event_open o)
-		: sem{sem_open(o.shared->name.c_str(), 0)}
+		: sem{sem_open(o.shared->name, 0)}
 	{
 	}
 	posix_local_event(posix_local_event&& other) noexcept

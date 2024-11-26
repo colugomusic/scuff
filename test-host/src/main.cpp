@@ -310,10 +310,20 @@ auto setup_buttons(host::app* app) -> void {
 	}
 }
 
+[[nodiscard]] static
+auto is_debugger_present() -> bool {
+#if defined(_WIN32)
+    return IsDebuggerPresent();
+#else
+    // Dunno how to do this on other platforms
+    return false;
+#endif
+}
+
 static
 auto create_window(host::app* app) -> void {
 	auto num_buttons = 2;
-	if (IsDebuggerPresent()) {
+    if (is_debugger_present()) {
 		num_buttons += 1;
 	}
 	app->ui.window                   = window_create(ekWINDOW_STDRES);
@@ -325,7 +335,7 @@ auto create_window(host::app* app) -> void {
 	app->ui.buttons                  = layout_create(1, num_buttons);
 	app->ui.btn_rescan               = button_push();
 	app->ui.btn_run_tests            = button_push();
-	if (IsDebuggerPresent()) {
+    if (is_debugger_present()) {
 		app->ui.chk_break_on_assert_fail = button_check();
 	}
 	create_log(&app->ui.log);
@@ -538,7 +548,7 @@ auto reporter::log_assert(const doctest::AssertData& in) -> void {
 }
 
 auto reporter::log_message(const doctest::MessageData& in) -> void {
-	textview_printf(app->ui.log.view, "%s:%d: %s\n", in.m_file, in.m_line, in.m_string);
+	textview_printf(app->ui.log.view, "%s:%d: %s\n", in.m_file, in.m_line, in.m_string.c_str());
 }
 
 auto reporter::test_case_skipped(const doctest::TestCaseData& in) -> void {
