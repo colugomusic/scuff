@@ -5,7 +5,9 @@ list (APPEND scuff-test-host_SRCFILES
 	src/main.cpp
 )
 set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)
-CPMAddPackage(NAME nappgui_src GITHUB_REPOSITORY colugomusic/nappgui_src GIT_TAG main  OPTIONS "NAPPGUI_DEMO OFF" "NAPPGUI_WEB OFF" "CMAKE_DISABLE_CRTDBG ON")
+CPMAddPackage(NAME nappgui_src     GITHUB_REPOSITORY colugomusic/nappgui_src GIT_TAG main   OPTIONS "NAPPGUI_DEMO OFF" "NAPPGUI_WEB OFF" "CMAKE_DISABLE_CRTDBG ON")
+CPMAddPackage(NAME tomlplusplus    GITHUB_REPOSITORY marzer/tomlplusplus     GIT_TAG v3.4.0                                                                       )
+CPMAddPackage(NAME PlatformFolders GITHUB_REPOSITORY sago007/PlatformFolders GIT_TAG 4.2.0                                                                        )
 set(NAPPGUI_ROOT_PATH ${nappgui_src_SOURCE_DIR})
 nap_generate_tools()
 nap_desktop_app(scuff-test-host "osapp" NRC_NONE)
@@ -15,6 +17,8 @@ target_include_directories(scuff-test-host PRIVATE
 )
 target_link_libraries(scuff-test-host
 	scuff::client
+	tomlplusplus::tomlplusplus
+	sago::platform_folders
 )
 if (APPLE)
     target_link_libraries(scuff-test-host

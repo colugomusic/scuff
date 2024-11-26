@@ -5,9 +5,11 @@
 #include <cs_plain_guarded.h>
 #include <deque>
 #include <nappgui.h>
+#include <platform_folders.h>
 #include <scuff/client.hpp>
 #include <stdlib.h>
 #include <string>
+#include <toml++/toml.hpp>
 #include <variant>
 #include <vector>
 
@@ -97,6 +99,7 @@ struct app {
 	ui::main ui;
 	with_dirt<std::vector<plugfile>> plugfiles;
 	with_dirt<std::vector<plugin>> plugins;
+	toml::table config;
 	//lg::plain_guarded<std::deque<to_main::msg>> to_main;
 };
 
@@ -249,13 +252,50 @@ auto setup_tables(host::app* app) -> void {
 	tableview_OnData(app->ui.plugin_table.view, listener(app, on_table_plugins_data, host::app));
 }
 
+[[nodiscard]] static
+auto get_config_file_path() -> std::filesystem::path {
+	auto dir = std::filesystem::path{sago::getConfigHome()};
+	dir /= "scuff-test-host";
+	dir /= "config.txt";
+	return dir;
+}
+
+static
+auto save_config_to_file(host::app* app) -> void {
+	const auto file_path = get_config_file_path();
+	std::stringstream ss;
+	ss << app->config;
+	const auto str = str_c(ss.str().c_str());
+	hfile_from_string(file_path.string().c_str(), str, nullptr);
+}
+
+static
+auto on_path_edit_sbox_exe_changed(host::app* app, Event* e) -> void {
+	const auto text = edit_get_text(app->ui.paths.path_edit_sbox_exe.edit);
+	app->config.insert_or_assign("sandbox_exe", std::string(text));
+	save_config_to_file(app);
+}
+
+static
+auto on_path_edit_scan_exe_changed(host::app* app, Event* e) -> void {
+	const auto text = edit_get_text(app->ui.paths.path_edit_scan_exe.edit);
+	app->config.insert_or_assign("scanner_exe", std::string(text));
+	save_config_to_file(app);
+}
+
 static
 auto setup_path_editors(host::app* app) -> void {
 	create_path_edit(&app->ui.paths.path_edit_sbox_exe, "Sandbox exe path");
 	create_path_edit(&app->ui.paths.path_edit_scan_exe, "Scanner exe path");
 	layout_vmargin(app->ui.paths.vbox, 0, ui::MARGIN_SMALL);
-	edit_text(app->ui.paths.path_edit_sbox_exe.edit, "Z:/dv/_bld/scuff/Debug/bin/scuff-sbox.exe");
-	edit_text(app->ui.paths.path_edit_scan_exe.edit, "Z:/dv/_bld/scuff/scan/Debug/scuff-scan.exe");
+	edit_OnChange(app->ui.paths.path_edit_sbox_exe.edit, listener(app, on_path_edit_sbox_exe_changed, host::app));
+	edit_OnChange(app->ui.paths.path_edit_scan_exe.edit, listener(app, on_path_edit_scan_exe_changed, host::app));
+	if (const auto pos = app->config.find("sandbox_exe"); pos != app->config.end()) {
+		edit_text(app->ui.paths.path_edit_sbox_exe.edit, pos->second.value_or<std::string>("").c_str());
+	}
+	if (const auto pos = app->config.find("scanner_exe"); pos != app->config.end()) {
+		edit_text(app->ui.paths.path_edit_scan_exe.edit, pos->second.value_or<std::string>("").c_str());
+	}
 }
 
 static
@@ -447,10 +487,20 @@ auto initialize_scuff(host::app* app) -> void {
 	scuff::init(on_error);
 }
 
+static
+auto initialize_config(host::app* app) -> void {
+	const auto path = get_config_file_path();
+	if (!std::filesystem::exists(path)) {
+		std::ofstream{path};
+	}
+	app->config = toml::parse_file(path.string());
+}
+
 [[nodiscard]] static
 auto create() -> host::app* {
 	const auto app = new host::app;
 	host::reporter::app = app;
+	initialize_config(app);
 	create_window(app);
 	initialize_scuff(app);
 	return app;
