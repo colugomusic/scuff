@@ -16,6 +16,13 @@ target_include_directories(scuff-test-host PRIVATE
 target_link_libraries(scuff-test-host
 	scuff::client
 )
+if (APPLE)
+    target_link_libraries(scuff-test-host
+        "-framework Foundation"
+        "-framework Cocoa"
+        "-framework UniformTypeIdentifiers"
+    )
+endif()
 target_compile_options(scuff-test-host PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
