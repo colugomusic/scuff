@@ -4,7 +4,7 @@ include(../CPM.cmake)
 list (APPEND scuff-test-host_SRCFILES
 	src/main.cpp
 )
-#set(CPM_nappgui_SOURCE "Z:/dv/nappgui_src")
+set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)
 CPMAddPackage(NAME nappgui_src GITHUB_REPOSITORY colugomusic/nappgui_src GIT_TAG main  OPTIONS "NAPPGUI_DEMO OFF" "NAPPGUI_WEB OFF" "CMAKE_DISABLE_CRTDBG ON")
 set(NAPPGUI_ROOT_PATH ${nappgui_src_SOURCE_DIR})
 nap_generate_tools()
