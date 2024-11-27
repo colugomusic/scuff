@@ -181,7 +181,7 @@ auto get_active_sandbox_count(const model& m, const scuff::group& group) -> int 
 }
 
 static
-auto zero_inactive_device_outputs(const std::shared_ptr<const model>& audio, const scuff::group& group) -> void {
+auto zero_inactive_device_outputs(const ez::immutable<model>& audio, const scuff::group& group) -> void {
 	for (const auto sbox_id : group.sandboxes) {
 		const auto& sbox = audio->sandboxes.at(sbox_id);
 		for (const auto dev_id : sbox.devices) {
@@ -204,7 +204,7 @@ auto zero_inactive_device_outputs(const std::shared_ptr<const model>& audio, con
 }
 
 [[nodiscard]] static
-auto do_sandbox_processing(const std::shared_ptr<const model>& audio, const scuff::group& group) -> bool {
+auto do_sandbox_processing(const ez::immutable<model>& audio, const scuff::group& group) -> bool {
 	auto sandbox_iterator = group.sandboxes.begin();
 	auto next_sandbox_signal = [&sandbox_iterator, &audio]() -> const ipc::local_event& {
 		const auto sandbox_id = *sandbox_iterator;

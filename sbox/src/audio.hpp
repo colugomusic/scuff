@@ -60,7 +60,7 @@ auto do_processing(sbox::app* app) -> void {
 	if (!signaling::notify_sandbox_done(app->group_signaler)) {
 		throw std::runtime_error("Failed to signal sandbox processing complete!");
 	}
-	app->audio_model.reset();
+	app->audio_model = {};
 }
 
 static

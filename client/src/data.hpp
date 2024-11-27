@@ -1,13 +1,13 @@
 #pragma once
 
 #include "client.hpp"
-#include "common-audio-sync.hpp"
 #include "common-shm.hpp"
 #include "common-slot-buffer.hpp"
 #include "jthread.hpp"
 #include "ui-types.hpp"
 #include <atomic>
 #include <boost/asio.hpp>
+#include <ez.hpp>
 #pragma warning(push, 0)
 #include <immer/box.hpp>
 #include <immer/map.hpp>
@@ -175,13 +175,13 @@ struct model {
 };
 
 struct data {
-	std::string              instance_id;
-	std::jthread             poll_thread;
-	std::jthread             scan_thread;
-	std::thread::id          ui_thread_id;
-	std::atomic_bool         scanning = false;
-	ui::msg::general_q       ui;
-	audio_sync<scuff::model> model;
+	std::string            instance_id;
+	std::jthread           poll_thread;
+	std::jthread           scan_thread;
+	std::thread::id        ui_thread_id;
+	std::atomic_bool       scanning = false;
+	ui::msg::general_q     ui;
+	ez::sync<scuff::model> model;
 };
 
 static std::atomic_bool      initialized_ = false;

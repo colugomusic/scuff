@@ -1,7 +1,6 @@
 #pragma once
 
 #include "clap-data.hpp"
-#include "common-audio-sync.hpp"
 #include "common-plugin-type.hpp"
 #include "common-events.hpp"
 #include "common-shm.hpp"
@@ -12,6 +11,7 @@
 #include "window-size.hpp"
 #include <boost/static_string.hpp>
 #include <cs_plain_guarded.h>
+#include <ez.hpp>
 #include <memory>
 #pragma warning(push, 0)
 #include <immer/box.hpp>
@@ -82,23 +82,23 @@ struct model {
 using heartbeat_time = std::chrono::time_point<std::chrono::steady_clock>;
 
 struct app {
-	sbox::options                      options;
-	shm::group                         shm_group;
-	shm::sandbox                       shm_sbox;
-	signaling::sandboxside_group       group_signaler;
-	signaling::sandboxside_sandbox     sandbox_signaler;
-	std::jthread                       audio_thread;
-	msg::sender<msg::out::msg>         msg_sender;
-	msg::receiver<msg::in::msg>        msg_receiver;
-	std::thread::id                    main_thread_id;
-	audio_sync<sbox::model>            model;
-	std::shared_ptr<const sbox::model> audio_model;
-	std::atomic<uint64_t>              uid = 0;
-	std::atomic_bool                   schedule_terminate = false;
-	sbox::debug_ui::model              debug_ui;
-	bool                               active = false;
-	double                             sample_rate = 44100.0;
-	heartbeat_time                     last_heartbeat;
+	sbox::options                  options;
+	shm::group                     shm_group;
+	shm::sandbox                   shm_sbox;
+	signaling::sandboxside_group   group_signaler;
+	signaling::sandboxside_sandbox sandbox_signaler;
+	std::jthread                   audio_thread;
+	msg::sender<msg::out::msg>     msg_sender;
+	msg::receiver<msg::in::msg>    msg_receiver;
+	std::thread::id                main_thread_id;
+	ez::sync<sbox::model>          model;
+	ez::immutable<sbox::model>     audio_model;
+	std::atomic<uint64_t>          uid = 0;
+	std::atomic_bool               schedule_terminate = false;
+	sbox::debug_ui::model          debug_ui;
+	bool                           active = false;
+	double                         sample_rate = 44100.0;
+	heartbeat_time                 last_heartbeat;
 };
 
 } // scuff::sbox
