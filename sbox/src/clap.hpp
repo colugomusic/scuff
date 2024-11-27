@@ -74,7 +74,7 @@ auto send_msg(const device& dev, const clap::device_msg::msg& msg) -> void {
 
 static
 auto send_msg(sbox::app* app, id::device dev_id, const clap::device_msg::msg& msg) -> void {
-	const auto m = app->model.rt_read();
+	const auto m = app->model.read(ez::audio);
 	if (const auto dev = m->clap_devices.find(dev_id)) {
 		send_msg(*dev, msg);
 	}
@@ -96,7 +96,7 @@ auto log(sbox::app* app, id::device dev_id, clap_log_severity severity, const ch
 
 [[nodiscard]] static
 auto get_extension(sbox::app* app, const clap::iface_host& iface_host, id::device dev_id, std::string_view extension_id) -> const void* {
-	const auto m   = app->model.rt_read();
+	const auto m   = app->model.read(ez::rt);
 	if (extension_id == std::string_view{CLAP_EXT_AUDIO_PORTS})         { return &iface_host.audio_ports; }
 	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU})        { return nullptr; } // Not implemented yet &iface.context_menu; }
 	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU_COMPAT}) { return nullptr; } // Not implemented yet &iface.context_menu; }
@@ -131,25 +131,25 @@ auto cb_params_rescan(sbox::app* app, id::device dev_id, clap_param_rescan_flags
 
 static
 auto cb_request_param_flush(sbox::app* app, id::device dev_id) -> void {
-	const auto svc = app->model.rt_read()->clap_devices.at(dev_id).service;
+	const auto svc = app->model.read(ez::rt)->clap_devices.at(dev_id).service;
 	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_param_flush, std::memory_order_relaxed);
 }
 
 static
 auto cb_request_process(sbox::app* app, id::device dev_id) -> void {
-	const auto svc = app->model.rt_read()->clap_devices.at(dev_id).service;
+	const auto svc = app->model.read(ez::rt)->clap_devices.at(dev_id).service;
 	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_active | device_atomic_flags::schedule_process);
 }
 
 static
 auto cb_request_restart(sbox::app* app, id::device dev_id) -> void {
-	const auto svc = app->model.rt_read()->clap_devices.at(dev_id).service;
+	const auto svc = app->model.read(ez::rt)->clap_devices.at(dev_id).service;
 	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_restart);
 }
 
 static
 auto cb_request_callback(sbox::app* app, id::device dev_id) -> void {
-	const auto svc = app->model.rt_read()->clap_devices.at(dev_id).service;
+	const auto svc = app->model.read(ez::rt)->clap_devices.at(dev_id).service;
 	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_callback);
 }
 
@@ -505,7 +505,7 @@ auto init_audio(clap::device&& clap_dev, const sbox::device& dev) -> device {
 
 static
 auto init_audio(sbox::app* app, id::device dev_id) -> void {
-	app->model.update_publish([=](model&& m) {
+	app->model.update_publish(ez::main, [=](model&& m) {
 		auto dev                         = m.devices.at(dev_id);
 		auto clap_dev                    = m.clap_devices.at(dev_id);
 		clap_dev.service.audio_port_info = retrieve_audio_port_info(clap_dev.iface->plugin);
@@ -523,7 +523,7 @@ auto rescan_audio_ports(sbox::app* app, id::device dev_id, uint32_t flags) -> vo
 		is_flag_set(flags, CLAP_AUDIO_PORTS_RESCAN_PORT_TYPE) ||
 		is_flag_set(flags, CLAP_AUDIO_PORTS_RESCAN_IN_PLACE_PAIR) ||
 		is_flag_set(flags, CLAP_AUDIO_PORTS_RESCAN_LIST);
-	const auto m   = app->model.read();
+	const auto m   = app->model.read(ez::main);
 	const auto dev = m.clap_devices.at(dev_id);
 	if (requires_not_active) {
 		if (is_active(dev)) {
@@ -589,13 +589,13 @@ auto process_msg_(sbox::app* app, const device& clap_dev, const clap::device_msg
 
 static
 auto process_msg_(sbox::app* app, const device& clap_dev, const clap::device_msg::gui_request_hide& msg) -> void {
-	const auto& dev = app->model.read().devices.at(clap_dev.id);
+	const auto& dev = app->model.read(ez::main).devices.at(clap_dev.id);
 	gui::hide(app, dev);
 }
 
 static
 auto process_msg_(sbox::app* app, const device& clap_dev, const clap::device_msg::gui_request_resize& msg) -> void {
-	const auto& dev = app->model.read().devices.at(clap_dev.id);
+	const auto& dev = app->model.read(ez::main).devices.at(clap_dev.id);
 	dev.service->scheduled_window_resize = msg.size;
 }
 
@@ -652,11 +652,11 @@ auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log
 
 static
 auto process_msg_(sbox::app* app, clap::device clap_dev, const clap::device_msg::params_rescan& msg) -> void {
-	const auto m    = app->model.read();
+	const auto m    = app->model.read(ez::main);
 	const auto& dev = m.devices.at(clap_dev.id);
 	clap_dev = init_params(std::move(clap_dev));
 	init_params_shm(dev, clap_dev);
-	app->model.update_publish([clap_dev](model&& m){
+	app->model.update_publish(ez::main, [clap_dev](model&& m){
 		m.clap_devices = m.clap_devices.insert(clap_dev);
 		return m;
 	});
@@ -670,7 +670,7 @@ auto process_msg(sbox::app* app, const device& dev, const clap::device_msg::msg&
 
 static
 auto update(sbox::app* app) -> void {
-	const auto m = app->model.read();
+	const auto m = app->model.read(ez::main);
 	for (const auto& dev : m.clap_devices) {
 		clap::device_msg::msg msg;
 		while (dev.service.data->msg_q.try_dequeue(msg)) {
@@ -887,7 +887,7 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	clap_dev              = init_audio(std::move(clap_dev), dev);
 	clap_dev              = init_params(std::move(clap_dev));
 	init_params_shm(dev, clap_dev);
-	app->model.update_publish([=](model&& m) {
+	app->model.update_publish(ez::main, [=](model&& m) {
 		m.devices      = m.devices.insert(dev);
 		m.clap_devices = m.clap_devices.insert(clap_dev);
 		return m;
@@ -896,7 +896,7 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 
 [[nodiscard]] static
 auto get_param_value(const sbox::app& app, id::device dev_id, idx::param param_idx) -> std::optional<double> {
-	const auto dev = app.model.read().clap_devices.at(dev_id);
+	const auto dev = app.model.read(ez::main).clap_devices.at(dev_id);
 	if (dev.iface->plugin.params) {
 		const auto param = dev.params[param_idx.value];
 		double value;
@@ -910,7 +910,7 @@ auto get_param_value(const sbox::app& app, id::device dev_id, idx::param param_i
 [[nodiscard]] static
 auto get_param_value_text(const sbox::app& app, id::device dev_id, idx::param param_idx, double value) -> std::string {
 	static constexpr auto BUFFER_SIZE = 50;
-	const auto dev = app.model.read().clap_devices.at(dev_id);
+	const auto dev = app.model.read(ez::main).clap_devices.at(dev_id);
 	if (dev.iface->plugin.params) {
 		const auto param = dev.params[param_idx.value];
 		char buffer[BUFFER_SIZE];
@@ -924,7 +924,7 @@ auto get_param_value_text(const sbox::app& app, id::device dev_id, idx::param pa
 
 [[nodiscard]] static
 auto load(sbox::app* app, id::device dev_id, const std::vector<std::byte>& state) -> bool {
-	const auto dev = app->model.read().clap_devices.at(dev_id);
+	const auto dev = app->model.read(ez::main).clap_devices.at(dev_id);
 	if (dev.iface->plugin.state) {
 		auto bytes = std::span{state};
 		clap_istream_t is;
@@ -944,7 +944,7 @@ auto load(sbox::app* app, id::device dev_id, const std::vector<std::byte>& state
 
 [[nodiscard]] static
 auto save(sbox::app* app, id::device dev_id) -> std::vector<std::byte> {
-	const auto dev = app->model.read().clap_devices.at(dev_id);
+	const auto dev = app->model.read(ez::main).clap_devices.at(dev_id);
 	if (dev.iface->plugin.state) {
 		std::vector<std::byte> bytes;
 		clap_ostream_t os;
@@ -965,7 +965,7 @@ auto save(sbox::app* app, id::device dev_id) -> std::vector<std::byte> {
 
 [[nodiscard]] static
 auto activate(sbox::app* app, id::device dev_id, double sr) -> bool {
-	const auto m              = app->model.read();
+	const auto m              = app->model.read(ez::main);
 	const auto dev            = m.devices.at(dev_id);
 	const auto clap_dev       = m.clap_devices.at(dev_id);
 	const auto already_active = clap_dev.flags.value & device_flags::active;
@@ -980,7 +980,7 @@ auto activate(sbox::app* app, id::device dev_id, double sr) -> bool {
 	if (!result) {
 		return false;
 	}
-	app->model.update_publish([dev_id, sr](model&& m) {
+	app->model.update_publish(ez::main, [dev_id, sr](model&& m) {
 		m.devices = m.devices.update(dev_id, [sr](sbox::device dev) {
 			dev.sample_rate = sr;
 			return dev;
@@ -997,13 +997,13 @@ auto activate(sbox::app* app, id::device dev_id, double sr) -> bool {
 
 static
 auto deactivate(sbox::app* app, id::device dev_id) -> void {
-	const auto m         = app->model.read();
+	const auto m         = app->model.read(ez::main);
 	const auto clap_dev  = m.clap_devices.at(dev_id);
 	const auto is_active = clap_dev.flags.value & device_flags::active;
 	if (!is_active) {
 		return;
 	}
-	app->model.update_publish([dev_id](model&& m) {
+	app->model.update_publish(ez::main, [dev_id](model&& m) {
 		m.clap_devices = m.clap_devices.update(dev_id, [](clap::device clap_dev) {
 			clap_dev.flags.value &= ~device_flags::active;
 			return clap_dev;
@@ -1017,7 +1017,7 @@ auto deactivate(sbox::app* app, id::device dev_id) -> void {
 [[nodiscard]] static
 auto create_gui(sbox::app* app, const sbox::device& dev) -> sbox::create_gui_result {
 	log(app, "clap::main::create_gui");
-	const auto m         = app->model.read();
+	const auto m         = app->model.read(ez::main);
 	const auto clap_dev  = m.clap_devices.at(dev.id);
 	const auto iface     = clap_dev.iface->plugin;
 	if (!iface.gui) {
@@ -1045,7 +1045,7 @@ auto create_gui(sbox::app* app, const sbox::device& dev) -> sbox::create_gui_res
 [[nodiscard]] static
 auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
 	log(app, "clap::main::setup_editor_window");
-	const auto m          = app->model.read();
+	const auto m          = app->model.read(ez::main);
 	const auto clap_dev   = m.clap_devices.at(dev.id);
 	const auto iface      = clap_dev.iface->plugin;
 	const auto window_ref = os::make_clap_window_ref(dev.ui.view);
@@ -1062,7 +1062,7 @@ auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
 
 static
 auto shutdown_editor_window(sbox::app* app, const sbox::device& dev) -> void {
-	const auto m        = app->model.read();
+	const auto m        = app->model.read(ez::main);
 	const auto clap_dev = m.clap_devices.at(dev.id);
 	const auto iface     = clap_dev.iface->plugin;
 	if (!iface.gui) {
@@ -1083,7 +1083,7 @@ auto get_gui_size(const clap::iface_plugin& iface) -> std::optional<window_size_
 
 static
 auto on_native_window_resize(const sbox::app* app, const sbox::device& dev, window_size_f native_window_size) -> void {
-	const auto m                = app->model.read();
+	const auto m                = app->model.read(ez::main);
 	const auto& clap_dev        = m.clap_devices.at(dev.id);
 	const auto iface            = clap_dev.iface->plugin;
 	const auto old_size         = get_gui_size(iface);

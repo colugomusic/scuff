@@ -10,7 +10,7 @@ namespace scuff::sbox::main {
 
 [[nodiscard]] static
 auto get_device_type(const sbox::app& app, id::device dev_id) -> plugin_type {
-	return app.model.read().devices.at(dev_id).type;
+	return app.model.read(ez::main).devices.at(dev_id).type;
 }
 
 [[nodiscard]] static
@@ -71,7 +71,7 @@ auto deactivate(sbox::app* app, const sbox::device& dev) -> void {
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors& msg) -> void {
 	log(&app->debug_ui, "msg::in::close_all_editors:");
-	const auto devices = app->model.read().devices;
+	const auto devices = app->model.read(ez::main).devices;
 	for (const auto& dev : devices) {
 		if (dev.ui.window) {
 			window_hide(dev.ui.window);
@@ -96,11 +96,11 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 	try {
 		if (msg.type == plugin_type::clap) {
 			clap::main::create_device(app, dev_id, msg.plugfile_path, msg.plugin_id, msg.callback);
-			app->model.update_publish([dev_id](model&& m){
+			app->model.update_publish(ez::main, [dev_id](model&& m){
 				m.device_processing_order = make_device_processing_order(m.devices);
 				return m;
 			});
-			const auto dev = app->model.read().devices.at(dev_id);
+			const auto dev = app->model.read(ez::main).devices.at(dev_id);
 			if (app->active) {
 				activate(app, dev, app->sample_rate);
 			}
@@ -121,7 +121,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& msg) -> void {
 	log(app, "msg::in::device_connect:");
-	app->model.update_publish([msg](model&& m){
+	app->model.update_publish(ez::main, [msg](model&& m){
 		auto in_dev_ptr  = m.devices.find({msg.in_dev_id});
 		auto out_dev_ptr = m.devices.find({msg.out_dev_id});
 		if (!in_dev_ptr)  { throw std::runtime_error(std::format("Input device {} doesn't exist in this sandbox!", msg.in_dev_id)); }
@@ -141,7 +141,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& ms
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect& msg) -> void {
 	log(app, "msg::in::device_disconnect:");
-	app->model.update_publish([msg](model&& m){
+	app->model.update_publish(ez::main, [msg](model&& m){
 		const auto in_dev_ptr  = m.devices.find({msg.in_dev_id});
 		const auto out_dev_ptr = m.devices.find({msg.out_dev_id});
 		if (!in_dev_ptr)  { throw std::runtime_error(std::format("Input device {} doesn't exist in this sandbox!", msg.in_dev_id)); }
@@ -165,7 +165,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect&
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg) -> void {
 	log(app, "msg::in::device_erase:");
-	app->model.update_publish([msg](model&& m){
+	app->model.update_publish(ez::main, [msg](model&& m){
 		const auto dev_id  = id::device{msg.dev_id};
 		const auto devices = m.devices;
 		// Remove any internal connections to this device
@@ -187,7 +187,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg)
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_hide& msg) -> void {
 	log(app, "msg::in::device_gui_hide:");
-	const auto devices = app->model.read().devices;
+	const auto devices = app->model.read(ez::main).devices;
 	auto device        = devices.at({msg.dev_id});
 	gui::hide(app, device);
 }
@@ -240,7 +240,7 @@ static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::event& msg) -> void {
 	log(app, "msg::in::event:");
 	const auto dev_id  = id::device{msg.dev_id};
-	const auto devices = app->model.read().devices;
+	const auto devices = app->model.read(ez::main).devices;
 	const auto dev     = devices.at(dev_id);
 	dev.service->input_events_from_main.enqueue(msg.event);
 }
@@ -274,7 +274,7 @@ static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::activate& msg) -> void {
 	log(app, "msg::in::activate: %f", msg.sr);
 	audio::start(app);
-	const auto m = app->model.read();
+	const auto m = app->model.read(ez::main);
 	for (const auto& dev : m.devices) {
 		activate(app, dev, msg.sr);
 	}
@@ -286,7 +286,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::activate& msg) -> 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::deactivate& msg) -> void {
 	log(app, "msg::in::deactivate:");
-	const auto m = app->model.read();
+	const auto m = app->model.read(ez::main);
 	for (const auto& dev : m.devices) {
 		deactivate(app, dev);
 	}

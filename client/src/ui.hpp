@@ -18,7 +18,7 @@ auto send(const scuff::group& group, const ui::msg::group& msg) -> void {
 
 static
 auto send(const scuff::sandbox& sbox, const ui::msg::group& msg) -> void {
-	if (const auto group = DATA_->model.read().groups.find(sbox.group)) {
+	if (const auto group = DATA_->model.read(ez::ui).groups.find(sbox.group)) {
 		send(*group, msg);
 	}
 }
@@ -57,7 +57,7 @@ static auto cb_(const ui::msg::param_value& msg, const group_ui& ui) -> void    
 static auto cb_(const ui::msg::param_value_text& msg, const group_ui& ui) -> void      { msg.callback(msg.text); }
 
 static auto cb_(const ui::msg::device_editor_visible_changed& msg, const group_ui& ui) -> void {
-	DATA_->model.update([dev_id = msg.dev, native_handle = msg.native_handle](model&& m) {
+	DATA_->model.update(ez::ui, [dev_id = msg.dev, native_handle = msg.native_handle](model&& m) {
 		auto dev = m.devices.at(dev_id);
 		dev.editor_window_native_handle = (void*)(native_handle);
 		m.devices = m.devices.insert(dev);
@@ -78,7 +78,7 @@ auto call_callbacks(const general_ui& ui) -> void {
 
 static
 auto call_callbacks(scuff::id::group group_id, const group_ui& ui) -> void {
-	const auto m      = DATA_->model.read();
+	const auto m      = DATA_->model.read(ez::ui);
 	const auto& group = m.groups.at(group_id);
 	while (const auto msg = pop_msg(&group.services->ui)) {
 		cb(*msg, ui);

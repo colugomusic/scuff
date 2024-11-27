@@ -100,7 +100,7 @@ auto read_broken_plugfile(const nlohmann::json& j) -> void {
 	pf.path  = path;
 	pf.error = error;
 	pf.type  = scuff::plugin_type_from_string(plugfile_type);
-	DATA_->model.update([pf](model&& m){
+	DATA_->model.update(ez::nort, [pf](model&& m){
 		m.plugfiles = m.plugfiles.insert(pf);
 		return m;
 	});
@@ -109,7 +109,7 @@ auto read_broken_plugfile(const nlohmann::json& j) -> void {
 
 [[nodiscard]] static
 auto find_plugfile_from_path(std::string_view path) -> id::plugfile {
-	const auto m         = DATA_->model.read();
+	const auto m         = DATA_->model.read(ez::nort);
 	for (const auto& pf : m.plugfiles) {
 		if (pf.path == path) {
 			return pf.id;
@@ -139,7 +139,7 @@ auto read_broken_plugin(const nlohmann::json& j) -> void {
 		plugin.vendor   = vendor;
 		plugin.version  = version;
 		plugin.plugfile = find_plugfile_from_path(path);
-		DATA_->model.update([plugin](model&& m){
+		DATA_->model.update(ez::nort, [plugin](model&& m){
 			m.plugins = m.plugins.insert(plugin);
 			return m;
 		});
@@ -163,7 +163,7 @@ auto read_plugfile(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 	pf.id   = id::plugfile{id_gen_++};
 	pf.path = path;
 	pf.type = scuff::plugin_type_from_string(plugfile_type);
-	DATA_->model.update([pf](model&& m){
+	DATA_->model.update(ez::nort, [pf](model&& m){
 		m.plugfiles = m.plugfiles.insert(pf);
 		return m;
 	});
@@ -214,7 +214,7 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 			// If it is, check if the version is higher.
 			// If it is, update the existing plugin entry.
 			// If it isn't ignore this plugin.
-			const auto m = DATA_->model.read();
+			const auto m = DATA_->model.read(ez::nort);
 			if (const auto existing_plugin = find_existing_plugin(m, id)) {
 				ui::send(ui::msg::scan_warning{std::format("The scanner found multiple plugins with the same id: '{}'", id)});
 				if (version.compare(existing_plugin->version) <= 0) {
@@ -230,7 +230,7 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 			plugin.version       = version;
 			plugin.clap_features = to_immer(features);
 			plugin.plugfile      = find_plugfile_from_path(path);
-			DATA_->model.update([plugin](model&& m){
+			DATA_->model.update(ez::nort, [plugin](model&& m){
 				m.plugins = m.plugins.insert(plugin);
 				return m;
 			});

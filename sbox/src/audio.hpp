@@ -52,7 +52,7 @@ auto do_processing(const sbox::app& app, const sbox::device& dev) -> void {
 
 static
 auto do_processing(sbox::app* app) -> void {
-	app->audio_model = app->model.rt_read();
+	app->audio_model = app->model.read(ez::audio);
 	for (const auto dev_id : app->audio_model->device_processing_order) {
 		const auto dev = app->audio_model->devices.at(dev_id);
 		do_processing(*app, dev);

@@ -37,7 +37,7 @@ auto hide(sbox::app* app, sbox::device dev) -> void {
 	}
 	window_hide(dev.ui.window);
 	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(os::get_editor_window_native_handle(dev))});
-	app->model.update([dev](model&& m){
+	app->model.update(ez::main, [dev](model&& m){
 		m.devices = m.devices.insert(dev);
 		return m;
 	});
@@ -54,7 +54,7 @@ auto on_native_window_resize_impl(sbox::app* app, const sbox::device& dev, windo
 
 static
 auto on_native_window_close(device_window_listener* dwl, Event* event) -> void {
-	const auto& device = dwl->app->model.read().devices.at(dwl->dev_id);
+	const auto& device = dwl->app->model.read(ez::main).devices.at(dwl->dev_id);
 	gui::hide(dwl->app, device);
 }
 
@@ -62,14 +62,14 @@ static
 auto on_native_window_resize(device_window_listener* dwl, Event* event) -> void {
 	const auto size = event_params(event, EvSize);
 	log_printf("on_window_resize: %f,%f", size->width, size->height);
-	const auto m    = dwl->app->model.read();
+	const auto m    = dwl->app->model.read(ez::main);
 	const auto& dev = m.devices.at(dwl->dev_id);
 	on_native_window_resize_impl(dwl->app, dev, {size->width, size->height});
 }
 
 static
 auto show(sbox::app* app, scuff::id::device dev_id) -> void {
-	const auto devices   = app->model.read().devices;
+	const auto devices   = app->model.read(ez::main).devices;
 	auto device          = devices.at({dev_id});
 	const auto has_gui   = device.service->shm.data->flags.value & shm::device_flags::has_gui;
 	if (!has_gui) {
@@ -110,7 +110,7 @@ auto show(sbox::app* app, scuff::id::device dev_id) -> void {
 	if (!setup_editor_window(app, device)) {
 		log(app, "Failed to setup clap editor window");
 	}
-	app->model.update([device](model&& m){
+	app->model.update(ez::main, [device](model&& m){
 		m.devices = m.devices.insert(device);
 		return m;
 	});

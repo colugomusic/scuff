@@ -56,7 +56,7 @@ auto create() -> sbox::app* {
 
 static
 auto destroy_all_editor_windows(const sbox::app& app) -> void {
-	const auto m = app.model.read();
+	const auto m = app.model.read(ez::main);
 	for (auto dev : m.devices) {
 		if (dev.ui.window) {
 			window_destroy(&dev.ui.window);
@@ -90,7 +90,7 @@ auto check_heartbeat(sbox::app* app) -> void {
 
 static
 auto do_scheduled_window_resizes(sbox::app* app) -> void {
-	const auto m = app->model.read();
+	const auto m = app->model.read(ez::main);
 	for (const auto& dev : m.devices) {
 		if (dev.service->scheduled_window_resize) {
 			S2Df sz;

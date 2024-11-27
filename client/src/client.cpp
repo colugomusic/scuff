@@ -234,7 +234,7 @@ auto do_sandbox_processing(const ez::immutable<model>& audio, const scuff::group
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::confirm_activated& msg) -> void {
-	DATA_->model.update_publish([sbox = sbox](model&& m) mutable {
+	DATA_->model.update_publish(ez::nort, [sbox = sbox](model&& m) mutable {
 		sbox.flags.value |= sandbox_flags::confirmed_active;
 		m.sandboxes       = m.sandboxes.insert(sbox);
 		auto group                   = m.groups.at(sbox.group);
@@ -247,7 +247,7 @@ auto process_message_(const sandbox& sbox, const msg::out::confirm_activated& ms
 static
 auto process_message_(const sandbox& sbox, const msg::out::device_create_fail& msg) -> void {
 	// The sandbox failed to create the remote device.
-	DATA_->model.update_publish([sbox, msg](model&& m){
+	DATA_->model.update_publish(ez::nort, [sbox, msg](model&& m){
 		m = set_error(std::move(m), {msg.dev_id}, "Failed to create remote device.");
 		return m;
 	});
@@ -258,7 +258,7 @@ auto process_message_(const sandbox& sbox, const msg::out::device_create_fail& m
 static
 auto process_message_(const sandbox& sbox, const msg::out::device_create_success& msg) -> void {
 	// The sandbox succeeded in creating the remote device.
-	DATA_->model.update_publish([sbox, msg](model&& m){
+	DATA_->model.update_publish(ez::nort, [sbox, msg](model&& m){
 		auto device             = m.devices.at({msg.dev_id});
 		const auto& sbox        = m.sandboxes.at(device.sbox);
 		const auto device_shmid = shm::make_device_id(sbox.services->get_shmid(), {msg.dev_id});
@@ -337,7 +337,7 @@ auto process_message(const sandbox& sbox, const msg::out::msg& msg) -> void {
 static
 auto process_sandbox_messages(const sandbox& sbox) -> void {
 	if (launched(sbox) && !sbox.services->proc.running()) {
-		DATA_->model.update_publish([sbox = sbox](model&& m) mutable {
+		DATA_->model.update_publish(ez::nort, [sbox = sbox](model&& m) mutable {
 			sbox.flags.value &= ~sandbox_flags::launched;
 			m.sandboxes       = m.sandboxes.insert(sbox);
 			for (const auto dev_id : sbox.devices) {
@@ -352,7 +352,7 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 			m.groups                     = m.groups.insert(group);
 			return m;
 		});
-		const auto m      = DATA_->model.read();
+		const auto m      = DATA_->model.read(ez::nort);
 		const auto& group = m.groups.at(sbox.group);
 		auto _            = signaling::unblock_self(group.services->signaler);
 		ui::send(sbox, ui::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
@@ -369,7 +369,7 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 
 static
 auto process_sandbox_messages() -> void {
-	const auto sandboxes = DATA_->model.read().sandboxes;
+	const auto sandboxes = DATA_->model.read(ez::nort).sandboxes;
 	for (const auto& sbox : sandboxes) {
 		process_sandbox_messages(sbox);
 	}
@@ -381,7 +381,7 @@ auto save_dirty_device_state(const scuff::device& dev) -> void {
 	const auto saved_marker = dev.services->saved_marker.load();
 	if (dirty_marker > saved_marker) {
 		auto with_bytes = [dev_id = dev.id, dirty_marker](const scuff::bytes& bytes){
-			DATA_->model.update([dev_id, dirty_marker, &bytes](model&& m){
+			DATA_->model.update(ez::nort, [dev_id, dirty_marker, &bytes](model&& m){
 				if (const auto ptr = m.devices.find(dev_id)) {
 					if (ptr->services->dirty_marker.load() > dirty_marker) {
 						// These bytes are already out of date
@@ -402,7 +402,7 @@ auto save_dirty_device_state(const scuff::device& dev) -> void {
 static
 auto save_dirty_device_states() -> void {
 	try {
-		const auto m = DATA_->model.read();
+		const auto m = DATA_->model.read(ez::nort);
 		for (const auto& dev : m.devices) {
 			save_dirty_device_state(dev);
 		}
@@ -418,12 +418,12 @@ auto is_running(const sandbox& sbox) -> bool {
 
 [[nodiscard]] static
 auto is_running(id::sandbox sbox) -> bool {
-	return is_running(scuff::DATA_->model.read().sandboxes.at({sbox}));
+	return is_running(scuff::DATA_->model.read(ez::nort).sandboxes.at({sbox}));
 }
 
 static
 auto send_heartbeat() -> void {
-	const auto m = DATA_->model.read();
+	const auto m = DATA_->model.read(ez::nort);
 	for (const auto& sbox : m.sandboxes) {
 		if (is_running(sbox)) {
 			sbox.services->enqueue(msg::in::heartbeat{});
@@ -441,7 +441,7 @@ auto poll_thread(std::stop_token stop_token) -> void {
 	while (!stop_token.stop_requested()) {
 		now = std::chrono::steady_clock::now();
 		if (now > next_gc) {
-			DATA_->model.gc();
+			DATA_->model.gc(ez::nort);
 			next_gc = now + std::chrono::milliseconds{GC_INTERVAL_MS};
 		}
 		if (now > next_hb) {
@@ -459,7 +459,7 @@ auto poll_thread(std::stop_token stop_token) -> void {
 
 static
 auto activate(id::group group_id, double sr) -> void {
-	DATA_->model.update([group_id, sr](model&& m){
+	DATA_->model.update(ez::nort, [group_id, sr](model&& m){
 		auto group = m.groups.at(group_id);
 		group.flags.value |= group_flags::is_active;
 		group.sample_rate = sr;
@@ -475,7 +475,7 @@ auto activate(id::group group_id, double sr) -> void {
 
 static
 auto deactivate(id::group group_id) -> void {
-	DATA_->model.update([group_id](model&& m){
+	DATA_->model.update(ez::nort, [group_id](model&& m){
 		auto group = m.groups.at(group_id);
 		group.flags.value &= ~group_flags::is_active;
 		m.groups = m.groups.insert(group);
@@ -488,7 +488,7 @@ auto deactivate(id::group group_id) -> void {
 
 static
 auto close_all_editors() -> void {
-	const auto sandboxes = scuff::DATA_->model.read().sandboxes;
+	const auto sandboxes = scuff::DATA_->model.read(ez::nort).sandboxes;
 	for (const auto& sandbox : sandboxes) {
 		if (is_running(sandbox)) {
 			sandbox.services->enqueue(scuff::msg::in::close_all_editors{});
@@ -498,7 +498,7 @@ auto close_all_editors() -> void {
 
 static
 auto connect(id::device dev_out_id, size_t port_out, id::device dev_in_id, size_t port_in) -> void {
-	DATA_->model.update_publish([dev_out_id, port_out, dev_in_id, port_in](model&& m){
+	DATA_->model.update_publish(ez::nort, [dev_out_id, port_out, dev_in_id, port_in](model&& m){
 		const auto& dev_out = m.devices.at(dev_out_id);
 		const auto& dev_in  = m.devices.at(dev_in_id);
 		if (dev_out.sbox == dev_in.sbox) {
@@ -539,7 +539,7 @@ auto find(const model& m, ext::id::plugin plugin_id) -> id::plugin {
 
 [[nodiscard]] static
 auto find(ext::id::plugin plugin_id) -> id::plugin {
-	return find(DATA_->model.read(), plugin_id);
+	return find(DATA_->model.read(ez::nort), plugin_id);
 }
 
 [[nodiscard]] static
@@ -572,7 +572,7 @@ auto create_device_async(model&& m, id::device dev_id, const sandbox& sbox, plug
 [[nodiscard]] static
 auto create_device_async(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id, return_create_device_result return_fn) -> id::device {
 	const auto dev_id = id::device{scuff::id_gen_++};
-	DATA_->model.update([dev_id, sbox_id, type, plugin_ext_id, return_fn](model&& m){
+	DATA_->model.update(ez::nort, [dev_id, sbox_id, type, plugin_ext_id, return_fn](model&& m){
 		const auto sbox     = m.sandboxes.at(sbox_id);
 		const auto plugin_id = id::plugin{find(m, plugin_ext_id)};
 		m = create_device_async(std::move(m), dev_id, sbox, type, plugin_ext_id, plugin_id, return_fn);
@@ -625,7 +625,7 @@ auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin
 
 static
 auto device_disconnect(id::device dev_out_id, size_t port_out, id::device dev_in_id, size_t port_in) -> void {
-	DATA_->model.update_publish([dev_out_id, port_out, dev_in_id, port_in](model&& m){
+	DATA_->model.update_publish(ez::nort, [dev_out_id, port_out, dev_in_id, port_in](model&& m){
 		const auto& dev_out = m.devices.at({dev_out_id});
 		const auto& dev_in  = m.devices.at({dev_in_id});
 		if (dev_out.sbox == dev_in.sbox) {
@@ -661,7 +661,7 @@ auto debug__check_we_are_in_the_ui_thread() -> void {
 
 static
 auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_create_device_result fn) -> id::device {
-	auto m                   = DATA_->model.read();
+	auto m                   = DATA_->model.read(ez::nort);
 	const auto new_dev_id    = id::device{scuff::id_gen_++};
 	const auto src_dev       = m.devices.at({src_dev_id});
 	const auto src_sbox      = m.sandboxes.at(src_dev.sbox);
@@ -686,7 +686,7 @@ auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_crea
 			// Call user's callback
 			fn(result);
 		};
-		DATA_->model.update([=](model&& m){
+		DATA_->model.update(ez::nort, [=](model&& m){
 			return create_device_async(std::move(m), new_dev_id, dst_sbox, type, plugin_ext_id, plugin, return_fn);
 		});
 	});
@@ -714,7 +714,7 @@ auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id) -> create_device_
 
 static
 auto erase(id::device dev_id) -> void {
-	DATA_->model.update_publish([=](model&& m){
+	DATA_->model.update_publish(ez::nort, [=](model&& m){
 		const auto& dev   = m.devices.at(dev_id);
 		const auto& sbox  = m.sandboxes.at(dev.sbox);
 		const auto& group = m.groups.at(sbox.group);
@@ -730,7 +730,7 @@ auto erase(id::device dev_id) -> void {
 
 [[nodiscard]] static
 auto find(id::device dev_id, ext::id::param param_id) -> idx::param {
-	const auto m    = DATA_->model.read();
+	const auto m    = DATA_->model.read(ez::nort);
 	const auto dev  = m.devices.at(dev_id);
 	const auto lock = std::lock_guard{dev.services->shm.data->param_info_mutex};
 	for (size_t i = 0; i < dev.services->shm.data->param_info.size(); i++) {
@@ -744,12 +744,12 @@ auto find(id::device dev_id, ext::id::param param_id) -> idx::param {
 
 [[nodiscard]] static
 auto get_error(id::device dev) -> const char* {
-	return DATA_->model.read().devices.at(dev).error->c_str();
+	return DATA_->model.read(ez::nort).devices.at(dev).error->c_str();
 }
 
 [[nodiscard]] static
 auto get_features(id::plugin plugin) -> std::vector<std::string> {
-	const auto list = DATA_->model.read().plugins.at(plugin).clap_features;
+	const auto list = DATA_->model.read(ez::nort).plugins.at(plugin).clap_features;
 	std::vector<std::string> out;
 	for (const auto& feature : list) {
 		out.push_back(feature);
@@ -759,7 +759,7 @@ auto get_features(id::plugin plugin) -> std::vector<std::string> {
 
 [[nodiscard]] static
 auto get_param_count(id::device dev) -> size_t {
-	const auto m       = DATA_->model.read();
+	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
 	if (!shm::is_valid(device.services->shm.seg)) {
 		// Device wasn't successfully created by the sandbox process (yet?)
@@ -771,7 +771,7 @@ auto get_param_count(id::device dev) -> size_t {
 
 static
 auto get_param_value_text(id::device dev, idx::param param, double value, return_string fn) -> void {
-	const auto m        = DATA_->model.read();
+	const auto m        = DATA_->model.read(ez::nort);
 	const auto& device  = m.devices.at({dev});
 	const auto& sbox    = m.sandboxes.at(device.sbox);
 	const auto callback = sbox.services->return_buffers.strings.put(fn);
@@ -780,17 +780,17 @@ auto get_param_value_text(id::device dev, idx::param param, double value, return
 
 [[nodiscard]] static
 auto get_plugin(id::device dev) -> id::plugin {
-	return DATA_->model.read().devices.at(dev).plugin;
+	return DATA_->model.read(ez::nort).devices.at(dev).plugin;
 }
 
 [[nodiscard]] static
 auto get_type(id::plugin id) -> plugin_type {
-	return DATA_->model.read().plugins.at(id).type;
+	return DATA_->model.read(ez::nort).plugins.at(id).type;
 }
 
 [[nodiscard]] static
 auto has_gui(id::device dev) -> bool {
-	const auto m       = DATA_->model.read();
+	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
 	if (!shm::is_valid(device.services->shm.seg)) {
 		// Device wasn't successfully created by the sandbox process (yet?)
@@ -802,7 +802,7 @@ auto has_gui(id::device dev) -> bool {
 
 [[nodiscard]] static
 auto has_params(id::device dev) -> bool {
-	const auto m       = DATA_->model.read();
+	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
 	if (!shm::is_valid(device.services->shm.seg)) {
 		// Device wasn't successfully created by the sandbox process (yet?)
@@ -823,7 +823,7 @@ auto has_rack_features(const immer::vector<std::string>& features) -> bool {
 
 [[nodiscard]] static
 auto has_rack_features(id::plugin id) -> bool {
-	const auto m       = DATA_->model.read();
+	const auto m       = DATA_->model.read(ez::nort);
 	const auto& plugin = m.plugins.at(id);
 	switch (plugin.type) {
 		case plugin_type::clap: {
@@ -841,7 +841,7 @@ auto has_rack_features(id::plugin id) -> bool {
 
 static
 auto set_render_mode(id::group group_id, render_mode mode) -> void {
-	const auto m = DATA_->model.read();
+	const auto m = DATA_->model.read(ez::nort);
 	auto group   = m.groups.at(group_id);
 	group.render_mode = mode;
 	for (const auto sbox_id : group.sandboxes) {
@@ -850,7 +850,7 @@ auto set_render_mode(id::group group_id, render_mode mode) -> void {
 			sbox.services->enqueue(scuff::msg::in::set_render_mode{mode});
 		}
 	}
-	DATA_->model.update([group](model&& m){
+	DATA_->model.update(ez::nort, [group](model&& m){
 		m.groups = m.groups.insert(group);
 		return m;
 	});
@@ -859,7 +859,7 @@ auto set_render_mode(id::group group_id, render_mode mode) -> void {
 [[nodiscard]] static
 auto get_broken_plugfiles() -> std::vector<id::plugfile> {
 	std::vector<id::plugfile> out;
-	const auto m = DATA_->model.read();
+	const auto m = DATA_->model.read(ez::nort);
 	for (const auto& pf : m.plugfiles) {
 		if (!pf.error->empty()) {
 			out.push_back(pf.id);
@@ -871,7 +871,7 @@ auto get_broken_plugfiles() -> std::vector<id::plugfile> {
 [[nodiscard]] static
 auto get_broken_plugins() -> std::vector<id::plugin> {
 	std::vector<id::plugin> out;
-	const auto m = DATA_->model.read();
+	const auto m = DATA_->model.read(ez::nort);
 	for (const auto& plugin : m.plugins) {
 		if (!plugin.error->empty()) {
 			out.push_back(plugin.id);
@@ -882,7 +882,7 @@ auto get_broken_plugins() -> std::vector<id::plugin> {
 
 [[nodiscard]] static
 auto get_devices(id::sandbox sbox_id) -> std::vector<id::device> {
-	const auto m     = DATA_->model.read();
+	const auto m     = DATA_->model.read(ez::nort);
 	const auto& sbox = m.sandboxes.at(sbox_id);
 	std::vector<id::device> out;
 	for (const auto dev_id : sbox.devices) {
@@ -893,7 +893,7 @@ auto get_devices(id::sandbox sbox_id) -> std::vector<id::device> {
 
 static
 auto gui_hide(id::device dev) -> void {
-	const auto m       = DATA_->model.read();
+	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
 	const auto& sbox   = m.sandboxes.at(device.sbox);
 	sbox.services->enqueue(scuff::msg::in::device_gui_hide{dev.value});
@@ -901,7 +901,7 @@ auto gui_hide(id::device dev) -> void {
 
 static
 auto gui_show(id::device dev) -> void {
-	const auto m       = DATA_->model.read();
+	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
 	const auto& sbox   = m.sandboxes.at(device.sbox);
 	sbox.services->enqueue(scuff::msg::in::device_gui_show{dev.value});
@@ -909,13 +909,13 @@ auto gui_show(id::device dev) -> void {
 
 [[nodiscard]] static
 auto was_loaded_successfully(id::device dev) -> bool {
-	return DATA_->model.read().devices.at(dev).flags.value & device_flags::created_successfully;
+	return DATA_->model.read(ez::nort).devices.at(dev).flags.value & device_flags::created_successfully;
 }
 
 [[nodiscard]] static
 auto create_group(double sample_rate) -> id::group {
 	const auto group_id = id::group{id_gen_++};
-	DATA_->model.update([=](model&& m){
+	DATA_->model.update(ez::nort, [=](model&& m){
 		scuff::group group;
 		group.id          = group_id;
 		group.sample_rate = sample_rate;
@@ -932,7 +932,7 @@ auto create_group(double sample_rate) -> id::group {
 
 static
 auto erase(id::group group_id) -> void {
-	DATA_->model.update_publish([=](model&& m){
+	DATA_->model.update_publish(ez::nort, [=](model&& m){
 		const auto& group = m.groups.at(group_id);
 		const auto sandbox_ids = group.sandboxes;
 		for (const auto sbox_id : sandbox_ids) {
@@ -958,7 +958,7 @@ auto is_scanning() -> bool {
 
 static
 auto get_value_async(id::device dev, idx::param param, return_double fn) -> void {
-	const auto& m       = DATA_->model.read();
+	const auto& m       = DATA_->model.read(ez::nort);
 	const auto& device  = m.devices.at({dev});
 	const auto& sbox    = m.sandboxes.at(device.sbox);
 	const auto callback = sbox.services->return_buffers.doubles.put(fn);
@@ -985,7 +985,7 @@ auto get_value(id::device dev_id, idx::param param) -> double {
 
 [[nodiscard]] static
 auto get_info(id::device dev_id, idx::param param) -> param_info {
-	const auto m    = DATA_->model.read();
+	const auto m    = DATA_->model.read(ez::nort);
 	const auto dev  = m.devices.at(dev_id);
 	const auto lock = std::unique_lock{dev.services->shm.data->param_info_mutex};
 	if (param.value >= dev.services->shm.data->param_info.size()) {
@@ -996,7 +996,7 @@ auto get_info(id::device dev_id, idx::param param) -> param_info {
 
 static
 auto push_event(id::device dev, const scuff::event& event) -> void {
-	const auto m       = DATA_->model.read();
+	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at({dev});
 	const auto& sbox   = m.sandboxes.at(device.sbox);
 	intercept_input_event(device, event);
@@ -1005,32 +1005,32 @@ auto push_event(id::device dev, const scuff::event& event) -> void {
 
 [[nodiscard]] static
 auto get_path(id::plugfile plugfile) -> const char* {
-	return DATA_->model.read().plugfiles.at({plugfile}).path->c_str();
+	return DATA_->model.read(ez::nort).plugfiles.at({plugfile}).path->c_str();
 }
 
 [[nodiscard]] static
 auto get_error(id::plugfile plugfile) -> const char* {
-	return DATA_->model.read().plugfiles.at({plugfile}).error->c_str();
+	return DATA_->model.read(ez::nort).plugfiles.at({plugfile}).error->c_str();
 }
 
 [[nodiscard]] static
 auto get_error(id::plugin plugin) -> const char* {
-	return DATA_->model.read().plugins.at({plugin}).error->c_str();
+	return DATA_->model.read(ez::nort).plugins.at({plugin}).error->c_str();
 }
 
 [[nodiscard]] static
 auto get_ext_id(id::plugin plugin) -> ext::id::plugin {
-	return DATA_->model.read().plugins.at(plugin).ext_id;
+	return DATA_->model.read(ez::nort).plugins.at(plugin).ext_id;
 }
 
 [[nodiscard]] static
 auto get_name(id::plugin plugin) -> const char* {
-	return DATA_->model.read().plugins.at({plugin}).name->c_str();
+	return DATA_->model.read(ez::nort).plugins.at({plugin}).name->c_str();
 }
 
 [[nodiscard]] static
 auto get_plugin_ext_id(id::device dev) -> ext::id::plugin {
-	return DATA_->model.read().devices.at(dev).plugin_ext_id;
+	return DATA_->model.read(ez::nort).devices.at(dev).plugin_ext_id;
 }
 
 [[nodiscard]] static
@@ -1052,7 +1052,7 @@ auto get_value_text(id::device dev_id, idx::param param, double value) -> std::s
 
 static
 auto get_value_text_async(id::device dev_id, idx::param param, double value, return_string fn) -> void {
-	const auto m     = DATA_->model.read();
+	const auto m     = DATA_->model.read(ez::nort);
 	const auto& dev  = m.devices.at(dev_id);
 	const auto& sbox = m.sandboxes.at(dev.sbox);
 	const auto callback = sbox.services->return_buffers.strings.put(fn);
@@ -1061,12 +1061,12 @@ auto get_value_text_async(id::device dev_id, idx::param param, double value, ret
 
 [[nodiscard]] static
 auto get_vendor(id::plugin plugin) -> const char* {
-	return DATA_->model.read().plugins.at({plugin}).vendor->c_str();
+	return DATA_->model.read(ez::nort).plugins.at({plugin}).vendor->c_str();
 }
 
 [[nodiscard]] static
 auto get_version(id::plugin plugin) -> const char* {
-	return DATA_->model.read().plugins.at({plugin}).version->c_str();
+	return DATA_->model.read(ez::nort).plugins.at({plugin}).version->c_str();
 }
 
 static
@@ -1077,14 +1077,14 @@ auto load_async(const model& m, const scuff::device& dev, const scuff::bytes& st
 
 static
 auto load_async(id::device dev_id, const scuff::bytes& state, return_load_device_result fn) -> void {
-	const auto m   = DATA_->model.read();
+	const auto m   = DATA_->model.read(ez::nort);
 	const auto& dev = m.devices.at(dev_id);
 	load_async(m, dev, state, fn);
 }
 
 static
 auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
-	const auto m      = DATA_->model.read();
+	const auto m      = DATA_->model.read(ez::nort);
 	auto sandbox      = m.sandboxes.at({sbox});
 	const auto& group = m.groups.at(sandbox.group);
 	if (sandbox.services->proc.running()) {
@@ -1112,7 +1112,7 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 	}
 	sandbox.services->enqueue(msg::in::activate{group.sample_rate});
 	sandbox.services->enqueue(msg::in::set_render_mode{group.render_mode});
-	DATA_->model.update([sandbox](model&& m){
+	DATA_->model.update(ez::nort, [sandbox](model&& m){
 		m.sandboxes = m.sandboxes.insert(sandbox);
 		return m;
 	});
@@ -1139,7 +1139,7 @@ auto load(id::device dev, const scuff::bytes& bytes) -> bool {
 
 static
 auto update_saved_state_with_returned_bytes(id::device dev_id, const scuff::bytes& bytes) -> void {
-	DATA_->model.update([dev_id, &bytes](model&& m){
+	DATA_->model.update(ez::nort, [dev_id, &bytes](model&& m){
 		if (auto ptr = m.devices.find(dev_id)) {
 			auto dev = *ptr;
 			dev.last_saved_state = bytes;
@@ -1155,14 +1155,14 @@ auto save_async(const scuff::device& dev, return_bytes fn) -> void {
 		update_saved_state_with_returned_bytes(dev_id, bytes);
 		fn(bytes);
 	};
-	const auto m = DATA_->model.read();
+	const auto m = DATA_->model.read(ez::nort);
 	const auto sbox = m.sandboxes.at(dev.sbox);
 	sbox.services->enqueue(msg::in::device_save{dev.id.value, sbox.services->return_buffers.states.put(wrapper_fn)});
 }
 
 static
 auto save_async(id::device dev_id, return_bytes fn) -> void {
-	const auto m = DATA_->model.read();
+	const auto m = DATA_->model.read(ez::nort);
 	save_async(m.devices.at(dev_id), fn);
 }
 
@@ -1178,7 +1178,7 @@ auto save(id::device dev_id) -> scuff::bytes {
 	auto ready = [&done] {
 		return done;
 	};
-	const auto m    = DATA_->model.read();
+	const auto m    = DATA_->model.read(ez::nort);
 	const auto& dev = m.devices.at(dev_id);
 	save_async(dev, fn);
 	if (!bso.wait_for(ready)) {
@@ -1216,7 +1216,7 @@ auto remove_sandbox_from_group(model&& m, id::group group, id::sandbox sbox) -> 
 [[nodiscard]] static
 auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::sandbox {
 	const auto sbox_id = id::sandbox{id_gen_++};
-	DATA_->model.update_publish([=](model&& m){
+	DATA_->model.update_publish(ez::nort, [=](model&& m){
 		sandbox sbox;
 		sbox.id = sbox_id;
 		const auto& group        = m.groups.at({group_id});
@@ -1237,7 +1237,7 @@ auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::s
 
 static
 auto erase(id::sandbox sbox) -> void {
-	DATA_->model.update_publish([=](model&& m){
+	DATA_->model.update_publish(ez::nort, [=](model&& m){
 		const auto& sandbox = m.sandboxes.at({sbox});
 		m = remove_sandbox_from_group(std::move(m), sandbox.group, {sbox});
 		m.sandboxes = m.sandboxes.erase({sbox});
@@ -1248,7 +1248,7 @@ auto erase(id::sandbox sbox) -> void {
 [[nodiscard]] static
 auto get_working_plugins() -> std::vector<id::plugin> {
 	std::vector<id::plugin> out;
-	const auto m = DATA_->model.read();
+	const auto m = DATA_->model.read(ez::nort);
 	for (const auto& plugin : m.plugins) {
 		if (plugin.error->empty()) {
 			out.push_back(plugin.id);
@@ -1273,34 +1273,34 @@ auto managed(id::sandbox id) -> managed_sandbox {
 }
 
 auto ref(id::device id) -> void {
-	DATA_->model.read().devices.at(id).services->ref_count++;
+	DATA_->model.read(ez::nort).devices.at(id).services->ref_count++;
 }
 
 auto ref(id::group id) -> void {
-	DATA_->model.read().groups.at(id).services->ref_count++;
+	DATA_->model.read(ez::nort).groups.at(id).services->ref_count++;
 }
 
 auto ref(id::sandbox id) -> void {
-	DATA_->model.read().sandboxes.at(id).services->ref_count++;
+	DATA_->model.read(ez::nort).sandboxes.at(id).services->ref_count++;
 }
 
 auto unref(id::device id) -> void {
 	if (!DATA_) { return; }
-	if (--DATA_->model.read().devices.at(id).services->ref_count <= 0) {
+	if (--DATA_->model.read(ez::nort).devices.at(id).services->ref_count <= 0) {
 		erase(id);
 	}
 }
 
 auto unref(id::group id) -> void {
 	if (!DATA_) { return; }
-	if (--DATA_->model.read().groups.at(id).services->ref_count <= 0) {
+	if (--DATA_->model.read(ez::nort).groups.at(id).services->ref_count <= 0) {
 		erase(id);
 	}
 }
 
 auto unref(id::sandbox id) -> void {
 	if (!DATA_) { return; }
-	if (--DATA_->model.read().sandboxes.at(id).services->ref_count <= 0) {
+	if (--DATA_->model.read(ez::nort).sandboxes.at(id).services->ref_count <= 0) {
 		erase(id);
 	}
 }
@@ -1310,7 +1310,7 @@ auto unref(id::sandbox id) -> void {
 namespace scuff {
 
 auto audio_process(const group_process& process) -> void {
-	const auto audio = scuff::DATA_->model.rt_read();
+	const auto audio = scuff::DATA_->model.read(ez::audio);
 	if (const auto group = audio->groups.find({process.group})) {
 		impl::process_inputs(*audio, process.audio_inputs, process.input_events);
 		if (impl::do_sandbox_processing(audio, *group)) {
