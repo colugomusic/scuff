@@ -21,6 +21,7 @@ list (APPEND scuff-sbox_SRCFILES
 	$<$<BOOL:${LINUX}>:src/os-lin.cpp>
 	$<$<BOOL:${WIN32}>:src/os-win.cpp>
 )
+set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)
 find_package(Boost REQUIRED COMPONENTS filesystem headers)
 CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES                           )
 CPMAddPackage(NAME ez          GITHUB_REPOSITORY colugomusic/ez               GIT_TAG main                                                 )
@@ -44,6 +45,13 @@ target_link_libraries(scuff-sbox
 	readerwriterqueue
 	scuff::common
 )
+if (APPLE)
+    target_link_libraries(scuff-sbox
+        "-framework Foundation"
+        "-framework Cocoa"
+        "-framework UniformTypeIdentifiers"
+    )
+endif()
 target_compile_options(scuff-sbox PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
