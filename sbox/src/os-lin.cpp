@@ -21,7 +21,7 @@ auto get_window_handle_for_clap(void* widget) -> void* {
 auto make_clap_window_ref(View* view) -> clap_window_t {
 	clap_window_t ref;
 	ref.api = scuff::os::get_clap_window_api();
-	ref.x11 = get_window_handle_for_clap(view_native(view));
+	ref.x11 = (clap_xwnd)(get_window_handle_for_clap(view_native(view)));
 	return ref;
 }
 
