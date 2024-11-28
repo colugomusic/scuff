@@ -24,7 +24,7 @@ list (APPEND scuff-sbox_SRCFILES
 set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)
 find_package(Boost REQUIRED COMPONENTS filesystem headers)
 CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES                           )
-CPMAddPackage(NAME ez          GITHUB_REPOSITORY colugomusic/ez               GIT_TAG main                                                 )
+CPMAddPackage(NAME ez          GITHUB_REPOSITORY colugomusic/ez               GIT_TAG master                                               )
 CPMAddPackage(NAME immer       GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                                               )
 CPMAddPackage(NAME nappgui_src GITHUB_REPOSITORY colugomusic/nappgui_src      GIT_TAG main     OPTIONS "NAPPGUI_DEMO OFF" "NAPPGUI_WEB OFF" "CMAKE_DISABLE_CRTDBG ON")
 CPMAddPackage(Name rwq         GITHUB_REPOSITORY cameron314/readerwriterqueue GIT_TAG v1.0.6                                               )
