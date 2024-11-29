@@ -15,7 +15,7 @@ auto get_editor_window_native_handle(const sbox::device& dev) -> void* {
 }
 
 auto get_window_handle_for_clap(View* view) -> void* {
-	return gtk::get_window_from_widget(gtk::get_toplevel_widget(view_native(view)));
+	return gtk::get_window_from_widget(view_native(view));
 }
 
 auto make_clap_window_ref(View* view) -> clap_window_t {
