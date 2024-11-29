@@ -11,7 +11,7 @@ auto get_window_from_widget(void* gtk_widget) -> void*;
 namespace scuff::sbox::os {
 
 auto get_editor_window_native_handle(const sbox::device& dev) -> void* {
-	return gtk::get_toplevel_widget(dev.ui.view);
+	return gtk::get_toplevel_widget(view_native(dev.ui.view));
 }
 
 auto get_window_handle_for_clap(void* widget) -> void* {
