@@ -44,6 +44,7 @@ target_link_libraries(scuff-sbox
 	immer
 	readerwriterqueue
 	scuff::common
+	$<$<BOOL:${WIN32}>:dwmapi>
 )
 #if (APPLE)
 #	target_link_libraries(scuff-sbox

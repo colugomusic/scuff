@@ -1,4 +1,5 @@
 #define NOMINMAX
+#include "dwmapi.h"
 #include "window.hpp"
 #include <Windows.h>
 
@@ -136,7 +137,8 @@ auto set(window* wnd, ezwin::position position) -> void {
 }
 
 auto set(window* wnd, ezwin::position position, ezwin::size size) -> void {
-	SetWindowPos(wnd->hwnd, nullptr, position.x, position.y, size.width, size.height, SWP_NOZORDER);
+	set(wnd, position);
+	set(wnd, size);
 }
 
 auto set(window* wnd, ezwin::resizable resizable) -> void {
@@ -147,6 +149,18 @@ auto set(window* wnd, ezwin::resizable resizable) -> void {
 }
 
 auto set(window* wnd, ezwin::size size) -> void {
+	RECT rect;
+	RECT frame;
+	RECT border;
+	GetWindowRect(wnd->hwnd, &rect);
+	DwmGetWindowAttribute(wnd->hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame));
+	border.left   = frame.left - rect.left;
+	border.top    = frame.top - rect.top;
+	border.right  = frame.right - rect.right;
+	border.bottom = frame.bottom - rect.bottom;
+	const auto titlebar_height = GetSystemMetrics(SM_CYCAPTION) + GetSystemMetrics(SM_CYFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+	size.width  = size.width + border.left + border.right;
+	size.height = size.height + border.top + border.bottom + titlebar_height;
 	SetWindowPos(wnd->hwnd, nullptr, 0, 0, size.width, size.height, SWP_NOMOVE | SWP_NOZORDER);
 }
 
