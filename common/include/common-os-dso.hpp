@@ -20,6 +20,20 @@ struct entry {
 	dso::fn_name fn_name;
 	void* lib    = nullptr;
 	void* fn_ptr = nullptr;
+	entry()                        = default;
+	entry(const entry&)            = delete;
+	entry& operator=(const entry&) = delete;
+	entry(entry&& rhs) noexcept : path{std::move(rhs.path)}, fn_name{std::move(rhs.fn_name)}, lib{rhs.lib}, fn_ptr{rhs.fn_ptr} { rhs.lib = nullptr; }
+	entry& operator=(entry&& rhs) noexcept {
+		if (this != &rhs) {
+			path    = std::move(rhs.path);
+			fn_name = std::move(rhs.fn_name);
+			lib     = rhs.lib;
+			fn_ptr  = rhs.fn_ptr;
+			rhs.lib = nullptr;
+		}
+		return *this;
+	}
 	~entry() { if (lib) { release_lib(lib); } }
 };
 
@@ -32,7 +46,7 @@ static model M_;
 template <typename FnT>
 auto find_fn(const dso::path& path, const dso::fn_name& fn_name) -> const FnT* {
 	const auto match = [&path, &fn_name](const dso::entry& entry) { return entry.path == path && entry.fn_name == fn_name; };
-	if (const auto pos = std::find_if(M_.entries.begin(), M_.entries.end(), match); pos != M_.entries.end()) {
+	if (const auto pos = std::ranges::find_if(M_.entries, match); pos != M_.entries.end()) {
 		return reinterpret_cast<FnT*>(pos->fn_ptr);
 	}
 	if (const auto lib = open_lib(path)) {
@@ -44,7 +58,7 @@ auto find_fn(const dso::path& path, const dso::fn_name& fn_name) -> const FnT* {
 		if (!entry.fn_ptr) {
 			return nullptr;
 		}
-		M_.entries.push_back(entry);
+		M_.entries.push_back(std::move(entry));
 		return reinterpret_cast<FnT*>(entry.fn_ptr);
 	}
 	return nullptr;

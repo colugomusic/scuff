@@ -38,8 +38,6 @@ auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id, 
 	args.push_back(std::string{group_id});
 	args.push_back("--sandbox");
 	args.push_back(std::string{sandbox_id});
-	args.push_back("--sr");
-	args.push_back(std::to_string(sample_rate));
 	return args;
 }
 

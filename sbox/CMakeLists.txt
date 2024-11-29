@@ -4,55 +4,54 @@ if (NOT TARGET scuff::common)
 	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../common ${CMAKE_BINARY_DIR}/common)
 endif()
 include(../CPM.cmake)
-list (APPEND scuff-sbox_SRCFILES
+list (APPEND src
 	src/audio.hpp
 	src/clap.hpp
 	src/clap-data.hpp
 	src/cmdline.hpp
 	src/data.hpp
-	src/debug-ui.hpp
 	src/gui.hpp
 	src/log.hpp
 	src/main.cpp
 	src/msg-proc.hpp
 	src/os.hpp
 	src/options.hpp
+	src/window.hpp
 	$<$<BOOL:${APPLE}>:src/os-mac.mm>
+	$<$<BOOL:${APPLE}>:src/window-mac.mm>
 	$<$<BOOL:${LINUX}>:src/os-lin.cpp>
 	$<$<BOOL:${LINUX}>:src/os-lin-gtk.cpp>
+	$<$<BOOL:${LINUX}>:src/window-lin.cpp>
 	$<$<BOOL:${WIN32}>:src/os-win.cpp>
+	$<$<BOOL:${WIN32}>:src/window-win.cpp>
 )
 set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)
-find_package(Boost REQUIRED COMPONENTS filesystem headers)
+find_package(Boost COMPONENTS headers program_options REQUIRED)
 CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES                           )
 CPMAddPackage(NAME ez          GITHUB_REPOSITORY colugomusic/ez               GIT_TAG master                                               )
 CPMAddPackage(NAME immer       GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                                               )
-CPMAddPackage(NAME nappgui_src GITHUB_REPOSITORY colugomusic/nappgui_src      GIT_TAG main     OPTIONS "NAPPGUI_DEMO OFF" "NAPPGUI_WEB OFF" "CMAKE_DISABLE_CRTDBG ON")
 CPMAddPackage(Name rwq         GITHUB_REPOSITORY cameron314/readerwriterqueue GIT_TAG v1.0.6                                               )
-set(NAPPGUI_ROOT_PATH ${nappgui_src_SOURCE_DIR})
-nap_generate_tools()
-nap_desktop_app(scuff-sbox "osapp" NRC_EMBEDDED)
-nap_target_cxx_standard(scuff-sbox 20)
+add_executable(scuff-sbox ${src})
 add_executable(scuff::sbox ALIAS scuff-sbox)
 target_include_directories(scuff-sbox PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/..
 	${clap_SOURCE_DIR}/include
 )
 target_link_libraries(scuff-sbox
-	Boost::filesystem
 	Boost::headers
+	Boost::program_options
 	ez::ez
 	immer
 	readerwriterqueue
 	scuff::common
 )
-if (APPLE)
-	target_link_libraries(scuff-sbox
-		"-framework Foundation"
-		"-framework Cocoa"
-		"-framework UniformTypeIdentifiers"
-	)
-endif()
+#if (APPLE)
+#	target_link_libraries(scuff-sbox
+#		"-framework Foundation"
+#		"-framework Cocoa"
+#		"-framework UniformTypeIdentifiers"
+#	)
+#endif()
 target_compile_options(scuff-sbox PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )

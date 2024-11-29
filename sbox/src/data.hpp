@@ -5,9 +5,9 @@
 #include "common-events.hpp"
 #include "common-shm.hpp"
 #include "common-slot-buffer.hpp"
-#include "debug-ui.hpp"
 #include "jthread.hpp"
 #include "options.hpp"
+#include "window.hpp"
 #include "window-size.hpp"
 #include <boost/static_string.hpp>
 #include <cs_plain_guarded.h>
@@ -37,10 +37,7 @@ struct device_flags {
 };
 
 struct device_ui {
-	View* view     = nullptr;
-	Layout* layout = nullptr;
-	Panel* panel   = nullptr;
-	Window* window = nullptr;
+	ezwin::window* window = nullptr;
 };
 
 struct port_conn {
@@ -50,14 +47,8 @@ struct port_conn {
 	auto operator<=>(const port_conn&) const = default;
 };
 
-struct device_window_listener {
-	sbox::app* app;
-	id::device dev_id;
-};
-
 struct device_service {
 	shm::device shm;
-	device_window_listener window_listener;
 	std::optional<window_size_f> scheduled_window_resize;
 	rwq<scuff::event> input_events_from_main = rwq<scuff::event>(EVENT_PORT_SIZE);
 };
@@ -95,7 +86,6 @@ struct app {
 	ez::immutable<sbox::model>     audio_model;
 	std::atomic<uint64_t>          uid = 0;
 	std::atomic_bool               schedule_terminate = false;
-	sbox::debug_ui::model          debug_ui;
 	bool                           active = false;
 	double                         sample_rate = 44100.0;
 	heartbeat_time                 last_heartbeat;

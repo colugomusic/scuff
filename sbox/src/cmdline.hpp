@@ -1,54 +1,25 @@
 #pragma once
 
 #include "options.hpp"
-#include <nappgui.h>
+#include <boost/program_options.hpp>
+
+namespace po = boost::program_options;
 
 namespace scuff::sbox::cmdline {
 
-static constexpr auto ARGV_BUFFER_SIZE = 256;
-
-[[nodiscard]] static
-auto get_arg(uint32_t argv_index) -> std::string {
-	char arg_buffer[ARGV_BUFFER_SIZE];
-	osapp_argv(argv_index, arg_buffer, ARGV_BUFFER_SIZE);
-	return arg_buffer;
-}
-
-[[nodiscard]] static
-auto get_option(std::string_view key, uint32_t* arg_key_index, char* value) -> bool {
-	const auto argc = osapp_argc();
-	const auto arg  = get_arg(*arg_key_index);
-	if (arg != key) {
-		return false;
-	}
-	(*arg_key_index)++;
-	if (*arg_key_index >= argc) {
-		log_printf("Missing argument for %s", key.data());
-		osapp_finish();
-		return false;
-	}
-	osapp_argv(*arg_key_index, value, ARGV_BUFFER_SIZE);
-	return true;
-}
-
-auto get_options() -> sbox::options {
+auto get_options(int argc, const char* argv[]) -> sbox::options {
 	sbox::options options;
-	const auto argc = osapp_argc();
-	for (uint32_t i = 0; i < argc; i++) {
-		char value[ARGV_BUFFER_SIZE];
-		if (get_option("--group", &i, value)) {
-			options.group_shmid = value;
-			continue;
-		}
-		if (get_option("--sandbox", &i, value)) {
-			options.sbox_shmid = value;
-			continue;
-		}
-		if (get_option("--sr", &i, value)) {
-			options.sample_rate = std::stod(value);
-			continue;
-		}
+	try {
+		po::options_description desc("Allowed options");
+		desc.add_options()
+			("group",   po::value<std::string>(&options.group_shmid),"Group shared memory ID")
+			("sandbox", po::value<std::string>(&options.sbox_shmid), "Sandbox shared memory ID")
+			;
+		po::variables_map vm;
+		po::store(po::parse_command_line(argc, argv, desc), vm);
+		po::notify(vm);
 	}
+	catch (...) {}
 	return options;
 }
 

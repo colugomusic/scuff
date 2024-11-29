@@ -70,12 +70,12 @@ auto deactivate(sbox::app* app, const sbox::device& dev) -> void {
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors& msg) -> void {
-	log(&app->debug_ui, "msg::in::close_all_editors:");
+	log(app, "msg::in::close_all_editors:");
 	const auto devices = app->model.read(ez::main).devices;
 	for (const auto& dev : devices) {
 		if (dev.ui.window) {
-			window_hide(dev.ui.window);
-			app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(os::get_editor_window_native_handle(dev))});
+			ezwin::set(dev.ui.window, ezwin::visible{false});
+			app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(ezwin::get_native_handle(*dev.ui.window).value)});
 		}
 	}
 }
@@ -104,7 +104,6 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 			if (app->active) {
 				activate(app, dev, app->sample_rate);
 			}
-			dev.service->window_listener = {app, dev_id};
 			app->msg_sender.enqueue(scuff::msg::out::device_create_success{dev_id.value, dev.service->shm.seg.id.data(), msg.callback});
 			return;
 		}

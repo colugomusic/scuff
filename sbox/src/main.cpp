@@ -10,71 +10,16 @@
 
 namespace scuff::sbox::main {
 
-[[nodiscard]] static
-auto create() -> sbox::app* {
-	const auto app = new sbox::app;
-	app->options = cmdline::get_options();
-	if (app->options.group_shmid.empty()) {
-		log(app, "Missing required option --group");
-		osapp_finish();
-		return app;
-	}
-	if (app->options.sbox_shmid.empty()) {
-		log(app, "Missing required option --sandbox");
-		osapp_finish();
-		return app;
-	}
-	if (app->options.sample_rate < 1) {
-		log(app, "Missing required option --sr");
-		osapp_finish();
-		return app;
-	}
-	try {
-		//while (!IsDebuggerPresent()) {
-		//	std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		//}
-		//__debugbreak();
-		debug_ui::create(&app->debug_ui);
-		log(app, "group: %s", app->options.group_shmid.c_str());
-		log(app, "sandbox: %s", app->options.sbox_shmid.c_str());
-		log(app, "sample rate: %f", app->options.sample_rate);
-		app->shm_group              = shm::open_group(app->options.group_shmid);
-		app->shm_sbox               = shm::open_sandbox(app->options.sbox_shmid);
-		app->group_signaler.local   = &app->shm_group.signaling;
-		app->group_signaler.shm     = &app->shm_group.data->signaling;
-		app->sandbox_signaler.local = &app->shm_sbox.signaling;
-		app->sandbox_signaler.shm   = &app->shm_sbox.data->signaling;
-		app->main_thread_id         = std::this_thread::get_id();
-		app->last_heartbeat         = std::chrono::steady_clock::now();
-	}
-	catch (const std::exception& err) {
-		log(app, "Error: %s", err.what());
-		osapp_finish();
-	}
-	return app;
-}
+static app app_;
 
 static
 auto destroy_all_editor_windows(const sbox::app& app) -> void {
 	const auto m = app.model.read(ez::main);
 	for (auto dev : m.devices) {
 		if (dev.ui.window) {
-			window_destroy(&dev.ui.window);
+			ezwin::destroy(dev.ui.window);
 		}
 	}
-}
-
-static
-auto destroy(sbox::app** app) -> void {
-	debug_log("scuff::sbox::main::destroy");
-	debug_ui::destroy(&(*app)->debug_ui);
-	if ((*app)->audio_thread.joinable()) {
-		(*app)->audio_thread.request_stop();
-		signaling::unblock_self((*app)->sandbox_signaler);
-		(*app)->audio_thread.join();
-	}
-	destroy_all_editor_windows(**app);
-	delete *app;
 }
 
 static
@@ -84,7 +29,7 @@ auto check_heartbeat(sbox::app* app) -> void {
 	if (diff > HEARTBEAT_TIMEOUT_MS) {
 		log(app, "Heartbeat timeout");
 		app->msg_sender.enqueue(scuff::msg::out::report_error{"Heartbeat timeout"});
-		osapp_finish();
+		app->schedule_terminate = true;
 	}
 }
 
@@ -93,29 +38,63 @@ auto do_scheduled_window_resizes(sbox::app* app) -> void {
 	const auto m = app->model.read(ez::main);
 	for (const auto& dev : m.devices) {
 		if (dev.service->scheduled_window_resize) {
-			S2Df sz;
-			sz.width  = dev.service->scheduled_window_resize->width;
-			sz.height = dev.service->scheduled_window_resize->height;
-			window_size(dev.ui.window, sz);
+			ezwin::size sz;
+			sz.width  = static_cast<int>(dev.service->scheduled_window_resize->width);
+			sz.height = static_cast<int>(dev.service->scheduled_window_resize->height);
+			ezwin::set(dev.ui.window, sz);
 			dev.service->scheduled_window_resize.reset();
 		}
 	}
 }
 
-static
-auto update(sbox::app* app, const real64_t prtime, const real64_t ctime) -> void {
-	if (app) {
-		main::process_messages(app);
-		main::do_scheduled_window_resizes(app);
-		check_heartbeat(app);
-		clap::main::update(app);
-		if (app->schedule_terminate) {
-			osapp_finish();
+auto go(int argc, const char* argv[]) -> int {
+	app_.options = cmdline::get_options(argc, argv);
+	if (app_.options.group_shmid.empty()) {
+		log(&app_, "Missing required option --group");
+		return EXIT_FAILURE;
+	}
+	if (app_.options.sbox_shmid.empty()) {
+		log(&app_, "Missing required option --sandbox");
+		return EXIT_FAILURE;
+	}
+	try {
+		log(&app_, "group: %s", app_.options.group_shmid.c_str());
+		log(&app_, "sandbox: %s", app_.options.sbox_shmid.c_str());
+		app_.shm_group              = shm::open_group(app_.options.group_shmid);
+		app_.shm_sbox               = shm::open_sandbox(app_.options.sbox_shmid);
+		app_.group_signaler.local   = &app_.shm_group.signaling;
+		app_.group_signaler.shm     = &app_.shm_group.data->signaling;
+		app_.sandbox_signaler.local = &app_.shm_sbox.signaling;
+		app_.sandbox_signaler.shm   = &app_.shm_sbox.data->signaling;
+		app_.main_thread_id         = std::this_thread::get_id();
+		app_.last_heartbeat         = std::chrono::steady_clock::now();
+		for (;;) {
+			main::process_messages(&app_);
+			do_scheduled_window_resizes(&app_);
+			ezwin::process_messages();
+			check_heartbeat(&app_);
+			clap::main::update(&app_);
+			if (app_.schedule_terminate) {
+				break;
+			}
 		}
+		if (app_.audio_thread.joinable()) {
+			app_.audio_thread.request_stop();
+			signaling::unblock_self(app_.sandbox_signaler);
+			app_.audio_thread.join();
+		}
+		destroy_all_editor_windows(app_);
+		ezwin::process_messages();
+		return EXIT_SUCCESS;
+	}
+	catch (const std::exception& err) {
+		log(&app_, "Error: %s", err.what());
+		return EXIT_FAILURE;
 	}
 }
 
 } // scuff::sbox::main
 
-#include <osmain.h>
-osmain_sync(0.04, scuff::sbox::main::create, scuff::sbox::main::destroy, scuff::sbox::main::update, "", scuff::sbox::app)
+auto main(int argc, const char* argv[]) -> int {
+	return scuff::sbox::main::go(argc, argv);
+}

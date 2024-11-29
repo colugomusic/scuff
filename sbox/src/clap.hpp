@@ -1048,7 +1048,7 @@ auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
 	const auto m          = app->model.read(ez::main);
 	const auto clap_dev   = m.clap_devices.at(dev.id);
 	const auto iface      = clap_dev.iface->plugin;
-	const auto window_ref = os::make_clap_window_ref(dev.ui.view);
+	const auto window_ref = os::make_clap_window_ref(dev.ui.window);
 	if (!iface.gui->set_parent(iface.plugin, &window_ref)) {
 		log(app, "iface.gui->set_parent() failed");
 		return false;
@@ -1082,7 +1082,7 @@ auto get_gui_size(const clap::iface_plugin& iface) -> std::optional<window_size_
 }
 
 static
-auto on_native_window_resize(const sbox::app* app, const sbox::device& dev, window_size_f native_window_size) -> void {
+auto on_native_window_resize(const sbox::app* app, const sbox::device& dev, ezwin::size native_window_size) -> void {
 	const auto m                = app->model.read(ez::main);
 	const auto& clap_dev        = m.clap_devices.at(dev.id);
 	const auto iface            = clap_dev.iface->plugin;

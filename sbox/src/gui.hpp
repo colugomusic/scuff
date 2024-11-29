@@ -35,8 +35,8 @@ auto hide(sbox::app* app, sbox::device dev) -> void {
 		case plugin_type::clap: { clap::main::shutdown_editor_window(app, dev); break; }
 		case plugin_type::vst3: { /* Not implemented yet. */ break; }
 	}
-	window_hide(dev.ui.window);
-	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(os::get_editor_window_native_handle(dev))});
+	ezwin::set(dev.ui.window, ezwin::visible{false});
+	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(ezwin::get_native_handle(*dev.ui.window).value)});
 	app->model.update(ez::main, [dev](model&& m){
 		m.devices = m.devices.insert(dev);
 		return m;
@@ -44,27 +44,12 @@ auto hide(sbox::app* app, sbox::device dev) -> void {
 }
 
 static
-auto on_native_window_resize_impl(sbox::app* app, const sbox::device& dev, window_size_f window_size) -> void {
+auto on_native_window_resize_impl(sbox::app* app, const sbox::device& dev, ezwin::size window_size) -> void {
 	switch (dev.type) {
 		case plugin_type::clap: { clap::main::on_native_window_resize(app, dev, window_size); break; }
 		case plugin_type::vst3: { /* Not implemented yet. */ break; }
 		default:                { assert (false); break; }
 	}
-}
-
-static
-auto on_native_window_close(device_window_listener* dwl, Event* event) -> void {
-	const auto& device = dwl->app->model.read(ez::main).devices.at(dwl->dev_id);
-	gui::hide(dwl->app, device);
-}
-
-static
-auto on_native_window_resize(device_window_listener* dwl, Event* event) -> void {
-	const auto size = event_params(event, EvSize);
-	log_printf("on_window_resize: %f,%f", size->width, size->height);
-	const auto m    = dwl->app->model.read(ez::main);
-	const auto& dev = m.devices.at(dwl->dev_id);
-	on_native_window_resize_impl(dwl->app, dev, {size->width, size->height});
 }
 
 static
@@ -77,36 +62,37 @@ auto show(sbox::app* app, scuff::id::device dev_id) -> void {
 		return;
 	}
 	if (device.ui.window) {
-		window_destroy(&device.ui.window);
+		ezwin::destroy(device.ui.window);
 	}
 	const auto result = create_gui(app, device);
 	if (!result.success) {
 		log(app, "Failed to create GUI for device %d", device.id.value);
 		return;
 	}
-	uint32_t window_flags = ekWINDOW_STDRES;
-	if (!result.resizable) {
-		window_flags &= ~ekWINDOW_RESIZE;
+	ezwin::window_config cfg;
+	cfg.on_closed = [app, dev_id]{
+		const auto& device = app->model.read(ez::main).devices.at(dev_id);
+		gui::hide(app, device);
+	};
+	cfg.on_resized = [app, dev_id](ezwin::size size) {
+		const auto& device = app->model.read(ez::main).devices.at(dev_id);
+		on_native_window_resize_impl(app, device, size);
+	};
+	// TOODOO:
+	// cfg.parent      = {app->parent_window};
+	// cfg.icon        = {};
+	cfg.resizable   = {result.resizable};
+	cfg.size.width  = static_cast<int>(result.width);
+	cfg.size.height = static_cast<int>(result.height);
+	cfg.title       = {device.name->c_str()};
+	cfg.visible     = {true};
+	const auto wnd = ezwin::create(cfg);
+	if (!wnd) {
+		log(app, "Failed to create window for device %d", device.id.value);
+		return;
 	}
-	window_flags &= ~ekWINDOW_MAX;
-	window_flags &= ~ekWINDOW_MIN;
-	device.ui.window = window_create(window_flags);
-	device.ui.panel  = panel_create();
-	device.ui.layout = layout_create(1, 1);
-	device.ui.view   = view_create();
-	layout_view(device.ui.layout, device.ui.view, 0, 0);
-	if (!result.resizable) {
-		view_size(device.ui.view, S2Df(float(result.width), float(result.height)));
-	}
-	panel_layout(device.ui.panel, device.ui.layout);
-	window_panel(device.ui.window, device.ui.panel);
-	window_OnClose(device.ui.window, listener(&device.service->window_listener, on_native_window_close, device_window_listener));
-	window_OnResize(device.ui.window, listener(&device.service->window_listener, on_native_window_resize, device_window_listener));
-	if (result.resizable) {
-		window_size(device.ui.window, S2Df(float(result.width), float(result.height)));
-	}
-	window_show(device.ui.window);
-	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{device.id.value, false, (int64_t)(os::get_editor_window_native_handle(device))});
+	device.ui.window = wnd;
+	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{device.id.value, false, (int64_t)(ezwin::get_native_handle(*wnd).value)});
 	if (!setup_editor_window(app, device)) {
 		log(app, "Failed to setup clap editor window");
 	}

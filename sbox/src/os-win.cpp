@@ -4,20 +4,15 @@
 
 namespace scuff::sbox::os {
 
-auto get_editor_window_native_handle(const sbox::device& dev) -> void* {
-	const auto view_hwnd = (HWND)(view_native(dev.ui.view));
-	return GetAncestor(view_hwnd, GA_ROOT);
-}
-
-auto make_clap_window_ref(View* view) -> clap_window_t {
+auto make_clap_window_ref(ezwin::window* wnd) -> clap_window_t {
 	clap_window_t ref;
 	ref.api   = scuff::os::get_clap_window_api();
-	ref.win32 = view_native(view);
+	ref.win32 = ezwin::get_native_handle(*wnd).value;
 	return ref;
 }
 
 auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> void {
-	const auto view_hwnd = (HWND)(view_native(dev.ui.view));
+	const auto view_hwnd = static_cast<HWND>(ezwin::get_native_handle(*dev.ui.window).value);
 	const auto top_hwnd  = GetAncestor(view_hwnd, GA_ROOT);
 	SetWindowPos(top_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 }

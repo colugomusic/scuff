@@ -8,6 +8,7 @@
 #include <cxxopts.hpp>
 #include <flux.hpp>
 #include <iostream>
+#include <fstream>
 #include <nlohmann/json.hpp>
 #include <flux.hpp>
 #include <vector>
@@ -45,8 +46,15 @@ struct options {
 	std::string file_to_scan;
 };
 
+static
+auto log_append(std::string s) -> void {
+	std::ofstream log_file("scuff-scanner.log", std::ios::app);
+	log_file << s << std::endl;
+}
+
 [[nodiscard]] static
 auto parse_options(int argc, const char* argv[]) -> options {
+	// TOODOO: we're already using boost so use that instead of cxxopts
 	auto options_parser = cxxopts::Options("scuff-scanner", "Scans the system for installed CLAP/VST plugins");
 	options_parser.add_options()
 		("f,file", "Plugin file to scan", cxxopts::value<std::string>())
@@ -200,6 +208,7 @@ static auto clap_host_request_restart(const clap_host* host) -> void {}
 
 static
 auto scan_clap_plugin(const plugfile& pf, const clap_plugin_factory_t& factory, uint32_t index) -> void {
+	log_append("Scanning CLAP plugin");
 	const auto desc = factory.get_plugin_descriptor(&factory, index);
 	if (!desc) {
 		return;
@@ -238,22 +247,32 @@ auto scan_clap_plugin(const plugfile& pf, const clap_plugin_factory_t& factory, 
 
 static
 auto scan_clap_plugfile_full(const plugfile& pf) -> void {
+	log_append("Scanning CLAP plugfile");
 	const auto entry = scuff::os::dso::find_fn<clap_plugin_entry_t>({pf.path}, {scuff::CLAP_SYMBOL_ENTRY});
+	log_append("1");
 	if (!entry) {
+		log_append("Couldn't resolve clap_entry");
 		report_broken_plugfile(pf, "Couldn't resolve clap_entry");
 		return;
 	}
+	log_append("2");
 	if (!entry->init(pf.path.string().c_str())) {
+		log_append("clap_plugin_entry.init failed");
 		report_broken_plugfile(pf, "clap_plugin_entry.init failed");
 		return;
 	}
+	log_append("3");
 	const auto factory = reinterpret_cast<const clap_plugin_factory_t*>(entry->get_factory(CLAP_PLUGIN_FACTORY_ID));
+	log_append("4");
 	if (!factory) {
+		log_append("clap_plugin_entry.get_factory failed");
 		report_broken_plugfile(pf, "clap_plugin_entry.get_factory failed");
 		entry->deinit();
 		return;
 	}
+	log_append("5");
 	const auto plugin_count = factory->get_plugin_count(factory);
+	log_append(std::format("Found {} plugins", plugin_count));
 	for (uint32_t i = 0; i < plugin_count; i++) {
 		scan_clap_plugin(pf, *factory, i);
 	}
@@ -307,6 +326,7 @@ auto main(int argc, const char* argv[]) -> int {
 			scanner::scan_system_for_plugfiles(options);
 		}
 	} catch (const std::exception& e) {
+		scanner::log_append(e.what());
 		std::fprintf(stderr, "Error: %s\n", e.what());
 		return 1;
 	}
