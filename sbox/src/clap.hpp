@@ -277,7 +277,7 @@ auto go_to_sleep(const clap::device& dev) -> void {
 	unset_flags(&dev.service.data->atomic_flags, device_atomic_flags::processing);
 }
 
-[[nodiscard]] static
+static
 auto handle_audio_process_result(const shm::device& shm, const clap::device& dev, clap_process_status status) -> void {
 	switch (status) {
 		case CLAP_PROCESS_CONTINUE: {
