@@ -47,11 +47,11 @@ target_link_libraries(scuff-sbox
 	scuff::common
 )
 if (APPLE)
-    target_link_libraries(scuff-sbox
-        "-framework Foundation"
-        "-framework Cocoa"
-        "-framework UniformTypeIdentifiers"
-    )
+	target_link_libraries(scuff-sbox
+		"-framework Foundation"
+		"-framework Cocoa"
+		"-framework UniformTypeIdentifiers"
+	)
 endif()
 target_compile_options(scuff-sbox PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
