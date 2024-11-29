@@ -35,8 +35,8 @@ auto hide(sbox::app* app, sbox::device dev) -> void {
 		case plugin_type::clap: { clap::main::shutdown_editor_window(app, dev); break; }
 		case plugin_type::vst3: { /* Not implemented yet. */ break; }
 	}
-	ezwin::set(dev.ui.window, ezwin::visible{false});
-	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(ezwin::get_native_handle(*dev.ui.window).value)});
+	edwin::set(dev.ui.window, edwin::hide);
+	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(edwin::get_native_handle(*dev.ui.window).value)});
 	app->model.update(ez::main, [dev](model&& m){
 		m.devices = m.devices.insert(dev);
 		return m;
@@ -44,7 +44,7 @@ auto hide(sbox::app* app, sbox::device dev) -> void {
 }
 
 static
-auto on_native_window_resize_impl(sbox::app* app, const sbox::device& dev, ezwin::size window_size) -> void {
+auto on_native_window_resize_impl(sbox::app* app, const sbox::device& dev, edwin::size window_size) -> void {
 	switch (dev.type) {
 		case plugin_type::clap: { clap::main::on_native_window_resize(app, dev, window_size); break; }
 		case plugin_type::vst3: { /* Not implemented yet. */ break; }
@@ -62,37 +62,45 @@ auto show(sbox::app* app, scuff::id::device dev_id) -> void {
 		return;
 	}
 	if (device.ui.window) {
-		ezwin::destroy(device.ui.window);
+		edwin::destroy(device.ui.window);
 	}
 	const auto result = create_gui(app, device);
 	if (!result.success) {
 		log(app, "Failed to create GUI for device %d", device.id.value);
 		return;
 	}
-	ezwin::window_config cfg;
+	edwin::window_config cfg;
 	cfg.on_closed = [app, dev_id]{
 		const auto& device = app->model.read(ez::main).devices.at(dev_id);
 		gui::hide(app, device);
 	};
-	cfg.on_resized = [app, dev_id](ezwin::size size) {
+	cfg.on_resized = [app, dev_id](edwin::size size) {
 		const auto& device = app->model.read(ez::main).devices.at(dev_id);
 		on_native_window_resize_impl(app, device, size);
 	};
-	// TOODOO:
+	// TOODOO: set window parent
 	// cfg.parent      = {app->parent_window};
-	// cfg.icon        = {};
+	// TOODOO: proper icon
+	std::vector<edwin::rgba> pixels;
+	pixels.resize(4);
+	pixels[0] = {std::byte{255},   std::byte{0},   std::byte{0}, std::byte{0}};
+	pixels[1] = {std::byte{200}, std::byte{100},   std::byte{0}, std::byte{255}};
+	pixels[2] = {  std::byte{100}, std::byte{200},   std::byte{100}, std::byte{255}};
+	pixels[3] = {  std::byte{0}, std::byte{255}, std::byte{255}, std::byte{255}};
+	cfg.icon.size = {2, 2};
+	cfg.icon.pixels = pixels;
 	cfg.resizable   = {result.resizable};
 	cfg.size.width  = static_cast<int>(result.width);
 	cfg.size.height = static_cast<int>(result.height);
 	cfg.title       = {device.name->c_str()};
 	cfg.visible     = {true};
-	const auto wnd = ezwin::create(cfg);
+	const auto wnd = edwin::create(cfg);
 	if (!wnd) {
 		log(app, "Failed to create window for device %d", device.id.value);
 		return;
 	}
 	device.ui.window = wnd;
-	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{device.id.value, false, (int64_t)(ezwin::get_native_handle(*wnd).value)});
+	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{device.id.value, false, (int64_t)(edwin::get_native_handle(*wnd).value)});
 	if (!setup_editor_window(app, device)) {
 		log(app, "Failed to setup clap editor window");
 	}

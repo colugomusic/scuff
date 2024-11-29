@@ -7,10 +7,10 @@
 #include "common-slot-buffer.hpp"
 #include "jthread.hpp"
 #include "options.hpp"
-#include "window.hpp"
 #include "window-size.hpp"
 #include <boost/static_string.hpp>
 #include <cs_plain_guarded.h>
+#include <edwin.hpp>
 #include <ez.hpp>
 #include <memory>
 #pragma warning(push, 0)
@@ -37,7 +37,7 @@ struct device_flags {
 };
 
 struct device_ui {
-	ezwin::window* window = nullptr;
+	edwin::window* window = nullptr;
 };
 
 struct port_conn {

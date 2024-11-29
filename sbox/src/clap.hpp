@@ -1082,7 +1082,7 @@ auto get_gui_size(const clap::iface_plugin& iface) -> std::optional<window_size_
 }
 
 static
-auto on_native_window_resize(const sbox::app* app, const sbox::device& dev, ezwin::size native_window_size) -> void {
+auto on_native_window_resize(const sbox::app* app, const sbox::device& dev, edwin::size native_window_size) -> void {
 	const auto m                = app->model.read(ez::main);
 	const auto& clap_dev        = m.clap_devices.at(dev.id);
 	const auto iface            = clap_dev.iface->plugin;

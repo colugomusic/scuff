@@ -17,7 +17,7 @@ auto destroy_all_editor_windows(const sbox::app& app) -> void {
 	const auto m = app.model.read(ez::main);
 	for (auto dev : m.devices) {
 		if (dev.ui.window) {
-			ezwin::destroy(dev.ui.window);
+			edwin::destroy(dev.ui.window);
 		}
 	}
 }
@@ -38,10 +38,10 @@ auto do_scheduled_window_resizes(sbox::app* app) -> void {
 	const auto m = app->model.read(ez::main);
 	for (const auto& dev : m.devices) {
 		if (dev.service->scheduled_window_resize) {
-			ezwin::size sz;
+			edwin::size sz;
 			sz.width  = static_cast<int>(dev.service->scheduled_window_resize->width);
 			sz.height = static_cast<int>(dev.service->scheduled_window_resize->height);
-			ezwin::set(dev.ui.window, sz);
+			edwin::set(dev.ui.window, sz);
 			dev.service->scheduled_window_resize.reset();
 		}
 	}
@@ -71,7 +71,7 @@ auto go(int argc, const char* argv[]) -> int {
 		for (;;) {
 			main::process_messages(&app_);
 			do_scheduled_window_resizes(&app_);
-			ezwin::process_messages();
+			edwin::process_messages();
 			check_heartbeat(&app_);
 			clap::main::update(&app_);
 			if (app_.schedule_terminate) {
@@ -84,7 +84,7 @@ auto go(int argc, const char* argv[]) -> int {
 			app_.audio_thread.join();
 		}
 		destroy_all_editor_windows(app_);
-		ezwin::process_messages();
+		edwin::process_messages();
 		return EXIT_SUCCESS;
 	}
 	catch (const std::exception& err) {

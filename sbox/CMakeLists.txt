@@ -16,21 +16,18 @@ list (APPEND src
 	src/msg-proc.hpp
 	src/os.hpp
 	src/options.hpp
-	src/window.hpp
 	$<$<BOOL:${APPLE}>:src/os-mac.mm>
-	$<$<BOOL:${APPLE}>:src/window-mac.mm>
 	$<$<BOOL:${LINUX}>:src/os-lin.cpp>
 	$<$<BOOL:${LINUX}>:src/os-lin-gtk.cpp>
-	$<$<BOOL:${LINUX}>:src/window-lin.cpp>
 	$<$<BOOL:${WIN32}>:src/os-win.cpp>
-	$<$<BOOL:${WIN32}>:src/window-win.cpp>
 )
 set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)
 find_package(Boost COMPONENTS headers program_options REQUIRED)
-CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES                           )
-CPMAddPackage(NAME ez          GITHUB_REPOSITORY colugomusic/ez               GIT_TAG master                                               )
-CPMAddPackage(NAME immer       GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                                               )
-CPMAddPackage(Name rwq         GITHUB_REPOSITORY cameron314/readerwriterqueue GIT_TAG v1.0.6                                               )
+CPMAddPackage(NAME clap        GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES)
+CPMAddPackage(NAME edwin       GITHUB_REPOSITORY colugomusic/edwin            GIT_TAG master                    )
+CPMAddPackage(NAME ez          GITHUB_REPOSITORY colugomusic/ez               GIT_TAG master                    )
+CPMAddPackage(NAME immer       GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                    )
+CPMAddPackage(Name rwq         GITHUB_REPOSITORY cameron314/readerwriterqueue GIT_TAG v1.0.6                    )
 add_executable(scuff-sbox ${src})
 add_executable(scuff::sbox ALIAS scuff-sbox)
 target_include_directories(scuff-sbox PRIVATE
@@ -40,19 +37,12 @@ target_include_directories(scuff-sbox PRIVATE
 target_link_libraries(scuff-sbox
 	Boost::headers
 	Boost::program_options
+	edwin::edwin
 	ez::ez
 	immer
 	readerwriterqueue
 	scuff::common
-	$<$<BOOL:${WIN32}>:dwmapi>
 )
-#if (APPLE)
-#	target_link_libraries(scuff-sbox
-#		"-framework Foundation"
-#		"-framework Cocoa"
-#		"-framework UniformTypeIdentifiers"
-#	)
-#endif()
 target_compile_options(scuff-sbox PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )

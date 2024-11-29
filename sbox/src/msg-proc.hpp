@@ -74,8 +74,8 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors&
 	const auto devices = app->model.read(ez::main).devices;
 	for (const auto& dev : devices) {
 		if (dev.ui.window) {
-			ezwin::set(dev.ui.window, ezwin::visible{false});
-			app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(ezwin::get_native_handle(*dev.ui.window).value)});
+			edwin::set(dev.ui.window, edwin::hide);
+			app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(edwin::get_native_handle(*dev.ui.window).value)});
 		}
 	}
 }
