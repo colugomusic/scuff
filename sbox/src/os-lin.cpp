@@ -1,27 +1,12 @@
 #include "common-os.hpp"
 #include "os.hpp"
 
-namespace scuff::sbox::os::gtk {
-
-auto get_toplevel_widget(void* gtk_widget) -> void*;
-auto get_window_from_widget(void* gtk_widget) -> void*;
-
-} // scuff::sbox::os::gtk
-
 namespace scuff::sbox::os {
 
-auto get_editor_window_native_handle(const sbox::device& dev) -> void* {
-	return gtk::get_toplevel_widget(view_native(dev.ui.view));
-}
-
-auto get_window_handle_for_clap(View* view) -> void* {
-	return gtk::get_window_from_widget(view_native(view));
-}
-
-auto make_clap_window_ref(View* view) -> clap_window_t {
+auto make_clap_window_ref(edwin::window* wnd) -> clap_window_t {
 	clap_window_t ref;
 	ref.api = scuff::os::get_clap_window_api();
-	ref.x11 = (clap_xwnd)(get_window_handle_for_clap(view));
+	ref.x11 = edwin::get_xwindow(*wnd);
 	return ref;
 }
 
@@ -32,5 +17,6 @@ auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> void {
 auto shutdown_editor_window(sbox::app* app, const sbox::device& dev) -> void {
 	// Nothing to do.
 }
+
 
 } // scuff::sbox::os
