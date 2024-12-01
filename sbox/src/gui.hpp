@@ -79,6 +79,10 @@ auto show(sbox::app* app, scuff::id::device dev_id, edwin::fn::on_window_closed 
 		const auto& device = app->model.read(ez::main).devices.at(dev_id);
 		on_native_window_resize_impl(app, device, size);
 	};
+	cfg.on_resizing.fn = [app, dev_id](edwin::size size) {
+		const auto& device = app->model.read(ez::main).devices.at(dev_id);
+		on_native_window_resize_impl(app, device, size);
+	};
 	// TOODOO: set window parent
 	// cfg.parent      = {app->parent_window};
 	// TOODOO: proper icon
