@@ -190,10 +190,6 @@ auto find_existing_plugin(const scuff::model& m, std::string_view id) -> std::op
 	return std::nullopt;
 }
 
-[[nodiscard]] static
-auto is_this_plugin_version_higher_than_the_existing_one(const scuff::model& m, std::string_view id, std::string_view version) -> bool {
-}
-
 static
 auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 	const std::string plugfile_type = j["plugfile-type"];
