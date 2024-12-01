@@ -17,7 +17,6 @@ auto create_gui(sbox::app* app, const sbox::device& dev) -> sbox::create_gui_res
 
 [[nodiscard]] static
 auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
-	os::setup_editor_window(app, dev);
 	switch (dev.type) {
 		case plugin_type::clap: { return clap::main::setup_editor_window(app, dev); }
 		case plugin_type::vst3: { /* Not implemented yet. */ return false; }
@@ -30,7 +29,6 @@ auto hide(sbox::app* app, sbox::device dev) -> void {
 	if (!dev.ui.window) {
 		return;
 	}
-	os::shutdown_editor_window(app, dev);
 	switch (dev.type) {
 		case plugin_type::clap: { clap::main::shutdown_editor_window(app, dev); break; }
 		case plugin_type::vst3: { /* Not implemented yet. */ break; }
