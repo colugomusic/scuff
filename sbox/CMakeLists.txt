@@ -14,11 +14,11 @@ list (APPEND src
 	src/log.hpp
 	src/main.cpp
 	src/msg-proc.hpp
-	src/os.hpp
+	src/op.hpp
 	src/options.hpp
+	src/os.hpp
 	$<$<BOOL:${APPLE}>:src/os-mac.mm>
 	$<$<BOOL:${LINUX}>:src/os-lin.cpp>
-	$<$<BOOL:${LINUX}>:src/os-lin-gtk.cpp>
 	$<$<BOOL:${WIN32}>:src/os-win.cpp>
 )
 set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)

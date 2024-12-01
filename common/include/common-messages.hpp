@@ -90,6 +90,8 @@ using msg = std::variant<
 	return_state
 >;
 
+using buf = std::vector<msg>;
+
 } // scuff::msg::out
 
 template <> inline

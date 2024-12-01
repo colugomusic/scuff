@@ -3,15 +3,17 @@
 #include "common-os-dso.hpp"
 #include "common-plugin-type.hpp"
 #include "common-util.hpp"
+#include <boost/program_options.hpp>
 #include <clap/factory/plugin-factory.h>
 #include <clap/string-sizes.h>
-#include <cxxopts.hpp>
 #include <flux.hpp>
 #include <iostream>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <flux.hpp>
 #include <vector>
+
+namespace po = boost::program_options;
 
 namespace scanner {
 
@@ -47,25 +49,30 @@ struct options {
 };
 
 [[nodiscard]] static
+auto make_path_list(std::string_view str) -> std::vector<std::filesystem::path> {
+	if (str.empty()) { return {}; }
+	return flux::from(str)
+		.split_string(';')
+		.map([](const auto& s) { return std::filesystem::path(s); })
+		.to<std::vector<std::filesystem::path>>();
+}
+
+[[nodiscard]] static
 auto parse_options(int argc, const char* argv[]) -> options {
-	// TOODOO: we're already using boost so use that instead of cxxopts
-	auto options_parser = cxxopts::Options("scuff-scanner", "Scans the system for installed CLAP/VST plugins");
-	options_parser.add_options()
-		("f,file", "Plugin file to scan", cxxopts::value<std::string>())
-		("s,search-paths", "List of additional search paths, separated by ';'", cxxopts::value<std::string>())
-		;
-	auto result = options_parser.parse(argc, argv);
 	auto options = scanner::options{};
-	if (result.count("search-paths") > 0) {
-		options.additional_search_paths =
-			flux::ref(result["search-paths"].as<std::string>())
-				.split_string(';')
-				.map([](const auto& s) { return std::filesystem::path(s); })
-				.to<std::vector<std::filesystem::path>>();
+	try {
+		std::string search_paths;
+		po::options_description desc("Allowed options");
+		desc.add_options()
+			("file",         po::value<std::string>(&options.file_to_scan), "Plugin file to scan")
+			("search-paths", po::value<std::string>(&search_paths),         "List of additional search paths, separated by ';'")
+			;
+		po::variables_map vm;
+		po::store(po::parse_command_line(argc, argv, desc), vm);
+		po::notify(vm);
+		options.additional_search_paths = make_path_list(search_paths);
 	}
-	if (result.count("file") > 0) {
-		options.file_to_scan = result["file"].as<std::string>();
-	}
+	catch (...) {}
 	return options;
 }
 

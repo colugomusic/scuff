@@ -36,7 +36,7 @@ auto hide(sbox::app* app, sbox::device dev) -> void {
 		case plugin_type::vst3: { /* Not implemented yet. */ break; }
 	}
 	edwin::set(dev.ui.window, edwin::hide);
-	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(edwin::get_native_handle(*dev.ui.window).value)});
+	app->msgs_out.lock()->push_back(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(edwin::get_native_handle(*dev.ui.window).value)});
 	app->model.update(ez::main, [dev](model&& m){
 		m.devices = m.devices.insert(dev);
 		return m;
@@ -53,7 +53,7 @@ auto on_native_window_resize_impl(sbox::app* app, const sbox::device& dev, edwin
 }
 
 static
-auto show(sbox::app* app, scuff::id::device dev_id) -> void {
+auto show(sbox::app* app, scuff::id::device dev_id, edwin::fn::on_window_closed on_closed) -> void {
 	const auto devices   = app->model.read(ez::main).devices;
 	auto device          = devices.at({dev_id});
 	const auto has_gui   = device.service->shm.data->flags.value & shm::device_flags::has_gui;
@@ -70,11 +70,12 @@ auto show(sbox::app* app, scuff::id::device dev_id) -> void {
 		return;
 	}
 	edwin::window_config cfg;
-	cfg.on_closed = [app, dev_id]{
+	cfg.on_closed.fn = [app, dev_id, on_closed]{
 		const auto& device = app->model.read(ez::main).devices.at(dev_id);
 		gui::hide(app, device);
+		on_closed.fn();
 	};
-	cfg.on_resized = [app, dev_id](edwin::size size) {
+	cfg.on_resized.fn = [app, dev_id](edwin::size size) {
 		const auto& device = app->model.read(ez::main).devices.at(dev_id);
 		on_native_window_resize_impl(app, device, size);
 	};
@@ -100,7 +101,7 @@ auto show(sbox::app* app, scuff::id::device dev_id) -> void {
 		return;
 	}
 	device.ui.window = wnd;
-	app->msg_sender.enqueue(scuff::msg::out::device_editor_visible_changed{device.id.value, false, (int64_t)(edwin::get_native_handle(*wnd).value)});
+	app->msgs_out.lock()->push_back(scuff::msg::out::device_editor_visible_changed{device.id.value, false, (int64_t)(edwin::get_native_handle(*wnd).value)});
 	if (!setup_editor_window(app, device)) {
 		log(app, "Failed to setup clap editor window");
 	}

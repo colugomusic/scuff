@@ -13,7 +13,7 @@
 namespace scuff::sbox::gui {
 
 static auto hide(sbox::app* app, sbox::device dev) -> void;
-static auto show(sbox::app* app, scuff::id::device dev_id) -> void;
+static auto show(sbox::app* app, scuff::id::device dev_id, edwin::fn::on_window_closed on_closed) -> void;
 
 } // namespace scuff::sbox::gui
 
@@ -115,7 +115,7 @@ auto get_extension(sbox::app* app, const clap::iface_host& iface_host, id::devic
 		// https://github.com/free-audio/clap/blob/main/include/clap/ext/tail.h
 		return nullptr;
 	}
-	app->msg_sender.enqueue(scuff::msg::out::report_warning{std::format("Device '{}' requested an unsupported extension: {}", dev_id.value, extension_id)});
+	app->msgs_out.lock()->push_back(msg::out::report_warning{std::format("Device '{}' requested an unsupported extension: {}", dev_id.value, extension_id)});
 	return nullptr;
 }
 
@@ -527,7 +527,7 @@ auto rescan_audio_ports(sbox::app* app, id::device dev_id, uint32_t flags) -> vo
 	const auto dev = m.clap_devices.at(dev_id);
 	if (requires_not_active) {
 		if (is_active(dev)) {
-			app->msg_sender.enqueue(scuff::msg::out::report_warning{std::format("Device '{}' tried to rescan audio ports while it is still active!", *dev.name)});
+			app->msgs_out.lock()->push_back(scuff::msg::out::report_warning{std::format("Device '{}' tried to rescan audio ports while it is still active!", *dev.name)});
 			return;
 		}
 	}
@@ -601,7 +601,7 @@ auto process_msg_(sbox::app* app, const device& clap_dev, const clap::device_msg
 
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_request_show& msg) -> void {
-	gui::show(app, dev.id);
+	gui::show(app, dev.id, {[]{}});
 }
 
 static
@@ -626,18 +626,18 @@ auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log
 		default:
 		case CLAP_LOG_DEBUG:
 		case CLAP_LOG_INFO: {
-			app->msg_sender.enqueue(scuff::msg::out::report_info{text});
+			app->msgs_out.lock()->push_back(scuff::msg::out::report_info{text});
 			break;
 		}
 		case CLAP_LOG_HOST_MISBEHAVING:
 		case CLAP_LOG_PLUGIN_MISBEHAVING:
 		case CLAP_LOG_ERROR:
 		case CLAP_LOG_FATAL: {
-			app->msg_sender.enqueue(scuff::msg::out::report_error{text});
+			app->msgs_out.lock()->push_back(scuff::msg::out::report_error{text});
 			break;
 		}
 		case CLAP_LOG_WARNING: {
-			app->msg_sender.enqueue(scuff::msg::out::report_warning{text});
+			app->msgs_out.lock()->push_back(scuff::msg::out::report_warning{text});
 			break;
 		}
 	}
@@ -660,7 +660,7 @@ auto process_msg_(sbox::app* app, clap::device clap_dev, const clap::device_msg:
 		m.clap_devices = m.clap_devices.insert(clap_dev);
 		return m;
 	});
-	app->msg_sender.enqueue(scuff::msg::out::device_params_changed{dev.id.value});
+	app->msgs_out.lock()->push_back(scuff::msg::out::device_params_changed{dev.id.value});
 }
 
 static
@@ -838,12 +838,13 @@ auto make_ext_data(sbox::app* app, id::device id) -> std::shared_ptr<clap::devic
 }
 
 [[nodiscard]] static
-auto make_shm_device(std::string_view sbox_shmid, id::device dev_id) -> shm::device {
-	return shm::open_or_create_device(shm::make_device_id(sbox_shmid, dev_id), false);
+auto make_shm_device(std::string_view sbox_shmid, id::device dev_id, sbox::mode mode) -> shm::device {
+	const auto remove_when_done = mode == sbox::mode::gui_test;
+	return shm::open_or_create_device(shm::make_device_id(sbox_shmid, dev_id), remove_when_done);
 }
 
 static
-auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id, size_t callback) -> void {
+auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id) -> void {
 	const auto entry = scuff::os::dso::find_fn<clap_plugin_entry_t>({plugfile_path}, {CLAP_SYMBOL_ENTRY});
 	if (!entry) {
 		throw std::runtime_error("Couldn't resolve clap_entry");
@@ -855,6 +856,13 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	if (!factory) {
 		entry->deinit();
 		throw std::runtime_error("clap_plugin_entry.get_factory failed");
+	}
+	if (plugin_id == "ANY") {
+		if (factory->get_plugin_count(factory) < 1) {
+			entry->deinit();
+			throw std::runtime_error("plugfile has no plugins");
+		}
+		plugin_id = factory->get_plugin_descriptor(factory, 0)->id;
 	}
 	auto ext_data = make_ext_data(app, dev_id);
 	make_host_for_instance(&ext_data->host_data);
@@ -872,7 +880,7 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	auto clap_dev                    = clap::device{};
 	dev.id                           = dev_id;
 	dev.type                         = plugin_type::clap;
-	dev.service->shm                 = make_shm_device(app->shm_sbox.seg.id, dev_id);
+	dev.service->shm = make_shm_device(app->shm_sbox.seg.id, dev_id, app->mode);
 	clap_dev.service.audio_port_info = retrieve_audio_port_info(iface.plugin);
 	const auto audio_in_count    = clap_dev.service.audio_port_info->inputs.size();
 	const auto audio_out_count   = clap_dev.service.audio_port_info->outputs.size();
