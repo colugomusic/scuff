@@ -32,12 +32,14 @@ namespace bip = boost::interprocess;
 namespace scuff::impl {
 
 [[nodiscard]] static
-auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id, double sample_rate) -> std::vector<std::string> {
+auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id, uint64_t parent_window) -> std::vector<std::string> {
 	std::vector<std::string> args;
 	args.push_back("--group");
 	args.push_back(std::string{group_id});
 	args.push_back("--sandbox");
 	args.push_back(std::string{sandbox_id});
+	args.push_back("--parent-window");
+	args.push_back(std::to_string(parent_window));
 	return args;
 }
 
@@ -911,12 +913,13 @@ auto was_loaded_successfully(id::device dev) -> bool {
 }
 
 [[nodiscard]] static
-auto create_group(double sample_rate) -> id::group {
+auto create_group(double sample_rate, void* parent_window_handle) -> id::group {
 	const auto group_id = id::group{id_gen_++};
 	DATA_->model.update(ez::nort, [=](model&& m){
 		scuff::group group;
-		group.id          = group_id;
-		group.sample_rate = sample_rate;
+		group.id                   = group_id;
+		group.sample_rate          = sample_rate;
+		group.parent_window_handle = parent_window_handle;
 		const auto shmid    = shm::make_group_id(DATA_->instance_id, group.id);
 		group.services      = std::make_shared<group_services>();
 		group.services->shm = shm::create_group(shmid, true);
@@ -1090,7 +1093,7 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 	}
 	const auto group_shmid   = group.services->shm.seg.id;
 	const auto sandbox_shmid = sandbox.services->get_shmid();
-	const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, group.sample_rate);
+	const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, reinterpret_cast<uint64_t>(group.parent_window_handle));
 	sandbox.services->proc   = bp::child{std::string{sbox_exe_path}, exe_args};
 	sandbox.flags.value     |= sandbox_flags::launched;
 	for (const auto dev_id : sandbox.devices) {
@@ -1220,7 +1223,7 @@ auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::s
 		const auto& group        = m.groups.at({group_id});
 		const auto group_shmid   = group.services->shm.seg.id;
 		const auto sandbox_shmid = shm::make_sandbox_id(DATA_->instance_id, sbox.id);
-		const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, group.sample_rate);
+		const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, reinterpret_cast<uint64_t>(group.parent_window_handle));
 		auto proc                = bp::child{std::string{sbox_exe_path}, exe_args};
 		sbox.flags.value        |= sandbox_flags::launched;
 		sbox.group               = {group_id};
@@ -1442,8 +1445,8 @@ auto gui_show(id::device dev) -> void {
 	try { impl::gui_show(dev); } SCUFF_CATCH_VOID;
 }
 
-auto create_group(double sample_rate) -> id::group {
-	try { return impl::create_group(sample_rate); } SCUFF_CATCH_RETURN;
+auto create_group(double sample_rate, void* parent_window_handle) -> id::group {
+	try { return impl::create_group(sample_rate, parent_window_handle); } SCUFF_CATCH_RETURN;
 }
 
 auto erase(id::group group) -> void {

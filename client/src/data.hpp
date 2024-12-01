@@ -140,6 +140,7 @@ struct group {
 	id::group id;
 	group_flags flags;
 	double sample_rate = 0.0f;
+	void* parent_window_handle = nullptr;
 	int total_active_sandboxes = 0;
 	scuff::render_mode render_mode = scuff::render_mode::realtime;
 	immer::set<id::sandbox> sandboxes;

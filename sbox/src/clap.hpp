@@ -889,6 +889,7 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	clap_dev.id           = dev_id;
 	clap_dev.iface        = std::move(iface);
 	clap_dev.name         = clap_dev.iface->plugin.plugin->desc->name;
+	dev.name              = clap_dev.name;
 	clap_dev.service.data = std::move(ext_data);
 	dev                   = init_gui(std::move(dev), clap_dev);
 	dev                   = init_params(std::move(dev), clap_dev);

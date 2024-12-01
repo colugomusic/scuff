@@ -11,14 +11,17 @@ auto get_options(int argc, const char* argv[]) -> sbox::options {
 	sbox::options options;
 	try {
 		po::options_description desc("Allowed options");
+		uint64_t parent_window = 0;
 		desc.add_options()
-			("group",   po::value<std::string>(&options.group_shmid),"Group shared memory ID")
-			("sandbox", po::value<std::string>(&options.sbox_shmid), "Sandbox shared memory ID")
-			("gui",     po::value<std::string>(&options.plugfile_gui), "Path to plugfile GUI to open for testing")
+			("group",         po::value<std::string>(&options.group_shmid),"Group shared memory ID")
+			("sandbox",       po::value<std::string>(&options.sbox_shmid), "Sandbox shared memory ID")
+			("gui",           po::value<std::string>(&options.plugfile_gui), "Path to plugfile GUI to open for testing")
+			("parent-window", po::value<uint64_t>(&parent_window), "Parent window handle")
 			;
 		po::variables_map vm;
 		po::store(po::parse_command_line(argc, argv, desc), vm);
 		po::notify(vm);
+		options.parent_window.value = reinterpret_cast<void*>(parent_window);
 	}
 	catch (...) {}
 	return options;

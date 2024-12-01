@@ -210,7 +210,7 @@ auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plu
 // - Every sandbox has to belong to a group.
 // - This is what allows data to travel between sandboxes.
 [[nodiscard]]
-auto create_group(double sample_rate) -> id::group;
+auto create_group(double sample_rate, void* parent_window_handle) -> id::group;
 
 // Create a new sandbox.
 // - Every sandbox has to belong to a group.
