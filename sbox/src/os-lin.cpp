@@ -1,5 +1,6 @@
 #include "common-os.hpp"
 #include "os.hpp"
+#include <edwin-ext.hpp>
 
 namespace scuff::sbox::os {
 
