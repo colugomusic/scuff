@@ -3,7 +3,6 @@
 #include "clap.hpp"
 #include "common-shm.hpp"
 #include "data.hpp"
-#include "log.hpp"
 
 namespace scuff::sbox::audio {
 
@@ -22,12 +21,12 @@ auto copy_data_from_connected_outputs(const sbox::app& app, const sbox::device& 
 }
 
 static
-auto transfer_input_events_from_main(const sbox::device& dev) -> void {
+auto transfer_input_events_from_main(const sbox::app& app, const sbox::device& dev) -> void {
 	scuff::event event;
 	auto& events_in = dev.service->shm.data->events_in;
 	while (dev.service->input_events_from_main.try_dequeue(event)) {
 		if (events_in.size() == events_in.max_size()) {
-			debug_log("Dropping input events because the input event queue is full. This is a bug!");
+			DLOG_S(INFO) << "Dropping input events because the input event queue is full. This is a bug!";
 			break;
 		}
 		dev.service->shm.data->events_in.push_back(event);
@@ -36,7 +35,7 @@ auto transfer_input_events_from_main(const sbox::device& dev) -> void {
 
 static
 auto do_processing(const sbox::app& app, const sbox::device& dev) -> void {
-	transfer_input_events_from_main(dev);
+	transfer_input_events_from_main(app, dev);
 	switch (dev.type) {
 		case plugin_type::clap: {
 			scuff::sbox::clap::audio::process(app, dev);
@@ -66,7 +65,7 @@ auto do_processing(sbox::app* app) -> void {
 static
 auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 	try {
-		debug_log("Audio thread has started.");
+		DLOG_S(INFO) << "Audio thread has started.";
 		for (;;) {
 			auto result = signaling::wait_for_work_begin(app->sandbox_signaler, stop_token);
 			if (result == signaling::sandbox_wait_result::signaled) {
@@ -74,14 +73,14 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 				continue;
 			}
 			if (result == signaling::sandbox_wait_result::stop_requested) {
-				debug_log("Audio thread is stopping because it was requested to.");
+				DLOG_S(INFO) << "Audio thread is stopping because it was requested to.";
 				return;
 			}
 			throw std::runtime_error("Unexpected sandbox_wait_result");
 		}
 	}
 	catch (const std::exception& err) {
-		debug_log("Audio thread is stopping because there was a fatal error: %s", err.what());
+		DLOG_S(INFO) << "Audio thread is stopping because there was a fatal error: " << err.what();
 		app->msgs_out.lock()->push_back(msg::out::report_error{err.what()});
 		app->schedule_terminate = true;
 	}
@@ -89,7 +88,7 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 
 static
 auto start(sbox::app* app) -> void {
-	debug_log("audio::start()");
+	DLOG_S(INFO) << "audio::start()";
 	if (app->audio_thread.joinable()) {
 		return;
 	}
@@ -99,7 +98,7 @@ auto start(sbox::app* app) -> void {
 
 static
 auto stop(sbox::app* app) -> void {
-	debug_log("audio::stop()");
+	DLOG_S(INFO) << "audio::stop()";
 	if (app->audio_thread.joinable()) {
 		app->audio_thread.request_stop();
 		app->audio_thread.join();

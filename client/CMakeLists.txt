@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(scuff-client)
-if (NOT TARGET scuff::common)
+if (NOT TARGET scuff::common::sources)
 	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../common ${CMAKE_BINARY_DIR}/common)
 endif()
 include(../CPM.cmake)
@@ -36,14 +36,17 @@ target_include_directories(scuff-client PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/..
 	${CMAKE_CURRENT_LIST_DIR}/../common
 )
-target_link_libraries(scuff-client PUBLIC
+target_link_libraries(scuff-client PRIVATE
 	Boost::filesystem
 	Boost::headers
 	ez::ez
 	immer
 	nlohmann_json::nlohmann_json
 	readerwriterqueue
-	scuff::common
+	scuff::common::sources
+)
+target_link_libraries(scuff-client PUBLIC
+	scuff::common::headers
 )
 target_compile_features(scuff-client PUBLIC
 	cxx_std_20

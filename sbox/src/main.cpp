@@ -2,11 +2,15 @@
 #include "common-os.hpp"
 #include "common-visit.hpp"
 #include "cmdline.hpp"
-#include "log.hpp"
+#include "loguru.hpp"
 #include "msg-proc.hpp"
+#include <filesystem>
 #include <iostream>
 #include <optional>
+#include <platform_folders.h>
 #include <string_view>
+
+namespace fs = std::filesystem;
 
 namespace scuff::sbox::main {
 
@@ -25,7 +29,7 @@ auto check_heartbeat(sbox::app* app) -> void {
 	const auto now  = std::chrono::steady_clock::now();
 	const auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - app->last_heartbeat).count();
 	if (diff > HEARTBEAT_TIMEOUT_MS) {
-		log(app, "Heartbeat timeout");
+		LOG_S(ERROR) << "Heartbeat timeout";
 		app->msgs_out.lock()->push_back(scuff::msg::out::report_error{"Heartbeat timeout"});
 		app->schedule_terminate = true;
 	}
@@ -46,17 +50,9 @@ auto do_scheduled_window_resizes(sbox::app* app) -> void {
 }
 
 static
-auto get_mode(sbox::app* app) -> sbox::mode {
-	if (!app->options.plugfile_gui.empty()) {
+auto get_mode(const sbox::app& app) -> sbox::mode {
+	if (!app.options.plugfile_gui.empty()) {
 		return sbox::mode::gui_test;
-	}
-	if (app->options.group_shmid.empty()) {
-		log(app, "Missing required option --group");
-		return sbox::mode::invalid;
-	}
-	if (app->options.sbox_shmid.empty()) {
-		log(app, "Missing required option --sandbox");
-		return sbox::mode::invalid;
 	}
 	return sbox::mode::sandbox;
 }
@@ -77,8 +73,8 @@ auto send_msgs_out(sbox::app* app) -> void {
 }
 
 auto sandbox(sbox::app* app) -> int {
-	log(app, "group: %s", app->options.group_shmid.c_str());
-	log(app, "sandbox: %s", app->options.sbox_shmid.c_str());
+	LOG_S(INFO) << "group: " << app->options.group_shmid;
+	LOG_S(INFO) << "sandbox: " << app->options.sbox_shmid;
 	app->shm_group              = shm::open_group(app->options.group_shmid);
 	app->shm_sbox               = shm::open_sandbox(app->options.sbox_shmid);
 	app->group_signaler.local   = &app->shm_group.signaling;
@@ -98,7 +94,9 @@ auto sandbox(sbox::app* app) -> int {
 			edwin::app_end();
 		}
 	};
+	DLOG_S(INFO) << "Entering message loop...";
 	edwin::app_beg({frame}, {std::chrono::milliseconds{50}});
+	DLOG_S(INFO) << "Cleanly exiting...";
 	if (app->audio_thread.joinable()) {
 		app->audio_thread.request_stop();
 		signaling::unblock_self(app->sandbox_signaler);
@@ -111,7 +109,7 @@ auto sandbox(sbox::app* app) -> int {
 
 static
 auto gui_test(sbox::app* app) -> int {
-	log(app, "plugfile_gui: %s", app->options.plugfile_gui.data());
+	LOG_S(INFO) << "plugfile_gui: " << app->options.plugfile_gui;
 	app->main_thread_id = std::this_thread::get_id();
 	auto on_window_closed = [app]{
 		app->schedule_terminate = true;
@@ -133,16 +131,27 @@ auto gui_test(sbox::app* app) -> int {
 	return EXIT_SUCCESS;
 }
 
+auto get_log_file_path() -> fs::path {
+	return fs::path(sago::getDataHome()) / "scuff-sbox" / "log.txt";
+}
+
 auto go(int argc, const char* argv[]) -> int {
 	sbox::app app;
-	app.options = cmdline::get_options(argc, argv);
-	app.mode    = get_mode(&app);
+	loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
+	loguru::init(argc, const_cast<char**>(argv));
+	loguru::add_file(get_log_file_path().string().c_str(), loguru::Truncate, loguru::Verbosity_MAX);
 	try {
+		LOG_S(INFO) << "scuff-sbox started";
+		app.options = cmdline::get_options(app, argc, argv);
+		app.mode    = get_mode(app);
 		if (app.mode == sbox::mode::sandbox)  { return sandbox(&app); }
 		if (app.mode == sbox::mode::gui_test) { return gui_test(&app); }
 	}
 	catch (const std::exception& err) {
-		log(&app, "Error: %s", err.what());
+		LOG_S(ERROR) << err.what();
+	}
+	catch (...) {
+		LOG_S(ERROR) << "Unknown error";
 	}
 	return EXIT_FAILURE;
 }

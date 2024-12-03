@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common-constants.hpp"
+#include "common-device-info.hpp"
 #include "common-events.hpp"
 #include "common-param-info.hpp"
 #include "common-plugin-type.hpp"
@@ -210,7 +211,7 @@ auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plu
 // - Every sandbox has to belong to a group.
 // - This is what allows data to travel between sandboxes.
 [[nodiscard]]
-auto create_group(double sample_rate, void* parent_window_handle) -> id::group;
+auto create_group(void* parent_window_handle) -> id::group;
 
 // Create a new sandbox.
 // - Every sandbox has to belong to a group.
@@ -273,15 +274,19 @@ auto get_devices(id::sandbox sbox) -> std::vector<id::device>;
 
 // If the plugin file failed to scan, return the error string.
 [[nodiscard]]
-auto get_error(id::plugfile plugfile) -> const char*;
+auto get_error(id::plugfile plugfile) -> std::string_view;
 
 // If the plugin failed to load, return the error string.
 [[nodiscard]]
-auto get_error(id::plugin plugin) -> const char*;
+auto get_error(id::plugin plugin) -> std::string_view;
 
 // Returns the plugin ID string.
 [[nodiscard]]
 auto get_ext_id(id::plugin plugin) -> ext::id::plugin;
+
+// Return device info.
+[[nodiscard]]
+auto get_info(id::device dev) -> device_info;
 
 // Return the parameter info.
 [[nodiscard]]
@@ -289,11 +294,15 @@ auto get_info(id::device dev, idx::param param) -> param_info;
 
 // Returns the plugin name
 [[nodiscard]]
-auto get_name(id::plugin plugin) -> const char*;
+auto get_name(id::plugin plugin) -> std::string_view;
 
 // Return the file path of the plugin file.
 [[nodiscard]]
-auto get_path(id::plugfile plugfile) -> const char*;
+auto get_path(id::plugfile plugfile) -> std::string_view;
+
+// Return the plugin file for the given plugin.
+[[nodiscard]]
+auto get_plugfile(id::plugin plugin) -> id::plugfile;
 
 // Get the current value of the parameter, synchronously.
 //  - This involves a round-trip to the sandbox process.
@@ -306,15 +315,15 @@ auto get_value_async(id::device dev, idx::param param, return_double fn) -> void
 
 // Returns the plugin vendor.
 [[nodiscard]]
-auto get_vendor(id::plugin plugin) -> const char*;
+auto get_vendor(id::plugin plugin) -> std::string_view;
 
 // Returns the plugin version string.
 [[nodiscard]]
-auto get_version(id::plugin plugin) -> const char*;
+auto get_version(id::plugin plugin) -> std::string_view;
 
 // If the device failed to load successfully, return the error string.
 [[nodiscard]]
-auto get_error(id::device dev) -> const char*;
+auto get_error(id::device dev) -> std::string_view;
 
 // For CLAP plugins, return the list of feature strings.
 // Not sure how this will look for VST yet.

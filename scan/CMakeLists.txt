@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(scuff-scan)
-if (NOT TARGET scuff::common)
+if (NOT TARGET scuff::common::sources)
 	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../common ${CMAKE_BINARY_DIR}/common)
 endif()
 include(../CPM.cmake)
@@ -16,7 +16,8 @@ target_link_libraries(scuff-scan
 	Boost::headers
 	Boost::program_options
 	nlohmann_json::nlohmann_json
-	scuff::common
+	scuff::common::headers
+	scuff::common::sources
 )
 target_compile_options(scuff-scan PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>

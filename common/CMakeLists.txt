@@ -14,15 +14,18 @@ list (APPEND sources
 CPMAddPackage(NAME clap          GITHUB_REPOSITORY free-audio/clap           GIT_TAG c2c1dea          DOWNLOAD_ONLY YES)
 CPMAddPackage(NAME cs_libguarded GITHUB_REPOSITORY copperspice/cs_libguarded GIT_TAG libguarded-1.4.1 DOWNLOAD_ONLY YES)
 CPMAddPackage(NAME flux          GITHUB_REPOSITORY tcbrindle/flux            GIT_TAG v0.4.0           DOWNLOAD_ONLY YES)
-add_library(scuff-common INTERFACE)
-add_library(scuff::common ALIAS scuff-common)
-target_sources(scuff-common INTERFACE ${sources})
-target_compile_features(scuff-common INTERFACE
-	cxx_std_20
+add_library(scuff-common-headers INTERFACE)
+add_library(scuff-common-sources INTERFACE)
+add_library(scuff::common::headers ALIAS scuff-common-headers)
+add_library(scuff::common::sources ALIAS scuff-common-sources)
+target_sources(scuff-common-sources INTERFACE ${sources})
+target_compile_features(scuff-common-headers INTERFACE cxx_std_20)
+target_compile_features(scuff-common-sources INTERFACE cxx_std_20)
+target_include_directories(scuff-common-headers INTERFACE
+	${CMAKE_CURRENT_LIST_DIR}/include
 )
-target_include_directories(scuff-common INTERFACE
+target_include_directories(scuff-common-sources INTERFACE
 	${clap_SOURCE_DIR}/include
 	${cs_libguarded_SOURCE_DIR}/src
 	${flux_SOURCE_DIR}/include
-	${CMAKE_CURRENT_LIST_DIR}/include
 )

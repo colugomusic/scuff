@@ -607,7 +607,7 @@ auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui
 static
 auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_resize_hints_changed& msg) -> void {
 	// FIXME: Stop ignoring this
-	scuff::sbox::log(app, "warning: clap_host_gui.resize_hints_changed is currently ignored");
+	DLOG_S(WARNING) << "clap_host_gui.resize_hints_changed is currently ignored";
 }
 
 static
@@ -1025,22 +1025,22 @@ auto deactivate(sbox::app* app, id::device dev_id) -> void {
 
 [[nodiscard]] static
 auto create_gui(sbox::app* app, const sbox::device& dev) -> sbox::create_gui_result {
-	log(app, "clap::main::create_gui");
+	DLOG_S(INFO) << "clap::main::create_gui";
 	const auto m         = app->model.read(ez::main);
 	const auto clap_dev  = m.clap_devices.at(dev.id);
 	const auto iface     = clap_dev.iface->plugin;
 	if (!iface.gui) {
-		log(app, "iface.gui is null?");
+		LOG_S(ERROR) << "iface.gui is null?";
 		return {};
 	}
 	if (!iface.gui->create(iface.plugin, scuff::os::get_clap_window_api(), false)) {
-		log(app, "iface.gui->create failed");
+		LOG_S(ERROR) << "iface.gui->create failed";
 		return {};
 	}
-	log(app, "iface.gui->create succeeded");
+	DLOG_S(INFO) << "iface.gui->create succeeded";
 	uint32_t width = 5000, height = 5000;
 	if (!iface.gui->get_size(iface.plugin, &width, &height)) {
-		log(app, "iface.gui->get_size failed");
+		LOG_S(ERROR) << "iface.gui->get_size failed";
 	}
 	const auto resizable = iface.gui->can_resize(iface.plugin);
 	sbox::create_gui_result result;
@@ -1053,16 +1053,16 @@ auto create_gui(sbox::app* app, const sbox::device& dev) -> sbox::create_gui_res
 
 [[nodiscard]] static
 auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
-	log(app, "clap::main::setup_editor_window");
+	DLOG_S(INFO) << "clap::main::setup_editor_window";
 	const auto m          = app->model.read(ez::main);
 	const auto clap_dev   = m.clap_devices.at(dev.id);
 	const auto iface      = clap_dev.iface->plugin;
 	const auto window_ref = os::make_clap_window_ref(dev.ui.window);
 	if (!iface.gui->set_parent(iface.plugin, &window_ref)) {
-		log(app, "iface.gui->set_parent() failed");
+		LOG_S(ERROR) << "iface.gui->set_parent() failed";
 		return false;
 	}
-	log(app, "iface.gui->set_parent() succeeded");
+	DLOG_S(INFO) << "iface.gui->set_parent() succeeded";
 	// This return value is ignored because some Plugins return false
 	// even if the window is shown.
 	iface.gui->show(iface.plugin);

@@ -23,7 +23,7 @@
 #else
 #	define SCUFF_CATCH_VOID \
 	catch (const std::exception& err) { throw err; }
-#	define SCUFF_CATCH_VOID_RETURN \
+#	define SCUFF_CATCH_RETURN \
 	catch (const std::exception& err) { throw err; }
 #endif
 
@@ -251,8 +251,7 @@ auto process_message_(const sandbox& sbox, const msg::out::device_create_fail& m
 		m = set_error(std::move(m), {msg.dev_id}, "Failed to create remote device.");
 		return m;
 	});
-	const auto return_fn = sbox.services->return_buffers.device_create_results.take(msg.callback);
-	ui::send(sbox, ui::msg::device_create{{msg.dev_id, false}, return_fn});
+	sbox.services->return_buffers.device_create_results.take(msg.callback)({msg.dev_id, false});
 }
 
 static
@@ -272,8 +271,7 @@ auto process_message_(const sandbox& sbox, const msg::out::device_create_success
 		m.devices = m.devices.insert(device);
 		return m;
 	});
-	const auto return_fn = sbox.services->return_buffers.device_create_results.take(msg.callback);
-	ui::send(sbox, ui::msg::device_create{{msg.dev_id, true}, return_fn});
+	sbox.services->return_buffers.device_create_results.take(msg.callback)({msg.dev_id, true});
 }
 
 static
@@ -314,17 +312,17 @@ auto process_message_(const sandbox& sbox, const msg::out::report_warning& msg) 
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::return_param_value& msg) -> void {
-	ui::send(sbox, ui::msg::param_value{msg.value, sbox.services->return_buffers.doubles.take(msg.callback)});
+	sbox.services->return_buffers.doubles.take(msg.callback)(msg.value);
 }
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::return_param_value_text& msg) -> void {
-	ui::send(sbox, ui::msg::param_value_text{msg.text, sbox.services->return_buffers.strings.take(msg.callback)});
+	sbox.services->return_buffers.strings.take(msg.callback)(msg.text);
 }
 
 static
 auto process_message_(const sandbox& sbox, const msg::out::return_state& msg) -> void {
-	ui::send(sbox, ui::msg::device_state{msg.bytes, sbox.services->return_buffers.states.take(msg.callback)});
+	sbox.services->return_buffers.states.take(msg.callback)(msg.bytes);
 }
 
 static
@@ -573,8 +571,13 @@ auto create_device_async(model&& m, id::device dev_id, const sandbox& sbox, plug
 auto create_device_async(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id, return_create_device_result return_fn) -> id::device {
 	const auto dev_id = id::device{scuff::id_gen_++};
 	DATA_->model.update(ez::nort, [dev_id, sbox_id, type, plugin_ext_id, return_fn](model&& m){
-		const auto sbox     = m.sandboxes.at(sbox_id);
+		const auto sbox      = m.sandboxes.at(sbox_id);
 		const auto plugin_id = id::plugin{find(m, plugin_ext_id)};
+		// The return callback will be called in the poll thread so this wrapper
+		// is to pass it back to the main thread to be called there instead.
+		const auto wrapper = [sbox, return_fn](create_device_result result) {
+			ui::send(sbox, ui::msg::device_create{result, return_fn});
+		};
 		m = create_device_async(std::move(m), dev_id, sbox, type, plugin_ext_id, plugin_id, return_fn);
 		return m;
 	});
@@ -613,7 +616,13 @@ auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin
 	auto ready = [&result] {
 		return result.has_value();
 	};
-	const auto dev_id = impl::create_device_async(sbox_id, type, plugin_ext_id, fn);
+	const auto dev_id = id::device{scuff::id_gen_++};
+	DATA_->model.update(ez::nort, [dev_id, sbox_id, type, plugin_ext_id, fn](model&& m){
+		const auto sbox      = m.sandboxes.at(sbox_id);
+		const auto plugin_id = id::plugin{find(m, plugin_ext_id)};
+		m = create_device_async(std::move(m), dev_id, sbox, type, plugin_ext_id, plugin_id, fn);
+		return m;
+	});
 	if (!bso.wait_for(ready)) {
 		ui::send(ui::msg::error{"Timed out waiting for device creation"});
 	}
@@ -743,8 +752,8 @@ auto find(id::device dev_id, ext::id::param param_id) -> idx::param {
 }
 
 [[nodiscard]] static
-auto get_error(id::device dev) -> const char* {
-	return DATA_->model.read(ez::nort).devices.at(dev).error->c_str();
+auto get_error(id::device dev) -> std::string_view {
+	return *DATA_->model.read(ez::nort).devices.at(dev).error;
 }
 
 [[nodiscard]] static
@@ -913,12 +922,11 @@ auto was_loaded_successfully(id::device dev) -> bool {
 }
 
 [[nodiscard]] static
-auto create_group(double sample_rate, void* parent_window_handle) -> id::group {
+auto create_group(void* parent_window_handle) -> id::group {
 	const auto group_id = id::group{id_gen_++};
 	DATA_->model.update(ez::nort, [=](model&& m){
 		scuff::group group;
 		group.id                   = group_id;
-		group.sample_rate          = sample_rate;
 		group.parent_window_handle = parent_window_handle;
 		const auto shmid    = shm::make_group_id(DATA_->instance_id, group.id);
 		group.services      = std::make_shared<group_services>();
@@ -958,12 +966,15 @@ auto is_scanning() -> bool {
 }
 
 static
-auto get_value_async(id::device dev, idx::param param, return_double fn) -> void {
+auto get_value_async(id::device dev_id, idx::param param, return_double fn) -> void {
 	const auto& m       = DATA_->model.read(ez::nort);
-	const auto& device  = m.devices.at({dev});
+	const auto& device  = m.devices.at(dev_id);
 	const auto& sbox    = m.sandboxes.at(device.sbox);
-	const auto callback = sbox.services->return_buffers.doubles.put(fn);
-	sbox.services->enqueue(scuff::msg::in::get_param_value{dev.value, param.value, callback});
+	const auto wrapper = [sbox, fn](double value) -> void {
+		ui::send(sbox, ui::msg::param_value{value, fn});
+	};
+	const auto callback = sbox.services->return_buffers.doubles.put(wrapper);
+	sbox.services->enqueue(scuff::msg::in::get_param_value{dev_id.value, param.value, callback});
 }
 
 static
@@ -976,12 +987,22 @@ auto get_value(id::device dev_id, idx::param param) -> double {
 	auto ready = [&result] {
 		return result.has_value();
 	};
-	get_value_async(dev_id, param, fn);
+	const auto& m       = DATA_->model.read(ez::nort);
+	const auto& device  = m.devices.at(dev_id);
+	const auto& sbox    = m.sandboxes.at(device.sbox);
+	const auto callback = sbox.services->return_buffers.doubles.put(fn);
+	sbox.services->enqueue(scuff::msg::in::get_param_value{dev_id.value, param.value, callback});
 	if (!bso.wait_for(ready)) {
 		ui::send(ui::msg::error{"Timed out waiting for value."});
 		return 0.0;
 	}
 	return *result;
+}
+
+[[nodiscard]] static
+auto get_info(id::device dev_id) -> device_info {
+	// TOODOO: implement get_info(device)
+	return {};
 }
 
 [[nodiscard]] static
@@ -1005,18 +1026,23 @@ auto push_event(id::device dev, const scuff::event& event) -> void {
 }
 
 [[nodiscard]] static
-auto get_path(id::plugfile plugfile) -> const char* {
-	return DATA_->model.read(ez::nort).plugfiles.at({plugfile}).path->c_str();
+auto get_path(id::plugfile plugfile) -> std::string_view {
+	return *DATA_->model.read(ez::nort).plugfiles.at({plugfile}).path;
 }
 
 [[nodiscard]] static
-auto get_error(id::plugfile plugfile) -> const char* {
-	return DATA_->model.read(ez::nort).plugfiles.at({plugfile}).error->c_str();
+auto get_plugfile(id::plugin plugin) -> id::plugfile {
+	return DATA_->model.read(ez::nort).plugins.at({plugin}).plugfile;
 }
 
 [[nodiscard]] static
-auto get_error(id::plugin plugin) -> const char* {
-	return DATA_->model.read(ez::nort).plugins.at({plugin}).error->c_str();
+auto get_error(id::plugfile plugfile) -> std::string_view {
+	return *DATA_->model.read(ez::nort).plugfiles.at({plugfile}).error;
+}
+
+[[nodiscard]] static
+auto get_error(id::plugin plugin) -> std::string_view {
+	return *DATA_->model.read(ez::nort).plugins.at({plugin}).error;
 }
 
 [[nodiscard]] static
@@ -1025,13 +1051,25 @@ auto get_ext_id(id::plugin plugin) -> ext::id::plugin {
 }
 
 [[nodiscard]] static
-auto get_name(id::plugin plugin) -> const char* {
-	return DATA_->model.read(ez::nort).plugins.at({plugin}).name->c_str();
+auto get_name(id::plugin plugin) -> std::string_view {
+	return *DATA_->model.read(ez::nort).plugins.at({plugin}).name;
 }
 
 [[nodiscard]] static
 auto get_plugin_ext_id(id::device dev) -> ext::id::plugin {
 	return DATA_->model.read(ez::nort).devices.at(dev).plugin_ext_id;
+}
+
+static
+auto get_value_text_async(id::device dev_id, idx::param param, double value, return_string fn) -> void {
+	const auto m     = DATA_->model.read(ez::nort);
+	const auto& dev  = m.devices.at(dev_id);
+	const auto& sbox = m.sandboxes.at(dev.sbox);
+	const auto wrapper = [sbox, fn](std::string_view text) -> void {
+		ui::send(sbox, ui::msg::param_value_text{std::string{text}, fn});
+	};
+	const auto callback = sbox.services->return_buffers.strings.put(wrapper);
+	sbox.services->enqueue(scuff::msg::in::get_param_value_text{dev_id.value, param.value, value, callback});
 }
 
 [[nodiscard]] static
@@ -1044,30 +1082,25 @@ auto get_value_text(id::device dev_id, idx::param param, double value) -> std::s
 	auto ready = [&result] {
 		return !result.empty();
 	};
-	get_value_text_async(dev_id, param, value, fn);
+	const auto m     = DATA_->model.read(ez::nort);
+	const auto& dev  = m.devices.at(dev_id);
+	const auto& sbox = m.sandboxes.at(dev.sbox);
+	const auto callback = sbox.services->return_buffers.strings.put(fn);
+	sbox.services->enqueue(scuff::msg::in::get_param_value_text{dev_id.value, param.value, value, callback});
 	if (!bso.wait_for(ready)) {
 		ui::send(ui::msg::error{"Timed out waiting for value text."});
 	}
 	return result;
 }
 
-static
-auto get_value_text_async(id::device dev_id, idx::param param, double value, return_string fn) -> void {
-	const auto m     = DATA_->model.read(ez::nort);
-	const auto& dev  = m.devices.at(dev_id);
-	const auto& sbox = m.sandboxes.at(dev.sbox);
-	const auto callback = sbox.services->return_buffers.strings.put(fn);
-	sbox.services->enqueue(scuff::msg::in::get_param_value_text{dev_id.value, param.value, value, callback});
+[[nodiscard]] static
+auto get_vendor(id::plugin plugin) -> std::string_view {
+	return *DATA_->model.read(ez::nort).plugins.at({plugin}).vendor;
 }
 
 [[nodiscard]] static
-auto get_vendor(id::plugin plugin) -> const char* {
-	return DATA_->model.read(ez::nort).plugins.at({plugin}).vendor->c_str();
-}
-
-[[nodiscard]] static
-auto get_version(id::plugin plugin) -> const char* {
-	return DATA_->model.read(ez::nort).plugins.at({plugin}).version->c_str();
+auto get_version(id::plugin plugin) -> std::string_view {
+	return *DATA_->model.read(ez::nort).plugins.at({plugin}).version;
 }
 
 static
@@ -1152,12 +1185,12 @@ auto update_saved_state_with_returned_bytes(id::device dev_id, const scuff::byte
 
 static
 auto save_async(const scuff::device& dev, return_bytes fn) -> void {
-	auto wrapper_fn = [dev_id = dev.id, fn](const scuff::bytes& bytes){
-		update_saved_state_with_returned_bytes(dev_id, bytes);
-		fn(bytes);
-	};
 	const auto m = DATA_->model.read(ez::nort);
 	const auto sbox = m.sandboxes.at(dev.sbox);
+	auto wrapper_fn = [dev_id = dev.id, sbox, fn](const scuff::bytes& bytes){
+		update_saved_state_with_returned_bytes(dev_id, bytes);
+		ui::send(sbox, ui::msg::device_state{bytes, fn});
+	};
 	sbox.services->enqueue(msg::in::device_save{dev.id.value, sbox.services->return_buffers.states.put(wrapper_fn)});
 }
 
@@ -1181,7 +1214,12 @@ auto save(id::device dev_id) -> scuff::bytes {
 	};
 	const auto m    = DATA_->model.read(ez::nort);
 	const auto& dev = m.devices.at(dev_id);
-	save_async(dev, fn);
+	const auto sbox = m.sandboxes.at(dev.sbox);
+	auto wrapper_fn = [dev_id = dev.id, sbox, fn](const scuff::bytes& bytes){
+		update_saved_state_with_returned_bytes(dev_id, bytes);
+		fn(bytes);
+	};
+	sbox.services->enqueue(msg::in::device_save{dev.id.value, sbox.services->return_buffers.states.put(wrapper_fn)});
 	if (!bso.wait_for(ready)) {
 		ui::send(ui::msg::error{"Timed out waiting for device save."});
 	}
@@ -1225,6 +1263,9 @@ auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::s
 		const auto sandbox_shmid = shm::make_sandbox_id(DATA_->instance_id, sbox.id);
 		const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, reinterpret_cast<uint64_t>(group.parent_window_handle));
 		auto proc                = bp::child{std::string{sbox_exe_path}, exe_args};
+		if (!proc.running()) {
+			throw std::runtime_error("Failed to launch sandbox process.");
+		}
 		sbox.flags.value        |= sandbox_flags::launched;
 		sbox.group               = {group_id};
 		sbox.services            = std::make_shared<sandbox_services>(std::move(proc), sandbox_shmid);
@@ -1425,7 +1466,7 @@ auto find(ext::id::plugin plugin_id) -> id::plugin {
 	try { return impl::find(plugin_id); } SCUFF_CATCH_RETURN;
 }
 
-auto get_error(id::device device) -> const char* {
+auto get_error(id::device device) -> std::string_view {
 	try { return impl::get_error(device); } SCUFF_CATCH_RETURN;
 }
 
@@ -1445,8 +1486,8 @@ auto gui_show(id::device dev) -> void {
 	try { impl::gui_show(dev); } SCUFF_CATCH_VOID;
 }
 
-auto create_group(double sample_rate, void* parent_window_handle) -> id::group {
-	try { return impl::create_group(sample_rate, parent_window_handle); } SCUFF_CATCH_RETURN;
+auto create_group(void* parent_window_handle) -> id::group {
+	try { return impl::create_group(parent_window_handle); } SCUFF_CATCH_RETURN;
 }
 
 auto erase(id::group group) -> void {
@@ -1465,11 +1506,11 @@ auto get_devices(id::sandbox sbox) -> std::vector<id::device> {
 	try { return impl::get_devices(sbox); } SCUFF_CATCH_RETURN;
 }
 
-auto get_error(id::plugfile plugfile) -> const char* {
+auto get_error(id::plugfile plugfile) -> std::string_view {
 	try { return impl::get_error(plugfile); } SCUFF_CATCH_RETURN;
 }
 
-auto get_error(id::plugin plugin) -> const char* {
+auto get_error(id::plugin plugin) -> std::string_view {
 	try { return impl::get_error(plugin); } SCUFF_CATCH_RETURN;
 }
 
@@ -1481,16 +1522,24 @@ auto get_features(id::plugin plugin) -> std::vector<std::string> {
 	try { return impl::get_features(plugin); } SCUFF_CATCH_RETURN;
 }
 
-auto get_info(id::device dev, idx::param param) -> param_info {
-	try { return impl::get_info({dev}, param); } SCUFF_CATCH_RETURN;
+auto get_info(id::device dev) -> device_info {
+	try { return impl::get_info(dev); } SCUFF_CATCH_RETURN;
 }
 
-auto get_name(id::plugin plugin) -> const char* {
+auto get_info(id::device dev, idx::param param) -> param_info {
+	try { return impl::get_info(dev, param); } SCUFF_CATCH_RETURN;
+}
+
+auto get_name(id::plugin plugin) -> std::string_view {
 	try { return impl::get_name(plugin); } SCUFF_CATCH_RETURN;
 }
 
-auto get_path(id::plugfile plugfile) -> const char* {
+auto get_path(id::plugfile plugfile) -> std::string_view {
 	try { return impl::get_path(plugfile); } SCUFF_CATCH_RETURN;
+}
+
+auto get_plugfile(id::plugin plugin) -> id::plugfile {
+	try { return impl::get_plugfile(plugin); } SCUFF_CATCH_RETURN;
 }
 
 auto get_plugin_ext_id(id::device dev) -> ext::id::plugin {
@@ -1517,11 +1566,11 @@ auto get_value_text_async(id::device dev, idx::param param, double value, return
 	try { impl::get_value_text_async(dev, param, value, fn); } SCUFF_CATCH_VOID;
 }
 
-auto get_vendor(id::plugin plugin) -> const char* {
+auto get_vendor(id::plugin plugin) -> std::string_view {
 	try { return impl::get_vendor(plugin); } SCUFF_CATCH_RETURN;
 }
 
-auto get_version(id::plugin plugin) -> const char* {
+auto get_version(id::plugin plugin) -> std::string_view {
 	try { return impl::get_version(plugin); } SCUFF_CATCH_RETURN;
 }
 

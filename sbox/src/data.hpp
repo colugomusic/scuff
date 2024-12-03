@@ -79,25 +79,25 @@ enum class mode {
 };
 
 struct app {
-	sbox::options                    options;
-	sbox::mode                       mode;
-	shm::group                       shm_group;
-	shm::sandbox                     shm_sbox;
-	signaling::sandboxside_group     group_signaler;
-	signaling::sandboxside_sandbox   sandbox_signaler;
-	std::jthread                     audio_thread;
-	msg::sender<msg::out::msg>       client_msg_sender;
-	msg::receiver<msg::in::msg>      client_msg_receiver;
-	lg::plain_guarded<msg::out::buf> msgs_out;
-	std::thread::id                  main_thread_id;
-	ez::sync<sbox::model>            model;
-	ez::immutable<sbox::model>       audio_model;
-	std::atomic<uint64_t>            uid = 0;
-	std::atomic_bool                 schedule_terminate = false;
-	bool                             active = false;
-	double                           sample_rate = 44100.0;
-	heartbeat_time                   last_heartbeat;
-	msg::out::buf                    reusable_msg_out_buf;
+	sbox::options                     options;
+	sbox::mode                        mode;
+	shm::group                        shm_group;
+	shm::sandbox                      shm_sbox;
+	signaling::sandboxside_group      group_signaler;
+	signaling::sandboxside_sandbox    sandbox_signaler;
+	std::jthread                      audio_thread;
+	msg::sender<msg::out::msg>        client_msg_sender;
+	msg::receiver<msg::in::msg>       client_msg_receiver;
+	lg::plain_guarded<msg::out::buf>  msgs_out;
+	std::thread::id                   main_thread_id;
+	ez::sync<sbox::model>             model;
+	ez::immutable<sbox::model>        audio_model;
+	std::atomic<uint64_t>             uid = 0;
+	std::atomic_bool                  schedule_terminate = false;
+	bool                              active = false;
+	double                            sample_rate = 44100.0;
+	heartbeat_time                    last_heartbeat;
+	msg::out::buf                     reusable_msg_out_buf;
 };
 
 } // scuff::sbox

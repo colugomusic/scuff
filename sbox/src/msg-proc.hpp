@@ -2,7 +2,6 @@
 
 #include "audio.hpp"
 #include "gui.hpp"
-#include "log.hpp"
 #include "op.hpp"
 
 namespace scuff::sbox::main {
@@ -14,7 +13,7 @@ auto get_device_type(const sbox::app& app, id::device dev_id) -> plugin_type {
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors& msg) -> void {
-	log(app, "msg::in::close_all_editors:");
+	DLOG_S(INFO) << "msg::in::close_all_editors:";
 	const auto devices = app->model.read(ez::main).devices;
 	for (const auto& dev : devices) {
 		if (dev.ui.window) {
@@ -26,7 +25,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::close_all_editors&
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::crash& msg) -> void {
-	log(app, "msg::in::device_crash:");
+	DLOG_S(INFO) << "msg::in::device_crash:";
 	// Crash the process. This is used for testing the
 	// way the client responds to sandbox crashes.
 	double* x{}; 
@@ -35,7 +34,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::crash& msg) -> voi
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
-	log(app, "msg::in::device_create:");
+	DLOG_S(INFO) << "msg::in::device_create:";
 	try {
 		const auto dev = op::device_create(app, msg.type, id::device{msg.dev_id}, msg.plugfile_path, msg.plugin_id);
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_create_success{msg.dev_id, dev.service->shm.seg.id.data(), msg.callback});
@@ -47,25 +46,25 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_create& msg
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_connect& msg) -> void {
-	log(app, "msg::in::device_connect:");
+	DLOG_S(INFO) << "msg::in::device_connect:";
 	op::device_connect(app, {msg.out_dev_id}, msg.out_port, {msg.in_dev_id}, msg.in_port);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_disconnect& msg) -> void {
-	log(app, "msg::in::device_disconnect:");
+	DLOG_S(INFO) << "msg::in::device_disconnect:";
 	op::device_disconnect(app, {msg.out_dev_id}, msg.out_port, {msg.in_dev_id}, msg.in_port);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_erase& msg) -> void {
-	log(app, "msg::in::device_erase:");
+	DLOG_S(INFO) << "msg::in::device_erase:";
 	op::device_erase(app, {msg.dev_id});
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_hide& msg) -> void {
-	log(app, "msg::in::device_gui_hide:");
+	DLOG_S(INFO) << "msg::in::device_gui_hide:";
 	const auto devices = app->model.read(ez::main).devices;
 	auto device        = devices.at({msg.dev_id});
 	gui::hide(app, device);
@@ -73,13 +72,13 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_hide& m
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_gui_show& msg) -> void {
-	log(app, "msg::in::device_gui_show:");
+	DLOG_S(INFO) << "msg::in::device_gui_show:";
 	gui::show(app, {msg.dev_id}, {[]{}});
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_load& msg) -> void {
-	log(app, "msg::in::device_load:");
+	DLOG_S(INFO) << "msg::in::device_load:";
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
@@ -95,7 +94,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_load& msg) 
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_save& msg) -> void {
-	log(app, "msg::in::device_save:");
+	DLOG_S(INFO) << "msg::in::device_save:";
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
@@ -111,13 +110,13 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::device_save& msg) 
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::set_render_mode& msg) -> void {
-	log(app, "msg::in::set_render_mode:");
+	DLOG_S(INFO) << "msg::in::set_render_mode:";
 	// TOODOO: msg::in::set_render_mode
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::event& msg) -> void {
-	log(app, "msg::in::event:");
+	DLOG_S(INFO) << "msg::in::event:";
 	const auto dev_id  = id::device{msg.dev_id};
 	const auto devices = app->model.read(ez::main).devices;
 	const auto dev     = devices.at(dev_id);
@@ -126,7 +125,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::event& msg) -> voi
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value& msg) -> void {
-	log(app, "msg::in::get_param_value:");
+	DLOG_S(INFO) << "msg::in::get_param_value:";
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
@@ -139,7 +138,7 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value& m
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value_text& msg) -> void {
-	log(app, "msg::in::get_param_value_text:");
+	DLOG_S(INFO) << "msg::in::get_param_value_text:";
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
@@ -151,19 +150,19 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::get_param_value_te
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::activate& msg) -> void {
-	log(app, "msg::in::activate: %f", msg.sr);
+	DLOG_S(INFO) << "msg::in::activate: " << msg.sr;
 	op::activate(app, msg.sr);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::deactivate& msg) -> void {
-	log(app, "msg::in::deactivate:");
+	DLOG_S(INFO) << "msg::in::deactivate:";
 	op::deactivate(app);
 }
 
 static
 auto process_input_msg_(sbox::app* app, const scuff::msg::in::heartbeat& msg) -> void {
-	//log(app, "msg::in::heartbeat:");
+	//app->logger->debug("msg::in::heartbeat:");
 	app->last_heartbeat = std::chrono::steady_clock::now();
 }
 
@@ -188,7 +187,7 @@ auto process_client_messages(sbox::app* app) -> void {
 		app->client_msg_sender.send(send);
 	}
 	catch (const std::exception& err) {
-		log(app, "Error in process_messages(): %s", err.what());
+		LOG_S(ERROR) << "Error in " << std::source_location::current().function_name() << ": " << err.what();
 		app->msgs_out.lock()->push_back(scuff::msg::out::report_error{err.what()});
 	}
 }
