@@ -99,7 +99,13 @@ auto create_a_bunch_of_devices(scuff::id::sandbox sbox) -> std::vector<scuff::id
 	return devices;
 }
 
-TEST_CASE("create p-sim") {
+TEST_CASE("com.FabFilter.preset-discovery.Saturn.2") {
+	const auto group  = scuff::managed_group{scuff::create_group(nullptr)};
+	const auto sbox   = scuff::managed_sandbox{scuff::create_sandbox(group.id(), sbox_exe_path_.string())};
+	const auto ext_id = scuff::ext::id::plugin{"com.FabFilter.preset-discovery.Saturn.2"};
+	const auto plugin = scuff::find({ext_id});
+	const auto device = scuff::create_device(sbox.id(), scuff::plugin_type::clap, ext_id);
+	REQUIRE(device.was_created_successfully);
 }
 
 TEST_CASE("stress test") {

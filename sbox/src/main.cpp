@@ -1,7 +1,9 @@
+#define DOCTEST_CONFIG_IMPLEMENT
 #include <boost/container/stable_vector.hpp> // included before nappgui to avoid preprocessor conflicts
 #include "common-os.hpp"
 #include "common-visit.hpp"
 #include "cmdline.hpp"
+#include "doctest.h"
 #include "loguru.hpp"
 #include "msg-proc.hpp"
 #include <filesystem>
@@ -13,6 +15,8 @@
 namespace fs = std::filesystem;
 
 namespace scuff::sbox::main {
+
+static sbox::app* app_for_tests_only_ = nullptr;
 
 static
 auto destroy_all_editor_windows(const sbox::app& app) -> void {
@@ -51,9 +55,8 @@ auto do_scheduled_window_resizes(sbox::app* app) -> void {
 
 static
 auto get_mode(const sbox::app& app) -> sbox::mode {
-	if (!app.options.plugfile_gui.empty()) {
-		return sbox::mode::gui_test;
-	}
+	if (app.options.test)                  { return sbox::mode::test; }
+	if (!app.options.plugfile_gui.empty()) { return sbox::mode::gui_test; }
 	return sbox::mode::sandbox;
 }
 
@@ -131,6 +134,15 @@ auto gui_test(sbox::app* app) -> int {
 	return EXIT_SUCCESS;
 }
 
+static
+auto run_tests(sbox::app* app) -> int {
+	app_for_tests_only_ = app;
+	app->options.sbox_shmid = "scuff-sbox-test+" + std::to_string(scuff::os::get_process_id());
+	doctest::Context ctx;
+	return ctx.run();
+}
+
+static
 auto get_log_file_path() -> fs::path {
 	return fs::path(sago::getDataHome()) / "scuff-sbox" / "log.txt";
 }
@@ -146,6 +158,7 @@ auto go(int argc, const char* argv[]) -> int {
 		app.mode    = get_mode(app);
 		if (app.mode == sbox::mode::sandbox)  { return sandbox(&app); }
 		if (app.mode == sbox::mode::gui_test) { return gui_test(&app); }
+		if (app.mode == sbox::mode::test)     { return run_tests(&app); }
 	}
 	catch (const std::exception& err) {
 		LOG_S(ERROR) << err.what();
@@ -154,6 +167,12 @@ auto go(int argc, const char* argv[]) -> int {
 		LOG_S(ERROR) << "Unknown error";
 	}
 	return EXIT_FAILURE;
+}
+
+TEST_CASE("com.FabFilter.preset-discovery.Saturn.2") {
+	const auto app = app_for_tests_only_;
+	const auto plugfile_path = "C:\\Program Files\\Common Files\\CLAP\\FabFilter Saturn 2.clap";
+	op::device_create(app, plugin_type::clap, id::device{1}, plugfile_path, "com.FabFilter.preset-discovery.Saturn.2");
 }
 
 } // scuff::sbox::main

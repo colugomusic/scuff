@@ -75,7 +75,8 @@ using heartbeat_time = std::chrono::time_point<std::chrono::steady_clock>;
 enum class mode {
 	invalid,
 	gui_test,
-	sandbox
+	sandbox,
+	test
 };
 
 struct app {

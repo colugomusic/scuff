@@ -564,8 +564,9 @@ auto init_params(clap::device&& dev) -> clap::device {
 static
 auto init_params_shm(const sbox::device& dev, const clap::device& clap_dev) -> void {
 	auto lock = std::lock_guard{dev.service->shm.data->param_info_mutex};
-	dev.service->shm.data->param_info.resize(clap_dev.params.size());
-	for (size_t i = 0; i < clap_dev.params.size(); i++) {
+	auto param_count = std::min(size_t(MAX_PARAMS), clap_dev.params.size());
+	dev.service->shm.data->param_info.resize(param_count);
+	for (size_t i = 0; i < param_count; i++) {
 		const auto& param = clap_dev.params[i];
 		scuff::param_info info;
 		info.id            = {param.info.id};
@@ -839,7 +840,7 @@ auto make_ext_data(sbox::app* app, id::device id) -> std::shared_ptr<clap::devic
 
 [[nodiscard]] static
 auto make_shm_device(std::string_view sbox_shmid, id::device dev_id, sbox::mode mode) -> shm::device {
-	const auto remove_when_done = mode == sbox::mode::gui_test;
+	const auto remove_when_done = mode != sbox::mode::sandbox;
 	return shm::open_or_create_device(shm::make_device_id(sbox_shmid, dev_id), remove_when_done);
 }
 

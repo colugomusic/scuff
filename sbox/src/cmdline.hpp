@@ -15,6 +15,7 @@ auto get_options(const sbox::app& app, int argc, const char* argv[]) -> sbox::op
 		("group",         po::value<std::string>(&options.group_shmid),"Group shared memory ID")
 		("sandbox",       po::value<std::string>(&options.sbox_shmid), "Sandbox shared memory ID")
 		("gui",           po::value<std::string>(&options.plugfile_gui), "Path to plugfile GUI to open for testing")
+		("test", po::bool_switch(&options.test), "Run tests")
 		("parent-window", po::value<uint64_t>(&parent_window), "Parent window handle")
 		;
 	po::variables_map vm;
