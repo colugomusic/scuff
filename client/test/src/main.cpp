@@ -93,13 +93,12 @@ auto create_a_bunch_of_devices(scuff::id::sandbox sbox) -> std::vector<scuff::id
 		const auto device = scuff::create_device(sbox, type, ext_id);
 		REQUIRE(device.was_created_successfully);
 		devices.push_back(device.id);
-		const auto info = scuff::get_info(device.id);
-		INFO("audio inputs: ", info.audio_input_port_count, " outputs: ", info.audio_output_port_count);
 	}
 	return devices;
 }
 
 TEST_CASE("com.FabFilter.preset-discovery.Saturn.2") {
+	// This plugin has a lot of parameters
 	const auto group  = scuff::managed_group{scuff::create_group(nullptr)};
 	const auto sbox   = scuff::managed_sandbox{scuff::create_sandbox(group.id(), sbox_exe_path_.string())};
 	const auto ext_id = scuff::ext::id::plugin{"com.FabFilter.preset-discovery.Saturn.2"};
