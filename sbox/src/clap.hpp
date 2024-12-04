@@ -6,9 +6,16 @@
 #include "common-shm.hpp"
 #include "common-visit.hpp"
 #include "data.hpp"
+#include "loguru.hpp"
 #include "os.hpp"
 #include <optional>
 #include <ranges>
+
+namespace scuff::sbox::op {
+
+auto make_client_param_info(const sbox::device& dev) -> std::vector<client_param_info>;
+
+} // namespace scuff::sbox::op
 
 namespace scuff::sbox::gui {
 
@@ -181,10 +188,10 @@ auto cb_gui_resize_hints_changed(sbox::app* app, id::device dev_id) -> void {
 static
 auto convert_input_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
 	auto get_cookie = [dev](idx::param param) -> void* {
-		return dev.service->shm.data->param_info[param.value].clap.cookie;
+		return dev.param_info[param.value].clap.cookie;
 	};
 	auto get_id = [dev](idx::param param) -> clap_id {
-		return dev.service->shm.data->param_info[param.value].id.value;
+		return dev.param_info[param.value].id.value;
 	};
 	auto fns = scuff::events::clap::scuff_to_clap_conversion_fns{get_cookie, get_id};
 	scuff::events::clap::event_buffer input_clap_events;
@@ -198,15 +205,14 @@ auto convert_input_events(const sbox::device& dev, const clap::device& clap_dev)
 static
 auto convert_output_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
 	auto find_param = [dev](clap_id id) -> idx::param {
-		auto has_id = [id](const scuff::param_info& info) -> bool {
+		auto has_id = [id](const scuff::sbox_param_info& info) -> bool {
 			return info.id.value == id;
 		};
-		const auto& infos = dev.service->shm.data->param_info;
-		const auto pos    = std::find_if(std::begin(infos), std::end(infos), has_id);
-		if (pos == std::end(infos)) {
+		const auto pos = std::ranges::find_if(dev.param_info, has_id);
+		if (pos == std::end(dev.param_info)) {
 			throw std::runtime_error(std::format("Could not find parameter with CLAP id: {}", id));
 		}
-		return static_cast<idx::param>(std::distance(std::begin(infos), pos));
+		return static_cast<idx::param>(std::distance(std::begin(dev.param_info), pos));
 	};
 	auto fns = scuff::events::clap::clap_to_scuff_conversion_fns{find_param};
 	scuff::event_buffer output_scuff_events;
@@ -510,7 +516,7 @@ auto init_audio(sbox::app* app, id::device dev_id) -> void {
 		auto clap_dev                    = m.clap_devices.at(dev_id);
 		clap_dev.service.audio_port_info = retrieve_audio_port_info(clap_dev.iface->plugin);
 		clap_dev                         = init_audio(std::move(clap_dev), dev);
-		m.clap_devices                  = m.clap_devices.insert(clap_dev);
+		m.clap_devices                   = m.clap_devices.insert(clap_dev);
 		return m;
 	});
 }
@@ -561,24 +567,21 @@ auto init_params(clap::device&& dev) -> clap::device {
 	return dev;
 }
 
-static
-auto init_params_shm(const sbox::device& dev, const clap::device& clap_dev) -> void {
-	auto lock = std::lock_guard{dev.service->shm.data->param_info_mutex};
-	auto param_count = std::min(size_t(MAX_PARAMS), clap_dev.params.size());
-	dev.service->shm.data->param_info.resize(param_count);
-	for (size_t i = 0; i < param_count; i++) {
+[[nodiscard]] static
+auto init_local_params(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
+	dev.param_info = {};
+	for (size_t i = 0; i < clap_dev.params.size(); i++) {
 		const auto& param = clap_dev.params[i];
-		scuff::param_info info;
+		scuff::sbox_param_info info;
 		info.id            = {param.info.id};
 		info.default_value = param.info.default_value;
 		info.max_value     = param.info.max_value;
 		info.min_value     = param.info.min_value;
 		info.clap.cookie   = param.info.cookie;
-		const auto name_buffer_size = std::min(std::size(info.name), std::size(param.info.name));
-		std::copy_n(std::begin(param.info.name), name_buffer_size, std::begin(info.name));
-		info.name[name_buffer_size - 1] = '\0';
-		dev.service->shm.data->param_info[i] = std::move(info);
+		info.name          = param.info.name;
+		dev.param_info = dev.param_info.push_back(info);
 	}
+	return dev;
 }
 
 static
@@ -653,15 +656,16 @@ auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log
 
 static
 auto process_msg_(sbox::app* app, clap::device clap_dev, const clap::device_msg::params_rescan& msg) -> void {
-	const auto m    = app->model.read(ez::main);
-	const auto& dev = m.devices.at(clap_dev.id);
+	const auto m = app->model.read(ez::main);
+	auto dev = m.devices.at(clap_dev.id);
 	clap_dev = init_params(std::move(clap_dev));
-	init_params_shm(dev, clap_dev);
-	app->model.update_publish(ez::main, [clap_dev](model&& m){
+	dev      = init_local_params(std::move(dev), clap_dev);
+	app->model.update_publish(ez::main, [dev, clap_dev](model&& m){
 		m.clap_devices = m.clap_devices.insert(clap_dev);
+		m.devices      = m.devices.insert(dev);
 		return m;
 	});
-	app->msgs_out.lock()->push_back(scuff::msg::out::device_params_changed{dev.id.value});
+	app->msgs_out.lock()->push_back(scuff::msg::out::device_param_info{dev.id.value, op::make_client_param_info(dev)});
 }
 
 static
@@ -896,7 +900,7 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	dev                   = init_params(std::move(dev), clap_dev);
 	clap_dev              = init_audio(std::move(clap_dev), dev);
 	clap_dev              = init_params(std::move(clap_dev));
-	init_params_shm(dev, clap_dev);
+	dev                   = init_local_params(std::move(dev), clap_dev);
 	app->model.update_publish(ez::main, [=](model&& m) {
 		m.devices      = m.devices.insert(dev);
 		m.clap_devices = m.clap_devices.insert(clap_dev);

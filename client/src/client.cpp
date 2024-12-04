@@ -290,7 +290,17 @@ auto process_message_(const sandbox& sbox, const msg::out::device_editor_visible
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::device_params_changed& msg) -> void {
+auto process_message_(const sandbox& sbox, const msg::out::device_param_info& msg) -> void {
+	DATA_->model.update_publish(ez::nort, [msg](model&& m) {
+		m.devices = m.devices.update_if_exists({msg.dev_id}, [msg](device dev) {
+			dev.param_info = {};
+			for (const auto& info : msg.info) {
+				dev.param_info = dev.param_info.push_back(info);
+			}
+			return dev;
+		});
+		return m;
+	});
 	ui::send(sbox, ui::msg::device_params_changed{{msg.dev_id}});
 }
 
@@ -740,11 +750,10 @@ auto erase(id::device dev_id) -> void {
 
 [[nodiscard]] static
 auto find(id::device dev_id, ext::id::param param_id) -> idx::param {
-	const auto m    = DATA_->model.read(ez::nort);
-	const auto dev  = m.devices.at(dev_id);
-	const auto lock = std::lock_guard{dev.services->shm.data->param_info_mutex};
-	for (size_t i = 0; i < dev.services->shm.data->param_info.size(); i++) {
-		const auto& info = dev.services->shm.data->param_info[i];
+	const auto m   = DATA_->model.read(ez::nort);
+	const auto dev = m.devices.at(dev_id);
+	for (size_t i = 0; i < dev.param_info.size(); i++) {
+		const auto& info = dev.param_info[i];
 		if (info.id == param_id) {
 			return {i};
 		}
@@ -771,12 +780,7 @@ auto get_features(id::plugin plugin) -> std::vector<std::string> {
 auto get_param_count(id::device dev) -> size_t {
 	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
-	if (!shm::is_valid(device.services->shm.seg)) {
-		// Device wasn't successfully created by the sandbox process (yet?)
-		return 0;
-	}
-	const auto lock = std::unique_lock{device.services->shm.data->param_info_mutex};
-	return device.services->shm.data->param_info.size();
+	return device.param_info.size();
 }
 
 static
@@ -1002,14 +1006,13 @@ auto get_info(id::device dev_id) -> device_info {
 }
 
 [[nodiscard]] static
-auto get_info(id::device dev_id, idx::param param) -> param_info {
-	const auto m    = DATA_->model.read(ez::nort);
-	const auto dev  = m.devices.at(dev_id);
-	const auto lock = std::unique_lock{dev.services->shm.data->param_info_mutex};
-	if (param.value >= dev.services->shm.data->param_info.size()) {
+auto get_info(id::device dev_id, idx::param param) -> client_param_info {
+	const auto m   = DATA_->model.read(ez::nort);
+	const auto dev = m.devices.at(dev_id);
+	if (param.value >= dev.param_info.size()) {
 		throw std::runtime_error("Invalid parameter index.");
 	}
-	return dev.services->shm.data->param_info[param.value];
+	return dev.param_info[param.value];
 }
 
 static
@@ -1522,7 +1525,7 @@ auto get_info(id::device dev) -> device_info {
 	try { return impl::get_info(dev); } SCUFF_CATCH_RETURN;
 }
 
-auto get_info(id::device dev, idx::param param) -> param_info {
+auto get_info(id::device dev, idx::param param) -> client_param_info {
 	try { return impl::get_info(dev, param); } SCUFF_CATCH_RETURN;
 }
 

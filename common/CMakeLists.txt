@@ -23,6 +23,7 @@ list (APPEND scuff-common-hdr
 	${CMAKE_CURRENT_LIST_DIR}/include/common-render-mode.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-serialize.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-serialize-events.hpp
+	${CMAKE_CURRENT_LIST_DIR}/include/common-serialize-param-info.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-shm.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-signaling.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-slot-buffer.hpp

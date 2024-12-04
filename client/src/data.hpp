@@ -110,6 +110,7 @@ struct device {
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
 	immer::box<scuff::bytes> last_saved_state;
+	immer::vector<client_param_info> param_info;
 	std::shared_ptr<device_services> services;
 };
 

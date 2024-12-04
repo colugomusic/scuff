@@ -3,6 +3,7 @@
 #include "common-plugin-type.hpp"
 #include "common-render-mode.hpp"
 #include "common-serialize-events.hpp"
+#include "common-serialize-param-info.hpp"
 #include <clap/id.h>
 #include <cs_plain_guarded.h>
 #include <deque>
@@ -66,7 +67,7 @@ struct device_create_success         { id::device::type dev_id; std::string port
 struct device_editor_visible_changed { id::device::type dev_id; bool visible; int64_t native_handle; };
 struct device_load_fail              { id::device::type dev_id; std::string error; };
 struct device_load_success           { id::device::type dev_id; };
-struct device_params_changed         { id::device::type dev_id; };
+struct device_param_info             { id::device::type dev_id; std::vector<client_param_info> info; };
 struct report_error                  { std::string text; };
 struct report_info                   { std::string text; };
 struct report_warning                { std::string text; };
@@ -81,7 +82,7 @@ using msg = std::variant<
 	device_editor_visible_changed,
 	device_load_fail,
 	device_load_success,
-	device_params_changed,
+	device_param_info,
 	report_error,
 	report_info,
 	report_warning,
@@ -137,6 +138,12 @@ auto deserialize<scuff::msg::out::device_load_fail>(std::span<const std::byte>* 
 template <> inline
 auto deserialize<scuff::msg::out::device_load_success>(std::span<const std::byte>* bytes, scuff::msg::out::device_load_success* msg) -> void {
 	deserialize(bytes, &msg->dev_id);
+}
+
+template <> inline
+auto deserialize<scuff::msg::out::device_param_info>(std::span<const std::byte>* bytes, scuff::msg::out::device_param_info* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->info);
 }
 
 template <> inline
@@ -219,6 +226,12 @@ auto serialize<scuff::msg::out::device_load_fail>(const scuff::msg::out::device_
 template <> inline
 auto serialize<scuff::msg::out::device_load_success>(const scuff::msg::out::device_load_success& msg, std::vector<std::byte>* bytes) -> void {
 	serialize(msg.dev_id, bytes);
+}
+
+template <> inline
+auto serialize<scuff::msg::out::device_param_info>(const scuff::msg::out::device_param_info& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
+	serialize(msg.info, bytes);
 }
 
 template <> inline

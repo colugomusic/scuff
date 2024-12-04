@@ -1,6 +1,7 @@
 #pragma once
 
 #include "clap-data.hpp"
+#include "common-param-info.hpp"
 #include "common-plugin-type.hpp"
 #include "common-events.hpp"
 #include "common-shm.hpp"
@@ -61,6 +62,7 @@ struct device {
 	double sample_rate = 0.0;
 	immer::box<std::string> name;
 	immer::flex_vector<port_conn> output_conns;
+	immer::vector<scuff::sbox_param_info> param_info;
 	std::shared_ptr<device_service> service = std::make_shared<device_service>();
 };
 

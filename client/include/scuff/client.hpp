@@ -290,7 +290,7 @@ auto get_info(id::device dev) -> device_info;
 
 // Return the parameter info.
 [[nodiscard]]
-auto get_info(id::device dev, idx::param param) -> param_info;
+auto get_info(id::device dev, idx::param param) -> client_param_info;
 
 // Returns the plugin name
 [[nodiscard]]

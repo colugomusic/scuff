@@ -134,10 +134,8 @@ struct device_data {
 	device_atomic_flags atomic_flags;
 	scuff::event_buffer events_in;
 	scuff::event_buffer events_out;
-	bc::static_vector<scuff::param_info, MAX_PARAMS> param_info;
 	bc::static_vector<audio_buffer, MAX_AUDIO_PORTS> audio_in;
 	bc::static_vector<audio_buffer, MAX_AUDIO_PORTS> audio_out;
-	bip::interprocess_mutex param_info_mutex; // Lock this when rescanning parameters
 };
 
 struct sandbox_data {

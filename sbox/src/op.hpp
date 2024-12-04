@@ -162,4 +162,20 @@ auto device_erase(sbox::app* app, id::device dev_id) -> void {
 	});
 }
 
+[[nodiscard]] static
+auto make_client_param_info(const sbox::device& dev) -> std::vector<client_param_info> {
+	std::vector<client_param_info> client_infos;
+	for (const auto& info : dev.param_info) {
+		client_param_info client_info;
+		client_info.default_value = info.default_value;
+		client_info.id            = info.id;
+		client_info.flags         = info.flags;
+		client_info.name          = info.name;
+		client_info.max_value     = info.max_value;
+		client_info.min_value     = info.min_value;
+		client_infos.push_back(client_info);
+	}
+	return client_infos;
+}
+
 } // scuff::sbox::op

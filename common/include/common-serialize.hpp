@@ -40,6 +40,16 @@ auto deserialize(std::span<const std::byte>* bytes, std::vector<std::byte>* out)
 	*bytes = bytes->subspan(size);
 }
 
+template <typename T> static
+auto deserialize(std::span<const std::byte>* bytes, std::vector<T>* ts) -> void {
+	size_t elem_count;
+	deserialize(bytes, &elem_count);
+	ts->resize(elem_count);
+	for (auto& t : *ts) {
+		deserialize(bytes, &t);
+	}
+}
+
 template <size_t Index, concepts::is_variant VariantT> static
 auto deserialize(size_t type, std::span<const std::byte>* bytes, VariantT* out, std::string_view variant_desc) -> void {
 	if (type == Index) {
@@ -90,11 +100,24 @@ auto serialize(std::string_view value, std::vector<std::byte>* bytes) -> void {
 }
 
 static
+auto serialize(const std::string& value, std::vector<std::byte>* bytes) -> void {
+	serialize(std::string_view{value}, bytes);
+}
+
+static
 auto serialize(const std::vector<std::byte>& value, std::vector<std::byte>* bytes) -> void {
 	serialize(value.size(), bytes);
 	const auto offset = bytes->size();
 	bytes->resize(offset + value.size());
 	std::memcpy(bytes->data() + offset, value.data(), value.size());
+}
+
+template <typename T> static
+auto serialize(const std::vector<T>& ts, std::vector<std::byte>* bytes) -> void {
+	serialize(ts.size(), bytes);
+	for (const auto& t : ts) {
+		serialize(t, bytes);
+	}
 }
 
 template <concepts::is_variant VariantT> static
