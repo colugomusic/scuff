@@ -67,6 +67,10 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 	try {
 		DLOG_S(INFO) << "Audio thread has started.";
 		for (;;) {
+			if (stop_token.stop_requested()) {
+				DLOG_S(INFO) << "Audio thread is stopping because it was requested to.";
+				return;
+			}
 			auto result = signaling::wait_for_work_begin(app->sandbox_signaler, stop_token);
 			if (result == signaling::sandbox_wait_result::signaled) {
 				do_processing(app);

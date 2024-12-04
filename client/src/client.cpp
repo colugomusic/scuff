@@ -365,14 +365,16 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 					return dev;
 				});
 			}
-			auto group                   = m.groups.at(sbox.group);
-			group.total_active_sandboxes = get_active_sandbox_count(m, group);
-			m.groups                     = m.groups.insert(group);
+			m.groups = m.groups.update_if_exists(sbox.group, [m](scuff::group g) {
+				g.total_active_sandboxes = get_active_sandbox_count(m, g);
+				return g;
+			});
 			return m;
 		});
-		const auto m      = DATA_->model.read(ez::nort);
-		const auto& group = m.groups.at(sbox.group);
-		auto _            = signaling::unblock_self(group.services->signaler);
+		const auto m = DATA_->model.read(ez::nort);
+		if (const auto group = m.groups.find(sbox.group)) {
+			auto _ = signaling::unblock_self(group->services->signaler);
+		}
 		ui::send(sbox, ui::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
 		return;
 	}
@@ -605,7 +607,7 @@ auto create_device_async(id::sandbox sbox_id, plugin_type type, ext::id::plugin 
 }
 
 struct blocking_sandbox_operation {
-	static constexpr auto MAX_WAIT = std::chrono::seconds(1);
+	static constexpr auto MAX_WAIT = std::chrono::seconds(30);
 	template <typename Fn> [[nodiscard]] auto make_fn(Fn fn) {
 		return [this, fn](auto... args) {
 			std::lock_guard lock{mutex_};
@@ -628,6 +630,14 @@ private:
 
 [[nodiscard]] static
 auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id) -> create_device_result {
+	if (!DATA_->model.read(ez::nort).sandboxes.at(sbox_id).group) {
+		ui::send(ui::msg::error{"Sandbox has no group"});
+		return create_device_result{{}, false};
+	}
+	if (!is_running(sbox_id)) {
+		ui::send(ui::msg::error{"Sandbox not running"});
+		return create_device_result{{}, false};
+	}
 	std::optional<create_device_result> result;
 	blocking_sandbox_operation bso;
 	auto fn = bso.make_fn([&result](create_device_result remote_result) -> void {
@@ -961,10 +971,12 @@ auto erase(id::group group_id) -> void {
 		const auto& group = m.groups.at(group_id);
 		const auto sandbox_ids = group.sandboxes;
 		for (const auto sbox_id : sandbox_ids) {
-			const auto& sbox = m.sandboxes.at(sbox_id);
+			auto sbox = m.sandboxes.at(sbox_id);
 			if (sbox.services->proc.running()) {
 				sbox.services->proc.terminate();
 			}
+			sbox.group = {};
+			m.sandboxes = m.sandboxes.insert(sbox);
 		}
 		m.groups = m.groups.erase(group_id);
 		return m;
@@ -1291,6 +1303,11 @@ auto erase(id::sandbox sbox) -> void {
 	DATA_->model.update_publish(ez::nort, [=](model&& m){
 		const auto& sandbox = m.sandboxes.at({sbox});
 		m = remove_sandbox_from_group(std::move(m), sandbox.group, {sbox});
+		for (const auto dev_id : sandbox.devices) {
+			auto dev = m.devices.at(dev_id);
+			dev.sbox = {};
+			m.devices = m.devices.insert(dev);
+		}
 		m.sandboxes = m.sandboxes.erase({sbox});
 		return m;
 	});
