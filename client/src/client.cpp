@@ -1,7 +1,6 @@
 #include "client.hpp"
 #include "common-os.hpp"
 #include "common-signaling.hpp"
-#include "common-speen.hpp"
 #include "common-types.hpp"
 #include "common-visit.hpp"
 #include "managed.hpp"
@@ -724,14 +723,16 @@ auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id) -> create_device_
 static
 auto erase(id::device dev_id) -> void {
 	DATA_->model.update_publish(ez::nort, [=](model&& m){
-		const auto& dev   = m.devices.at(dev_id);
-		const auto& sbox  = m.sandboxes.at(dev.sbox);
-		const auto& group = m.groups.at(sbox.group);
-		for (const auto sbox_id : group.sandboxes) {
-			const auto& sbox = m.sandboxes.at(sbox_id);
-			sbox.services->enqueue(msg::in::device_erase{dev_id.value});
+		const auto& dev = m.devices.at(dev_id);
+		if (const auto sbox = m.sandboxes.find(dev.sbox)) {
+			if (const auto group = m.groups.find(sbox->group)) {
+				for (const auto sbox_id : group->sandboxes) {
+					const auto& sbox = m.sandboxes.at(sbox_id);
+					sbox.services->enqueue(msg::in::device_erase{dev_id.value});
+				}
+			}
+			m = remove_device_from_sandbox(std::move(m), sbox->id, dev_id);
 		}
-		m = remove_device_from_sandbox(std::move(m), dev.sbox, dev_id);
 		m.devices = m.devices.erase(dev_id);
 		return m;
 	});
@@ -949,11 +950,6 @@ auto erase(id::group group_id) -> void {
 			if (sbox.services->proc.running()) {
 				sbox.services->proc.terminate();
 			}
-			const auto dev_ids = sbox.devices;
-			for (const auto dev_id : dev_ids) {
-				m.devices = m.devices.erase(dev_id);
-			}
-			m.sandboxes = m.sandboxes.erase(sbox_id);
 		}
 		m.groups = m.groups.erase(group_id);
 		return m;
@@ -1675,7 +1671,10 @@ auto unref(id::group id) -> void {
 }
 
 auto unref(id::sandbox id) -> void {
-	try { impl::unref(id); } SCUFF_CATCH_VOID;
+	try { impl::unref(id); }
+	catch (const std::exception& err) {
+		throw err;
+	};
 }
 
 } // scuff

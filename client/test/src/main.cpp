@@ -109,23 +109,23 @@ TEST_CASE("com.FabFilter.preset-discovery.Saturn.2") {
 }
 
 TEST_CASE("stress test") {
-	const auto group   = scuff::managed_group{scuff::create_group(nullptr)};
+	auto group = scuff::managed_group{scuff::create_group(nullptr)};
 	const auto sbox    = scuff::managed_sandbox{scuff::create_sandbox(group.id(), sbox_exe_path_.string())};
 	const auto plugins = scuff::get_working_plugins();
 	scuff::activate(group.id(), 44100.0);
 	INFO("plugin count: ", plugins.size());
 	auto devices = create_a_bunch_of_devices(sbox.id());
-	//SUBCASE ("just erase the group") {
-		//scuff::erase(group.id());
-	//}
-	//SUBCASE ("erase devices") {
-	//	SUBCASE ("deactivate group first") {
-	//		scuff::deactivate(group.id());
-	//	}
-	//	for (const auto dev : devices) {
-	//		scuff::erase(dev);
-	//	}
-	//}
+	SUBCASE ("just erase the group") {
+		group = {};
+	}
+	SUBCASE ("erase devices") {
+		SUBCASE ("deactivate group first") {
+			scuff::deactivate(group.id());
+		}
+		for (const auto dev : devices) {
+			scuff::erase(dev);
+		}
+	}
 }
 
 /*

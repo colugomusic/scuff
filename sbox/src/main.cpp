@@ -56,7 +56,7 @@ auto do_scheduled_window_resizes(sbox::app* app) -> void {
 static
 auto get_mode(const sbox::app& app) -> sbox::mode {
 	if (app.options.test)                  { return sbox::mode::test; }
-	if (!app.options.plugfile_gui.empty()) { return sbox::mode::gui_test; }
+	if (!app.options.gui_file.empty()) { return sbox::mode::gui_test; }
 	return sbox::mode::sandbox;
 }
 
@@ -112,12 +112,12 @@ auto sandbox(sbox::app* app) -> int {
 
 static
 auto gui_test(sbox::app* app) -> int {
-	LOG_S(INFO) << "plugfile_gui: " << app->options.plugfile_gui;
+	LOG_S(INFO) << "gui_file: " << app->options.gui_file;
 	app->main_thread_id = std::this_thread::get_id();
 	auto on_window_closed = [app]{
 		app->schedule_terminate = true;
 	};
-	op::device_create(app, plugin_type::clap, id::device{1}, app->options.plugfile_gui, "ANY");
+	op::device_create(app, plugin_type::clap, id::device{1}, app->options.gui_file, app->options.gui_id);
 	gui::show(app, id::device{1}, {on_window_closed});
 	auto frame = [app]{
 		do_scheduled_window_resizes(app);

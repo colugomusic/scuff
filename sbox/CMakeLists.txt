@@ -56,3 +56,4 @@ set_target_properties(scuff-sbox PROPERTIES
 target_compile_definitions(scuff-sbox PRIVATE
 	LOGURU_WITH_STREAMS=1
 )
+source_group(common REGULAR_EXPRESSION [[scuff/common/]])

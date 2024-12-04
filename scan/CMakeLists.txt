@@ -22,3 +22,4 @@ target_link_libraries(scuff-scan
 target_compile_options(scuff-scan PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
+source_group(common REGULAR_EXPRESSION [[scuff/common/]])

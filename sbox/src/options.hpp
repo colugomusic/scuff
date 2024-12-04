@@ -9,7 +9,8 @@ namespace scuff::sbox {
 struct options {
 	std::string group_shmid;
 	std::string sbox_shmid;
-	std::string plugfile_gui;
+	std::string gui_file;
+	std::string gui_id;
 	bool test = false;
 	edwin::native_handle parent_window;
 };
