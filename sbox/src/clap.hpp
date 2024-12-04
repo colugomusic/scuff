@@ -81,7 +81,7 @@ auto send_msg(const device& dev, const clap::device_msg::msg& msg) -> void {
 
 static
 auto send_msg(sbox::app* app, id::device dev_id, const clap::device_msg::msg& msg) -> void {
-	const auto m = app->model.read(ez::audio);
+	const auto m = app->model.read(ez::rt);
 	if (const auto dev = m->clap_devices.find(dev_id)) {
 		send_msg(*dev, msg);
 	}
