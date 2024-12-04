@@ -111,6 +111,7 @@ struct device {
 	immer::box<std::string> error;
 	immer::box<scuff::bytes> last_saved_state;
 	immer::vector<client_param_info> param_info;
+	device_info info;
 	std::shared_ptr<device_services> services;
 };
 

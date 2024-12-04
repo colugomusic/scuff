@@ -290,6 +290,17 @@ auto process_message_(const sandbox& sbox, const msg::out::device_editor_visible
 }
 
 static
+auto process_message_(const sandbox& sbox, const msg::out::device_info& msg) -> void {
+	DATA_->model.update(ez::nort, [msg](model&& m) {
+		m.devices = m.devices.update_if_exists({msg.dev_id}, [msg](device dev) {
+			dev.info = msg.info;
+			return dev;
+		});
+		return m;
+	});
+}
+
+static
 auto process_message_(const sandbox& sbox, const msg::out::device_param_info& msg) -> void {
 	DATA_->model.update_publish(ez::nort, [msg](model&& m) {
 		m.devices = m.devices.update_if_exists({msg.dev_id}, [msg](device dev) {
@@ -1001,8 +1012,7 @@ auto get_value(id::device dev_id, idx::param param) -> double {
 
 [[nodiscard]] static
 auto get_info(id::device dev_id) -> device_info {
-	// TOODOO: implement get_info(device)
-	return {};
+	return DATA_->model.read(ez::nort).devices.at(dev_id).info;
 }
 
 [[nodiscard]] static

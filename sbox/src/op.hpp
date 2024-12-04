@@ -178,4 +178,12 @@ auto make_client_param_info(const sbox::device& dev) -> std::vector<client_param
 	return client_infos;
 }
 
+[[nodiscard]] static
+auto make_device_info(const sbox::app& app, const sbox::device& dev) -> device_info {
+	if (dev.type == plugin_type::clap) {
+		return clap::main::make_device_info(app, dev.id);
+	}
+	throw std::runtime_error("Unsupported device type");
+}
+
 } // scuff::sbox::op

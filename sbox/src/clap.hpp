@@ -521,6 +521,20 @@ auto init_audio(sbox::app* app, id::device dev_id) -> void {
 	});
 }
 
+[[nodiscard]] static
+auto make_device_info(const clap::device& clap_dev) -> device_info {
+	scuff::device_info info;
+	info.audio_input_port_count  = clap_dev.service.audio_port_info->inputs.size();
+	info.audio_output_port_count = clap_dev.service.audio_port_info->outputs.size();
+	return info;
+}
+
+[[nodiscard]] static
+auto make_device_info(const sbox::app& app, id::device dev_id) -> device_info {
+	const auto& clap_dev = app.model.read(ez::main).clap_devices.at(dev_id);
+	return make_device_info(clap_dev);
+}
+
 static
 auto rescan_audio_ports(sbox::app* app, id::device dev_id, uint32_t flags) -> void {
 	const auto requires_not_active =
@@ -538,6 +552,7 @@ auto rescan_audio_ports(sbox::app* app, id::device dev_id, uint32_t flags) -> vo
 		}
 	}
 	init_audio(app, dev_id);
+	app->msgs_out.lock()->push_back(scuff::msg::out::device_info{dev_id.value, make_device_info(*app, dev_id)});
 }
 
 [[nodiscard]] static
