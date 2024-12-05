@@ -16,7 +16,6 @@ endif()
 set(sbox_target_file $<TARGET_FILE:scuff::sbox>)	
 set(scan_target_file $<TARGET_FILE:scuff::scan>)
 include(../CPM.cmake)
-option(SCUFF_NOEXCEPT "Don't allow exceptions to escape the client API" OFF)
 find_package(Boost COMPONENTS filesystem headers program_options REQUIRED)
 CPMAddPackage(NAME clap              GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea DOWNLOAD_ONLY YES)
 CPMAddPackage(NAME ez                GITHUB_REPOSITORY colugomusic/ez               GIT_TAG master                   )
@@ -63,9 +62,6 @@ target_compile_features(scuff-client PUBLIC
 )
 target_compile_options(scuff-client PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
-)
-target_compile_definitions(scuff-client PUBLIC
-	$<$<BOOL:${SCUFF_NOEXCEPT}>:SCUFF_NOEXCEPT>
 )
 # Tests ########################################################################
 list (APPEND scuff-client-test-src

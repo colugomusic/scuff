@@ -122,13 +122,12 @@ auto create_a_bunch_of_devices(scuff::id::sandbox sbox) -> std::vector<scuff::id
 		const auto ext_id = scuff::get_ext_id(plugin);
 		const auto pf     = scuff::get_plugfile(plugin);
 		const auto path   = scuff::get_path(pf);
-		MESSAGE(i);
 		INFO("creating device: ", path, " id: ", ext_id.value, " index: ", i);
 		const auto device = scuff::create_device(sbox, type, ext_id);
-		if (!device.was_created_successfully) {
+		if (!device.was_loaded_successfully) {
 			scuff::ui_update(make_ui_reporter());
 		}
-		REQUIRE(device.was_created_successfully);
+		REQUIRE(device.was_loaded_successfully);
 		devices.push_back(device.id);
 		i++;
 	}
@@ -142,10 +141,10 @@ TEST_CASE("studio.kx.distrho.MaGigaverb") {
 	const auto plugin = scuff::find({ext_id});
 	for (int i = 0; i < 10; i++) {
 		const auto device = scuff::create_device(sbox.id(), scuff::plugin_type::clap, ext_id);
-		if (!device.was_created_successfully) {
+		if (!device.was_loaded_successfully) {
 			MESSAGE(i);
 		}
-		REQUIRE(device.was_created_successfully);
+		REQUIRE(device.was_loaded_successfully);
 		const auto managed = scuff::managed_device{device.id};
 	}
 }
@@ -157,44 +156,42 @@ TEST_CASE("com.FabFilter.preset-discovery.Saturn.2") {
 	const auto ext_id = scuff::ext::id::plugin{"com.FabFilter.preset-discovery.Saturn.2"};
 	const auto plugin = scuff::find({ext_id});
 	const auto device = scuff::create_device(sbox.id(), scuff::plugin_type::clap, ext_id);
-	REQUIRE(device.was_created_successfully);
+	REQUIRE(device.was_loaded_successfully);
+}
+
+TEST_CASE("lifetimes") {
+	scuff::create_device_result device1, device2, device3, device4;
+	scuff::id::group group1;
+	scuff::id::sandbox sbox1, sbox2;
+	group1 = scuff::create_group(nullptr);
+	sbox1  = scuff::create_sandbox(group1, sbox_exe_path_.string());
+	scuff::activate(group1, 44100.0);
+	CHECK_NOTHROW(scuff::erase(group1));
+	CHECK_NOTHROW(sbox2 = scuff::create_sandbox(group1, sbox_exe_path_.string()));
+	CHECK_NOTHROW(device1 = scuff::create_device(sbox1, scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"}));
+	REQUIRE(device1.was_loaded_successfully);
+	CHECK_NOTHROW(scuff::erase(sbox1));
+	CHECK_NOTHROW(device2 = scuff::create_device(sbox1, scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"}));
+	REQUIRE(device2.was_loaded_successfully);
+	CHECK_NOTHROW(scuff::erase(device1.id));
+	CHECK_NOTHROW(scuff::erase(device2.id));
+	CHECK_THROWS(device3 = scuff::create_device(sbox1, scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"}));
+	CHECK_NOTHROW(scuff::erase(sbox2));
+	CHECK_THROWS(scuff::erase(device3.id));
+	CHECK_THROWS(device4 = scuff::create_device(sbox1, scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"}));
+	CHECK_THROWS(sbox1 = scuff::create_sandbox(group1, sbox_exe_path_.string()));
+}
+
+TEST_CASE("single-sandbox rack connections") {
+	scuff::create_device_result device1, device2, device3, device4;
+	scuff::id::group group1;
+	scuff::id::sandbox sbox1;
 }
 
 TEST_CASE("stress test") {
 	auto group = scuff::managed_group{scuff::create_group(nullptr)};
-	auto sbox    = scuff::managed_sandbox{scuff::create_sandbox(group.id(), sbox_exe_path_.string())};
-	auto plugins = scuff::get_working_plugins();
-	scuff::activate(group.id(), 44100.0);
-	INFO("plugin count: ", plugins.size());
-	//auto devices = create_a_bunch_of_devices(sbox.id());
-	group = {};
-	MESSAGE("creating device in group: ", group.id().value, " sbox: ", sbox.id().value);
-	auto device = scuff::create_device(sbox.id(), scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"});
-	REQUIRE(!device.was_created_successfully);
-	group = scuff::managed_group{scuff::create_group(nullptr)};
-	sbox = scuff::managed_sandbox{scuff::create_sandbox(group.id(), sbox_exe_path_.string())};
-	MESSAGE("creating device in group: ", group.id().value, " sbox: ", sbox.id().value);
-	device = scuff::create_device(sbox.id(), scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"});
-	REQUIRE(device.was_created_successfully);
-	group = scuff::managed_group{scuff::create_group(nullptr)};
-	sbox = scuff::managed_sandbox{scuff::create_sandbox(group.id(), sbox_exe_path_.string())};
-	group = {};
-	MESSAGE("creating device in group: ", group.id().value, " sbox: ", sbox.id().value);
-	device = scuff::create_device(sbox.id(), scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"});
-	REQUIRE(!device.was_created_successfully);
-	group = scuff::managed_group{scuff::create_group(nullptr)};
-	sbox = scuff::managed_sandbox{scuff::create_sandbox(group.id(), sbox_exe_path_.string())};
-	MESSAGE("creating device in group: ", group.id().value, " sbox: ", sbox.id().value);
-	device = scuff::create_device(sbox.id(), scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"});
-	REQUIRE(device.was_created_successfully);
-}
-
-TEST_CASE("stress test 2") {
-	auto group = scuff::managed_group{scuff::create_group(nullptr)};
 	const auto sbox    = scuff::managed_sandbox{scuff::create_sandbox(group.id(), sbox_exe_path_.string())};
-	const auto plugins = scuff::get_working_plugins();
 	scuff::activate(group.id(), 44100.0);
-	INFO("plugin count: ", plugins.size());
 	SUBCASE ("erase the group") {
 		group = {};
 	}

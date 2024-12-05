@@ -70,7 +70,8 @@ private:
 
 struct group_flags {
 	enum e {
-		is_active = 1 << 0,
+		is_active         = 1 << 0,
+		marked_for_delete = 1 << 1,
 	};
 	int value = 0;
 };
@@ -117,8 +118,9 @@ struct device {
 
 struct sandbox_flags {
 	enum e {
-		launched         = 1 << 0,
-		confirmed_active = 1 << 1,
+		launched          = 1 << 0,
+		confirmed_active  = 1 << 1,
+		marked_for_delete = 1 << 2,
 	};
 	int value = 0;
 };

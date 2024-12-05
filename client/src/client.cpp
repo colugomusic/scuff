@@ -12,19 +12,13 @@
 #include <string>
 #include <variant>
 
-#if defined(SCUFF_NOEXCEPT)
-#	define SCUFF_CATCH_VOID \
-	catch (const std::exception& err) { ui::send(api_error(err.what())); } \
-	catch (...)                       { ui::send(api_error("Unknown exception")); }
-#	define SCUFF_CATCH_RETURN \
-	catch (const std::exception& err) { ui::send(api_error(err.what())); return {}; } \
-	catch (...)                       { ui::send(api_error("Unknown exception")); return {}; }
-#else
-#	define SCUFF_CATCH_VOID \
-	catch (const std::exception& err) { throw err; }
-#	define SCUFF_CATCH_RETURN \
-	catch (const std::exception& err) { throw err; }
-#endif
+#define SCUFF_EXCEPTION_WRAPPER \
+	catch (const std::exception& err) { \
+		throw scuff::runtime_error(std::source_location::current().function_name(), err.what()); \
+	} \
+	catch (...) { \
+		throw scuff::runtime_error(std::source_location::current().function_name(), "Unknown error"); \
+	}
 
 namespace bip = boost::interprocess;
 
@@ -575,7 +569,8 @@ auto create_device_async(model&& m, id::device dev_id, const sandbox& sbox, plug
 	m.devices = m.devices.insert(dev);
 	if (!dev.plugin) {
 		// We don't have this plugin yet so put the device into an error
-		// state and call the return function immediately.
+		// state and call the return function immediately. The device can
+		// be loaded later after the required plugin is scanned.
 		const auto err = "Plugin not found.";
 		m = set_error(std::move(m), dev.id, err);
 		ui::send(sbox, ui::msg::device_create{{dev.id, false}, return_fn});
@@ -607,7 +602,7 @@ auto create_device_async(id::sandbox sbox_id, plugin_type type, ext::id::plugin 
 }
 
 struct blocking_sandbox_operation {
-	static constexpr auto MAX_WAIT = std::chrono::seconds(30);
+	static constexpr auto MAX_WAIT = std::chrono::seconds(5);
 	template <typename Fn> [[nodiscard]] auto make_fn(Fn fn) {
 		return [this, fn](auto... args) {
 			std::lock_guard lock{mutex_};
@@ -630,14 +625,6 @@ private:
 
 [[nodiscard]] static
 auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id) -> create_device_result {
-	if (!DATA_->model.read(ez::nort).sandboxes.at(sbox_id).group) {
-		ui::send(ui::msg::error{"Sandbox has no group"});
-		return create_device_result{{}, false};
-	}
-	if (!is_running(sbox_id)) {
-		ui::send(ui::msg::error{"Sandbox not running"});
-		return create_device_result{{}, false};
-	}
 	std::optional<create_device_result> result;
 	blocking_sandbox_operation bso;
 	auto fn = bso.make_fn([&result](create_device_result remote_result) -> void {
@@ -654,7 +641,7 @@ auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin
 		return m;
 	});
 	if (!bso.wait_for(ready)) {
-		ui::send(ui::msg::error{"Timed out waiting for device creation"});
+		throw std::runtime_error("Timed out waiting for device creation.");
 	}
 	if (!result) {
 		return create_device_result{dev_id, false};
@@ -717,8 +704,8 @@ auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_crea
 		const auto return_fn = [=](create_device_result result) {
 			// We should be in the UI thread at this point.
 			debug__check_we_are_in_the_ui_thread();
-			if (result.was_created_successfully) {
-				// Remote device was created successfully.
+			if (result.was_loaded_successfully) {
+				// Remote device was loaded successfully.
 				// Now send a message to the destination sandbox to load the saved state into the new device.
 				dst_sbox.services->enqueue(msg::in::device_load{result.id.value, src_state});
 			}
@@ -745,28 +732,9 @@ auto duplicate(id::device src_dev_id, id::sandbox dst_sbox_id) -> create_device_
 	};
 	duplicate_async(src_dev_id, dst_sbox_id, fn);
 	if (!bso.wait_for(ready)) {
-		ui::send(ui::msg::error{"Timed out waiting for value."});
-		return {};
+		throw std::runtime_error("Timed out waiting for device duplication.");
 	}
 	return *result;
-}
-
-static
-auto erase(id::device dev_id) -> void {
-	DATA_->model.update_publish(ez::nort, [=](model&& m){
-		const auto& dev = m.devices.at(dev_id);
-		if (const auto sbox = m.sandboxes.find(dev.sbox)) {
-			if (const auto group = m.groups.find(sbox->group)) {
-				for (const auto sbox_id : group->sandboxes) {
-					const auto& sbox = m.sandboxes.at(sbox_id);
-					sbox.services->enqueue(msg::in::device_erase{dev_id.value});
-				}
-			}
-			m = remove_device_from_sandbox(std::move(m), sbox->id, dev_id);
-		}
-		m.devices = m.devices.erase(dev_id);
-		return m;
-	});
 }
 
 [[nodiscard]] static
@@ -966,24 +934,6 @@ auto create_group(void* parent_window_handle) -> id::group {
 }
 
 static
-auto erase(id::group group_id) -> void {
-	DATA_->model.update_publish(ez::nort, [=](model&& m){
-		const auto& group = m.groups.at(group_id);
-		const auto sandbox_ids = group.sandboxes;
-		for (const auto sbox_id : sandbox_ids) {
-			auto sbox = m.sandboxes.at(sbox_id);
-			if (sbox.services->proc.running()) {
-				sbox.services->proc.terminate();
-			}
-			sbox.group = {};
-			m.sandboxes = m.sandboxes.insert(sbox);
-		}
-		m.groups = m.groups.erase(group_id);
-		return m;
-	});
-}
-
-static
 auto is_scanning() -> bool {
 	return DATA_->scanning;
 }
@@ -1016,8 +966,7 @@ auto get_value(id::device dev_id, idx::param param) -> double {
 	const auto callback = sbox.services->return_buffers.doubles.put(fn);
 	sbox.services->enqueue(scuff::msg::in::get_param_value{dev_id.value, param.value, callback});
 	if (!bso.wait_for(ready)) {
-		ui::send(ui::msg::error{"Timed out waiting for value."});
-		return 0.0;
+		throw std::runtime_error("Timed out waiting for value.");
 	}
 	return *result;
 }
@@ -1109,7 +1058,7 @@ auto get_value_text(id::device dev_id, idx::param param, double value) -> std::s
 	const auto callback = sbox.services->return_buffers.strings.put(fn);
 	sbox.services->enqueue(scuff::msg::in::get_param_value_text{dev_id.value, param.value, value, callback});
 	if (!bso.wait_for(ready)) {
-		ui::send(ui::msg::error{"Timed out waiting for value text."});
+		throw std::runtime_error("Timed out waiting for value text.");
 	}
 	return result;
 }
@@ -1153,7 +1102,7 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 	for (const auto dev_id : sandbox.devices) {
 		const auto& dev = m.devices.at(dev_id);
 		const auto with_created_device = [m, dev](create_device_result result){
-			if (result.was_created_successfully) {
+			if (result.was_loaded_successfully) {
 				load_async(m, dev, dev.last_saved_state, [](load_device_result){});
 			}
 			else {
@@ -1187,7 +1136,7 @@ auto load(id::device dev, const scuff::bytes& bytes) -> bool {
 	};
 	load_async(dev, bytes, fn);
 	if (!bso.wait_for(ready)) {
-		ui::send(ui::msg::error{"Timed out waiting for device load."});
+		throw std::runtime_error("Timed out waiting for device load.");
 	}
 	return success;
 }
@@ -1242,7 +1191,7 @@ auto save(id::device dev_id) -> scuff::bytes {
 	};
 	sbox.services->enqueue(msg::in::device_save{dev.id.value, sbox.services->return_buffers.states.put(wrapper_fn)});
 	if (!bso.wait_for(ready)) {
-		ui::send(ui::msg::error{"Timed out waiting for device save."});
+		throw std::runtime_error("Timed out waiting for device save.");
 	}
 	return bytes;
 }
@@ -1298,20 +1247,86 @@ auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::s
 	return sbox_id;
 }
 
-static
-auto erase(id::sandbox sbox) -> void {
-	DATA_->model.update_publish(ez::nort, [=](model&& m){
-		const auto& sandbox = m.sandboxes.at({sbox});
-		m = remove_sandbox_from_group(std::move(m), sandbox.group, {sbox});
-		for (const auto dev_id : sandbox.devices) {
-			auto dev = m.devices.at(dev_id);
-			dev.sbox = {};
-			m.devices = m.devices.insert(dev);
-		}
-		m.sandboxes = m.sandboxes.erase({sbox});
-		return m;
-	});
+[[nodiscard]] static auto is_marked_for_delete(const group& g) -> bool { return g.flags.value & group_flags::marked_for_delete; } 
+[[nodiscard]] static auto is_marked_for_delete(const sandbox& s) -> bool { return s.flags.value & sandbox_flags::marked_for_delete; } 
+[[nodiscard]] static auto is_marked_for_delete(const model& m, id::group group_id) -> bool { return m.groups.at(group_id).flags.value & group_flags::marked_for_delete; } 
+[[nodiscard]] static auto is_marked_for_delete(const model& m, id::sandbox sbox_id) -> bool { return m.sandboxes.at(sbox_id).flags.value & sandbox_flags::marked_for_delete; } 
+[[nodiscard]] static auto is_ready_to_erase(const group& g) -> bool { return is_marked_for_delete(g) && g.sandboxes.empty(); } 
+[[nodiscard]] static auto is_ready_to_erase(const sandbox& s) -> bool { return is_marked_for_delete(s) && s.devices.empty(); } 
+[[nodiscard]] static auto is_ready_to_erase(const model& m, id::group group_id) -> bool { return is_ready_to_erase(m.groups.at(group_id)); } 
+[[nodiscard]] static auto is_ready_to_erase(const model& m, id::sandbox sbox_id) -> bool { return is_ready_to_erase(m.sandboxes.at(sbox_id)); } 
+
+[[nodiscard]] static auto mark_for_delete(group&& g) -> group { g.flags.value |= group_flags::marked_for_delete; return g; }
+[[nodiscard]] static auto mark_for_delete(sandbox&& s) -> sandbox { s.flags.value |= sandbox_flags::marked_for_delete; return s; }
+
+[[nodiscard]] static
+auto mark_for_delete(model&& m, id::group group_id) -> model {
+	auto group = m.groups.at(group_id);
+	group = mark_for_delete(std::move(group));
+	m.groups = m.groups.insert(group);
+	return m;
 }
+
+[[nodiscard]] static
+auto mark_for_delete(model&& m, id::sandbox sbox_id) -> model {
+	auto sbox = m.sandboxes.at(sbox_id);
+	sbox = mark_for_delete(std::move(sbox));
+	m.sandboxes = m.sandboxes.insert(sbox);
+	return m;
+}
+
+[[nodiscard]] static
+auto actually_erase(model&& m, id::group group_id) -> model {
+	m.groups = m.groups.erase(group_id);
+	return m;
+}
+
+[[nodiscard]] static
+auto actually_erase(model&& m, id::sandbox sbox_id) -> model {
+	const auto sbox  = m.sandboxes.at(sbox_id);
+	m = remove_sandbox_from_group(std::move(m), sbox.group, sbox_id);
+	m.sandboxes = m.sandboxes.erase(sbox_id);
+	const auto group = m.groups.at(sbox.group);
+	if (is_ready_to_erase(group)) {
+		m = actually_erase(std::move(m), group.id);
+	}
+	return m;
+}
+
+[[nodiscard]] static
+auto actually_erase(model&& m, id::device dev_id) -> model {
+	const auto dev = m.devices.at(dev_id);
+	m = remove_device_from_sandbox(std::move(m), dev.sbox, dev_id);
+	m.devices = m.devices.erase(dev_id);
+	auto sbox = m.sandboxes.at(dev.sbox);
+	if (is_ready_to_erase(sbox)) {
+		m = actually_erase(std::move(m), sbox.id);
+	}
+	return m;
+}
+
+[[nodiscard]] static
+auto erase(model&& m, id::group group_id) -> model {
+	auto group = m.groups.at(group_id);
+	if (group.sandboxes.empty()) { return actually_erase(std::move(m), group_id); }
+	else                         { return mark_for_delete(std::move(m), group_id); }
+}
+
+[[nodiscard]] static
+auto erase(model&& m, id::sandbox sbox_id) -> model {
+	auto sbox = m.sandboxes.at(sbox_id);
+	if (sbox.devices.empty()) { return actually_erase(std::move(m), sbox_id); }
+	else                      { return mark_for_delete(std::move(m), sbox_id); }
+}
+
+[[nodiscard]] static
+auto erase(model&& m, id::device dev_id) -> model {
+	return actually_erase(std::move(m), dev_id);
+}
+
+static auto erase(id::group group_id) -> void  { DATA_->model.update_publish(ez::nort, [group_id](model&& m){ return erase(std::move(m), group_id); }); } 
+static auto erase(id::sandbox sbox_id) -> void { DATA_->model.update_publish(ez::nort, [sbox_id](model&& m){ return erase(std::move(m), sbox_id); }); } 
+static auto erase(id::device dev_id) -> void   { DATA_->model.update_publish(ez::nort, [dev_id](model&& m){ return erase(std::move(m), dev_id); }); }
 
 [[nodiscard]] static
 auto get_working_plugins() -> std::vector<id::plugin> {
@@ -1413,11 +1428,7 @@ auto init() -> void {
 }
 
 auto init(const scuff::on_error& on_error) -> void {
-	try {
-		init();
-	} catch (const std::exception& err) {
-		on_error(err.what());
-	}
+	try { init(); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto shutdown() -> void {
@@ -1433,278 +1444,276 @@ auto shutdown() -> void {
 		}
 		scuff::DATA_.reset();
 		scuff::initialized_ = false;
-	} SCUFF_CATCH_VOID;
+	}
+	SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto activate(id::group group, double sr) -> void {
-	try { impl::activate(group, sr); } SCUFF_CATCH_VOID;
+	try { impl::activate(group, sr); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto close_all_editors() -> void {
-	try { impl::close_all_editors(); } SCUFF_CATCH_VOID;
+	try { impl::close_all_editors(); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void {
-	try { impl::connect(dev_out, port_out, dev_in, port_in); } SCUFF_CATCH_VOID;
+	try { impl::connect(dev_out, port_out, dev_in, port_in); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id) -> create_device_result {
-	try { return impl::create_device(sbox, type, plugin_id); } SCUFF_CATCH_RETURN;
+	try { return impl::create_device(sbox, type, plugin_id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_create_device_result fn) -> id::device {
-	try { return impl::create_device_async(sbox, type, plugin_id, fn); } SCUFF_CATCH_RETURN;
+	try { return impl::create_device_async(sbox, type, plugin_id, fn); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::sandbox {
-	try { return impl::create_sandbox(group_id, sbox_exe_path); } SCUFF_CATCH_RETURN;
+	try { return impl::create_sandbox(group_id, sbox_exe_path); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto deactivate(id::group group) -> void {
-	try { impl::deactivate(group); } SCUFF_CATCH_VOID;
+	try { impl::deactivate(group); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto disconnect(id::device dev_out, size_t port_out, id::device dev_in, size_t port_in) -> void {
-	try { impl::device_disconnect(dev_out, port_out, dev_in, port_in); } SCUFF_CATCH_VOID;
+	try { impl::device_disconnect(dev_out, port_out, dev_in, port_in); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto duplicate(id::device dev, id::sandbox sbox) -> create_device_result {
-	try { return impl::duplicate(dev, sbox); } SCUFF_CATCH_RETURN;
+	try { return impl::duplicate(dev, sbox); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto duplicate_async(id::device dev, id::sandbox sbox, return_create_device_result fn) -> id::device {
-	try { return impl::duplicate_async(dev, sbox, fn); } SCUFF_CATCH_RETURN;
+	try { return impl::duplicate_async(dev, sbox, fn); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto erase(id::device dev) -> void {
-	try { impl::erase({dev}); } SCUFF_CATCH_VOID;
+	try { impl::erase({dev}); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto erase(id::sandbox sbox) -> void {
-	try { impl::erase(sbox); } SCUFF_CATCH_VOID;
+	try { impl::erase(sbox); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto find(id::device dev, ext::id::param param_id) -> idx::param {
-	try { return impl::find(dev, param_id); } SCUFF_CATCH_RETURN;
+	try { return impl::find(dev, param_id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto find(ext::id::plugin plugin_id) -> id::plugin {
-	try { return impl::find(plugin_id); } SCUFF_CATCH_RETURN;
+	try { return impl::find(plugin_id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_error(id::device device) -> std::string_view {
-	try { return impl::get_error(device); } SCUFF_CATCH_RETURN;
+	try { return impl::get_error(device); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_param_count(id::device dev) -> size_t {
-	try { return impl::get_param_count(dev); } SCUFF_CATCH_RETURN;
+	try { return impl::get_param_count(dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_plugin(id::device dev) -> id::plugin {
-	try { return impl::get_plugin(dev); } SCUFF_CATCH_RETURN;
+	try { return impl::get_plugin(dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto gui_hide(id::device dev) -> void {
-	try { impl::gui_hide(dev); } SCUFF_CATCH_VOID;
+	try { impl::gui_hide(dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto gui_show(id::device dev) -> void {
-	try { impl::gui_show(dev); } SCUFF_CATCH_VOID;
+	try { impl::gui_show(dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto create_group(void* parent_window_handle) -> id::group {
-	try { return impl::create_group(parent_window_handle); } SCUFF_CATCH_RETURN;
+	try { return impl::create_group(parent_window_handle); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto erase(id::group group) -> void {
-	try { impl::erase({group}); } SCUFF_CATCH_VOID;
+	try { impl::erase({group}); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_broken_plugfiles() -> std::vector<id::plugfile> {
-	try { return impl::get_broken_plugfiles(); } SCUFF_CATCH_RETURN;
+	try { return impl::get_broken_plugfiles(); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_broken_plugins() -> std::vector<id::plugin> {
-	try { return impl::get_broken_plugins(); } SCUFF_CATCH_RETURN;
+	try { return impl::get_broken_plugins(); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_devices(id::sandbox sbox) -> std::vector<id::device> {
-	try { return impl::get_devices(sbox); } SCUFF_CATCH_RETURN;
+	try { return impl::get_devices(sbox); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_error(id::plugfile plugfile) -> std::string_view {
-	try { return impl::get_error(plugfile); } SCUFF_CATCH_RETURN;
+	try { return impl::get_error(plugfile); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_error(id::plugin plugin) -> std::string_view {
-	try { return impl::get_error(plugin); } SCUFF_CATCH_RETURN;
+	try { return impl::get_error(plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_ext_id(id::plugin plugin) -> ext::id::plugin {
-	try { return impl::get_ext_id(plugin); } SCUFF_CATCH_RETURN;
+	try { return impl::get_ext_id(plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_features(id::plugin plugin) -> std::vector<std::string> {
-	try { return impl::get_features(plugin); } SCUFF_CATCH_RETURN;
+	try { return impl::get_features(plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_info(id::device dev) -> device_info {
-	try { return impl::get_info(dev); } SCUFF_CATCH_RETURN;
+	try { return impl::get_info(dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_info(id::device dev, idx::param param) -> client_param_info {
-	try { return impl::get_info(dev, param); } SCUFF_CATCH_RETURN;
+	try { return impl::get_info(dev, param); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_name(id::plugin plugin) -> std::string_view {
-	try { return impl::get_name(plugin); } SCUFF_CATCH_RETURN;
+	try { return impl::get_name(plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_path(id::plugfile plugfile) -> std::string_view {
-	try { return impl::get_path(plugfile); } SCUFF_CATCH_RETURN;
+	try { return impl::get_path(plugfile); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_plugfile(id::plugin plugin) -> id::plugfile {
-	try { return impl::get_plugfile(plugin); } SCUFF_CATCH_RETURN;
+	try { return impl::get_plugfile(plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_plugin_ext_id(id::device dev) -> ext::id::plugin {
-	try { return impl::get_plugin_ext_id(dev); } SCUFF_CATCH_RETURN;
+	try { return impl::get_plugin_ext_id(dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_type(id::plugin plugin) -> plugin_type {
-	try { return impl::get_type(plugin); } SCUFF_CATCH_RETURN;
+	try { return impl::get_type(plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_value(id::device dev, idx::param param) -> double {
-	try { return impl::get_value(dev, param); } SCUFF_CATCH_RETURN;
+	try { return impl::get_value(dev, param); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_value_async(id::device dev, idx::param param, return_double fn) -> void {
-	try { impl::get_value_async(dev, param, fn); } SCUFF_CATCH_VOID;
+	try { impl::get_value_async(dev, param, fn); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_value_text(id::device dev, idx::param param, double value) -> std::string {
-	try { return impl::get_value_text(dev, param, value); } SCUFF_CATCH_RETURN;
+	try { return impl::get_value_text(dev, param, value); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_value_text_async(id::device dev, idx::param param, double value, return_string fn) -> void {
-	try { impl::get_value_text_async(dev, param, value, fn); } SCUFF_CATCH_VOID;
+	try { impl::get_value_text_async(dev, param, value, fn); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_vendor(id::plugin plugin) -> std::string_view {
-	try { return impl::get_vendor(plugin); } SCUFF_CATCH_RETURN;
+	try { return impl::get_vendor(plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_version(id::plugin plugin) -> std::string_view {
-	try { return impl::get_version(plugin); } SCUFF_CATCH_RETURN;
+	try { return impl::get_version(plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_working_plugins() -> std::vector<id::plugin> {
-	try { return impl::get_working_plugins(); } SCUFF_CATCH_RETURN;
+	try { return impl::get_working_plugins(); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto has_gui(id::device dev) -> bool {
-	try { return impl::has_gui(dev); } SCUFF_CATCH_RETURN;
+	try { return impl::has_gui(dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto has_params(id::device dev) -> bool {
-	try { return impl::has_params(dev); } SCUFF_CATCH_RETURN;
+	try { return impl::has_params(dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto has_rack_features(id::plugin plugin) -> bool {
-	try { return impl::has_rack_features(plugin); } SCUFF_CATCH_RETURN;
+	try { return impl::has_rack_features(plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto is_running(id::sandbox sbox) -> bool {
-	try { return impl::is_running(sbox); } SCUFF_CATCH_RETURN;
+	try { return impl::is_running(sbox); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto is_scanning() -> bool {
-	try { return impl::is_scanning(); } SCUFF_CATCH_RETURN;
+	try { return impl::is_scanning(); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto load(id::device dev, const scuff::bytes& bytes) -> bool {
-	try { return impl::load(dev, bytes); } SCUFF_CATCH_RETURN;
+	try { return impl::load(dev, bytes); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto load_async(id::device dev, const scuff::bytes& bytes, return_load_device_result fn) -> void {
-	try { impl::load_async(dev, bytes, fn); } SCUFF_CATCH_VOID;
+	try { impl::load_async(dev, bytes, fn); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto push_event(id::device dev, const scuff::event& event) -> void {
-	try { impl::push_event(dev, event); } SCUFF_CATCH_VOID;
+	try { impl::push_event(dev, event); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto ui_update(const general_ui& ui) -> void {
-	try { ui::call_callbacks(ui); } SCUFF_CATCH_VOID;
+	try { ui::call_callbacks(ui); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto ui_update(id::group group_id, const group_ui& ui) -> void {
-	try { ui::call_callbacks(group_id, ui); } SCUFF_CATCH_VOID;
+	try { ui::call_callbacks(group_id, ui); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool {
-	try { impl::restart(sbox, sbox_exe_path); return true; } SCUFF_CATCH_RETURN;
+	try { impl::restart(sbox, sbox_exe_path); return true; } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto save(id::device dev) -> scuff::bytes {
-	try { return impl::save(dev); } SCUFF_CATCH_RETURN;
+	try { return impl::save(dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto save_async(id::device dev, return_bytes fn) -> void {
-	try { impl::save_async(dev, fn); } SCUFF_CATCH_VOID;
+	try { impl::save_async(dev, fn); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto scan(std::string_view scan_exe_path, scan_flags flags) -> void {
-	try { impl::do_scan(scan_exe_path, flags); } SCUFF_CATCH_VOID;
+	try { impl::do_scan(scan_exe_path, flags); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto set_render_mode(id::group group, render_mode mode) -> void {
-	try { impl::set_render_mode(group, mode); } SCUFF_CATCH_VOID;
+	try { impl::set_render_mode(group, mode); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto was_loaded_successfully(id::device dev) -> bool {
-	try { return impl::was_loaded_successfully(dev); } SCUFF_CATCH_RETURN;
+	try { return impl::was_loaded_successfully(dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto managed(id::device id) -> managed_device {
-	try { return impl::managed(id); } SCUFF_CATCH_RETURN;
+	try { return impl::managed(id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto managed(id::group id) -> managed_group {
-	try { return impl::managed(id); } SCUFF_CATCH_RETURN;
+	try { return impl::managed(id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto managed(id::sandbox id) -> managed_sandbox {
-	try { return impl::managed(id); } SCUFF_CATCH_RETURN;
+	try { return impl::managed(id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto ref(id::device id) -> void {
-	try { impl::ref(id); } SCUFF_CATCH_VOID;
+	try { impl::ref(id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto ref(id::group id) -> void {
-	try { impl::ref(id); } SCUFF_CATCH_VOID;
+	try { impl::ref(id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto ref(id::sandbox id) -> void {
-	try { impl::ref(id); } SCUFF_CATCH_VOID;
+	try { impl::ref(id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto unref(id::device id) -> void {
-	try { impl::unref(id); } SCUFF_CATCH_VOID;
+	try { impl::unref(id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto unref(id::group id) -> void {
-	try { impl::unref(id); } SCUFF_CATCH_VOID;
+	try { impl::unref(id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto unref(id::sandbox id) -> void {
-	try { impl::unref(id); }
-	catch (const std::exception& err) {
-		throw err;
-	};
+	try { impl::unref(id); } SCUFF_EXCEPTION_WRAPPER
 }
 
 } // scuff

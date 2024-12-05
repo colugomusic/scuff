@@ -8,10 +8,51 @@
 #include "common-render-mode.hpp"
 #include "common-types.hpp"
 #include <functional>
+#include <stdexcept>
+#include <source_location>
 #include <string_view>
 #include <vector>
 
 namespace scuff {
+
+// OBJECT LIFETIMES
+// ----------------
+// - Sandboxes can have devices.
+// - Groups can have sandboxes.
+// - If erase(sandbox) is called, and it still has at least one device, it will be marked for delete and then
+//   automatically deleted when its final device is deleted. Otherwise it will be deleted immediately.
+// - If erase(group) is called, and it still has at least one sandbox, it will be marked for delete and then
+//   automatically deleted when its final sandbox is deleted. Otherwise it will be deleted immediately.
+
+// WHEN ARE EXCEPTIONS THROWN?
+// ---------------------------
+// Generally speaking this library can throw in the following situations:
+// - An invalid input, e.g. passing in an invalid ID.
+// - Calling ui_update() without providing all of the callbacks.
+// - Forgetting to call init().
+// - Attempting to connect two devices which exist in different groups.
+// - A bug in the sandboxing system.
+//
+// This library does NOT throw in any of these situations:
+// - An error occurring during plugin scanning (this is reported via a callback instead.)
+// - A sandbox crashing (this is reported via a callback instead.)
+// - A device failing to load correctly (the device is created, but remains in an "unloaded" state.)
+// - One of the 'find(...)' overloads failing to find the requested thing (an special 'invalid' value is
+//   returned instead, to indicate failure.)
+
+// EXCEPTION SAFETY
+// ----------------
+// https://en.wikipedia.org/wiki/Exception_safety
+// This library provides "strong exception safety" throughout, meaning if an exception is thrown then there will
+// be no side effects. If this is ever not the case, then I consider it a bug in the sandboxing system.
+
+// WHICH EXCEPTION TYPES ARE THROWN?
+// ---------------------------------
+// Only this one:
+struct runtime_error : public std::runtime_error {
+	runtime_error(std::string_view function_name, const char* what) : std::runtime_error(what), function_name{function_name} {}
+	std::string function_name;
+};
 
 struct scan_flags {
 	enum e {
@@ -25,7 +66,7 @@ struct scan_flags {
 
 struct create_device_result {
 	id::device id;
-	bool was_created_successfully = false;
+	bool was_loaded_successfully = false;
 };
 
 struct load_device_result {
@@ -144,22 +185,12 @@ auto audio_process(const group_process& process) -> void;
 // In a UI processing thread, it is recommended to use the asynchronous functions over
 // their blocking variants when possible because these operations require a
 // back-and-forth between the client and sandbox processes in order to do their work.
-// 
-// If SCUFF_NOEXCEPT is defined when building the client library then instead of throwing
-// exceptions, errors will be reported via the general_ui::on_error callback.
-//
-// If SCUFF_NOEXCEPT is not defined then any of these functions may throw, but they all
-// guarantee "strong exception safety": https://en.wikipedia.org/wiki/Exception_safety
 /////////////////////////////////////////////////////////////////////////////////////////
 
 // Call this before anything else.
 //  - The thread this is called from is considered the "UI thread" until shutdown() is
 //    called.
-#if defined(SCUFF_NOEXCEPT)
-auto init(const scuff::on_error& on_error) -> void;
-#else
 auto init() -> void;
-#endif
 
 // Call this when you're done with the sandboxing system.
 //  - Don't call anything else after this, except for init() to reinitialize.
