@@ -1,17 +1,30 @@
 # scuff (work in progress)
  
-I am working on a cross-platform CLAP/VST3 audio plugin sandboxing system. Since this is not an easy problem to solve, I am trying to design the system to be generic enough that nobody has to figure it out ever again. They can just use this instead. The project consists of:
+I am working on a cross-platform CLAP/VST3 audio plugin sandboxing system for Windows, macOS and Linux. Since this is not an easy problem to solve, I am trying to design the system to be generic enough that nobody has to figure it out ever again. They can just use this instead. The project consists of:
 - [A sandbox executable](sbox) responsible for hosting one or more plugin instances.
 - [A scanner executable](scan) which can scan the system for installed plugins.
 - [A static library](client) which encapsulates the sandboxing system and allows us to use it within our audio applications.
 
-If you have expertise in this area and want to help then please get in touch.
-
-I am targeting Windows, macOS and Linux. My immediate plan is to start by implementing CLAP support only and then add VST3 support later. I am planning to use [nappgui](https://github.com/frang75/nappgui_src) to handle opening editor windows within the sandbox processes.
-
 Here is a blog post about this project: https://www.patreon.com/posts/plugin-110821252
 
 Here is the interface of the client library in its current state: [client/include/scuff/client.hpp](client/include/scuff/client.hpp)
+
+## Current status
+
+### The scanner
+Finished for CLAP plugins.
+
+### The sandboxing backend and framework
+Pretty much done. By this I'm talking about all the sandbox process management, shared memory management, interprocess communication, and the client API. Everything appears to work well on Windows. Have not yet done enough testing on macOS and Linux.
+
+### CLAP-based audio effects
+About 99% done. I worked towards this goal first because this is what I need for my own project. More tests need to be written.
+
+### CLAP-based instruments or other kinds of devices
+Not done but the framework is all there. I just don't need this for my own project yet so I'm not working on it.
+
+### VST3 support
+Not started at all because I don't need it for my own project but everything is sort of written with this in mind.
 
 ## Glossary
 
@@ -26,7 +39,7 @@ A collection of sandboxes which can be processed as a group. Audio and event dat
 
 ## Basic concept
 
-Here are some basic example scenarios and I will try to describe how they will work in this system. The arrows represent audio signal flow and I am ignoring event data. Each of these illustrates a single sandbox group. Clients are free to create as many sandbox groups as they like.
+Here are some basic example scenarios and I will try to describe how they work in this system. The arrows represent audio signal flow and I am ignoring event data. Each of these illustrates a single sandbox group. Clients are free to create as many sandbox groups as they like.
 
 ### Scenario 1
 ![scuff01](https://github.com/user-attachments/assets/049b3659-bd3a-4e4f-9c97-8f42e7ebca41)
@@ -36,12 +49,12 @@ This is a simple effect rack consisting of three devices in series. Each device 
 ### Scenario 2
 ![scuff02](https://github.com/user-attachments/assets/69a485d3-82d5-4762-9e86-f9d957715e92)
 
-This is the same effect rack except every device belongs to one big sandbox. If one plugin crashes then it brings the entire sandbox process down with it. The sandbox still logically exists, it's just in a crashed state. The client library has a function to restart the sandbox which will attempt to re-launch the sandbox process and recreate all the devices within it. This might benefit from some kind of auto-save system which periodically saves device state to be used when restoring them after a crash (haven't thought about that properly yet.)
+This is the same effect rack except every device belongs to one big sandbox. If one plugin crashes then it brings the entire sandbox process down with it. The sandbox still logically exists, it's just in a crashed state. The client library has a function to restart the sandbox which will attempt to re-launch the sandbox process and recreate all the devices within it. There is an invisible auto-save system which periodically saves dirty device states to be used when restoring them after a crash.
 
 ### Scenario 3
 ![scuff04](https://github.com/user-attachments/assets/97d7a7b7-fcc0-4fde-a1b0-a1f7088b2e96)
 
-Here devices 1 and 2 belong to the same sandbox process. An audio connection between two devices inside the same sandbox is treated differently than a connection which goes between two different sandboxes. When the device graph changes we calculate the correct order of processing for each device in each sandbox so when the red sandbox is processed it will process the entire signal chain (device 1, then device 2), so only one buffer of latency is introduced for the first 2 devices.
+Here devices 1 and 2 belong to the same sandbox process. An audio connection between two devices inside the same sandbox is treated differently than a connection which goes between two different sandboxes. When the device graph changes we calculate the correct order of processing for each device in each sandbox so when the red sandbox is processed it will process the entire signal chain (device 1, then device 2), so only one buffer of latency is introduced in this chain.
 
 ### Scenario 4
 ![scuff03](https://github.com/user-attachments/assets/33a527dc-3d04-4ca9-838c-0b751b54c935)
