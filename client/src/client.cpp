@@ -13,12 +13,8 @@
 #include <variant>
 
 #define SCUFF_EXCEPTION_WRAPPER \
-	catch (const std::exception& err) { \
-		throw scuff::runtime_error(std::source_location::current().function_name(), err.what()); \
-	} \
-	catch (...) { \
-		throw scuff::runtime_error(std::source_location::current().function_name(), "Unknown error"); \
-	}
+	catch (const std::exception& err) { throw scuff::runtime_error(std::source_location::current().function_name(), err.what()); } \
+	catch (...)                       { throw scuff::runtime_error(std::source_location::current().function_name(), "Unknown error"); }
 
 namespace bip = boost::interprocess;
 
@@ -918,7 +914,7 @@ auto was_loaded_successfully(id::device dev) -> bool {
 [[nodiscard]] static
 auto create_group(void* parent_window_handle) -> id::group {
 	const auto group_id = id::group{id_gen_++};
-	DATA_->model.update(ez::nort, [=](model&& m){
+	DATA_->model.update(ez::nort, [group_id, parent_window_handle](model&& m){
 		scuff::group group;
 		group.id                   = group_id;
 		group.parent_window_handle = parent_window_handle;
@@ -1255,7 +1251,6 @@ auto create_sandbox(id::group group_id, std::string_view sbox_exe_path) -> id::s
 [[nodiscard]] static auto is_ready_to_erase(const sandbox& s) -> bool { return is_marked_for_delete(s) && s.devices.empty(); } 
 [[nodiscard]] static auto is_ready_to_erase(const model& m, id::group group_id) -> bool { return is_ready_to_erase(m.groups.at(group_id)); } 
 [[nodiscard]] static auto is_ready_to_erase(const model& m, id::sandbox sbox_id) -> bool { return is_ready_to_erase(m.sandboxes.at(sbox_id)); } 
-
 [[nodiscard]] static auto mark_for_delete(group&& g) -> group { g.flags.value |= group_flags::marked_for_delete; return g; }
 [[nodiscard]] static auto mark_for_delete(sandbox&& s) -> sandbox { s.flags.value |= sandbox_flags::marked_for_delete; return s; }
 
