@@ -4,7 +4,6 @@ I am working on a cross-platform CLAP/VST3 audio plugin sandboxing system. Since
 - [A sandbox executable](sbox) responsible for hosting one or more plugin instances.
 - [A scanner executable](scan) which can scan the system for installed plugins.
 - [A static library](client) which encapsulates the sandboxing system and allows us to use it within our audio applications.
-- [A test host](test-host) for testing.
 
 If you have expertise in this area and want to help then please get in touch.
 
