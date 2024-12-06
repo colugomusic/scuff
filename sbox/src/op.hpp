@@ -162,6 +162,15 @@ auto device_erase(sbox::app* app, id::device dev_id) -> void {
 	});
 }
 
+auto set_render_mode(sbox::app* app, id::device dev_id, scuff::render_mode mode) -> void {
+	const auto m = app->model.read(ez::main);
+	const auto dev = m.devices.at(dev_id);
+	switch (dev.type) {
+		case plugin_type::clap: { clap::main::set_render_mode(app, dev_id, mode); break; }
+		default:                { throw std::runtime_error("Unsupported device type"); }
+	}
+}
+
 [[nodiscard]] static
 auto make_client_param_info(const sbox::device& dev) -> std::vector<client_param_info> {
 	std::vector<client_param_info> client_infos;

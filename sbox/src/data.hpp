@@ -89,6 +89,7 @@ struct icon {
 struct app {
 	sbox::options                     options;
 	sbox::mode                        mode;
+	scuff::render_mode                render_mode = scuff::render_mode::realtime;
 	shm::group                        shm_group;
 	shm::sandbox                      shm_sbox;
 	signaling::sandboxside_group      group_signaler;

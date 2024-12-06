@@ -1132,4 +1132,18 @@ auto on_native_window_resize(const sbox::app* app, const sbox::device& dev, edwi
 	iface.gui->set_size(iface.plugin, adjusted_size.width, adjusted_size.height);
 }
 
+auto set_render_mode(sbox::app* app, id::device dev_id, scuff::render_mode mode) -> void {
+	const auto m = app->model.read(ez::main);
+	const auto clap_dev = m.clap_devices.at(dev_id);
+	const auto iface = clap_dev.iface->plugin;
+	if (!iface.render) {
+		return;
+	}
+	if (mode == render_mode::offline && iface.render->has_hard_realtime_requirement(iface.plugin)) {
+		return;
+	}
+	const auto clap_mode = mode == render_mode::offline ? CLAP_RENDER_OFFLINE : CLAP_RENDER_REALTIME;
+	iface.render->set(iface.plugin, clap_mode);
+}
+
 } // scuff::sbox::clap::main
