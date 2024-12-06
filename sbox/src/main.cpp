@@ -6,11 +6,15 @@
 #include "doctest.h"
 #include "loguru.hpp"
 #include "msg-proc.hpp"
+#include <cmrc/cmrc.hpp>
 #include <filesystem>
 #include <iostream>
 #include <optional>
 #include <platform_folders.h>
 #include <string_view>
+#include <tga.h>
+
+CMRC_DECLARE(scuff::sbox);
 
 namespace fs = std::filesystem;
 
@@ -147,6 +151,40 @@ auto get_log_file_path() -> fs::path {
 	return fs::path(sago::getDataHome()) / "scuff-sbox" / "log.txt";
 }
 
+auto make_window_icon() -> sbox::icon {
+	const auto fs = cmrc::scuff::sbox::get_filesystem();
+	const auto clap_icon_256_tga = fs.open("res/clap-icon-256.tga");
+	const auto bytes = std::span<const std::byte>{reinterpret_cast<const std::byte*>(clap_icon_256_tga.begin()), clap_icon_256_tga.size()};
+	auto rofile  = tga::ReadOnlyMemoryFileInterface{bytes};
+	auto decoder = tga::Decoder(&rofile);
+	auto header  = tga::Header{};
+	if (!decoder.readHeader(header)) {
+		return {};
+	}
+	auto image = tga::Image{};
+	image.bytesPerPixel = header.bytesPerPixel();
+	image.rowstride     = header.width * image.bytesPerPixel;
+	auto buffer = std::vector<uint8_t>(image.rowstride * header.height);
+	image.pixels = buffer.data();
+	if (!decoder.readImage(header, image)) {
+		return {};
+	}
+	decoder.postProcessImage(header, image);
+	sbox::icon icon;
+	icon.size = edwin::size{header.width, header.height};
+	for (auto y = 0; y < header.height; ++y) {
+		for (auto x = 0; x < header.width; ++x) {
+			const auto index = (y * header.width + x) * 4;
+			const auto r = static_cast<std::byte>(image.pixels[index + 0]);
+			const auto g = static_cast<std::byte>(image.pixels[index + 1]);
+			const auto b = static_cast<std::byte>(image.pixels[index + 2]);
+			const auto a = static_cast<std::byte>(image.pixels[index + 3]);
+			icon.pixels.push_back(edwin::rgba{r, g, b, a});
+		}
+	}
+	return icon;
+}
+
 auto go(int argc, const char* argv[]) -> int {
 	sbox::app app;
 	loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
@@ -154,8 +192,9 @@ auto go(int argc, const char* argv[]) -> int {
 	loguru::add_file(get_log_file_path().string().c_str(), loguru::Truncate, loguru::Verbosity_MAX);
 	try {
 		LOG_S(INFO) << "scuff-sbox started";
-		app.options = cmdline::get_options(app, argc, argv);
-		app.mode    = get_mode(app);
+		app.options     = cmdline::get_options(app, argc, argv);
+		app.mode        = get_mode(app);
+		app.window_icon = make_window_icon();
 		if (app.mode == sbox::mode::sandbox)  { return sandbox(&app); }
 		if (app.mode == sbox::mode::gui_test) { return gui_test(&app); }
 		if (app.mode == sbox::mode::test)     { return run_tests(&app); }

@@ -81,16 +81,9 @@ auto show(sbox::app* app, scuff::id::device dev_id, edwin::fn::on_window_closed 
 		const auto& device = app->model.read(ez::main).devices.at(dev_id);
 		on_native_window_resize_impl(app, device, size);
 	};
-	// TOODOO: proper icon
-	std::vector<edwin::rgba> pixels;
-	pixels.resize(4);
-	pixels[0] = {std::byte{255},   std::byte{0},   std::byte{0}, std::byte{255}};
-	pixels[1] = {std::byte{200}, std::byte{100},   std::byte{0}, std::byte{255}};
-	pixels[2] = {  std::byte{100}, std::byte{200},   std::byte{100}, std::byte{255}};
-	pixels[3] = {  std::byte{0}, std::byte{255}, std::byte{255}, std::byte{255}};
 	cfg.parent    = app->options.parent_window;
-	cfg.icon.size = {2, 2};
-	cfg.icon.pixels = pixels;
+	cfg.icon.size   = app->window_icon.size;
+	cfg.icon.pixels = app->window_icon.pixels;
 	cfg.resizable   = {result.resizable};
 	cfg.size.width  = static_cast<int>(result.width);
 	cfg.size.height = static_cast<int>(result.height);

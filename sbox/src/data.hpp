@@ -81,6 +81,11 @@ enum class mode {
 	test
 };
 
+struct icon {
+	std::vector<edwin::rgba> pixels;
+	edwin::size size;
+};
+
 struct app {
 	sbox::options                     options;
 	sbox::mode                        mode;
@@ -101,6 +106,7 @@ struct app {
 	double                            sample_rate = 44100.0;
 	heartbeat_time                    last_heartbeat;
 	msg::out::buf                     reusable_msg_out_buf;
+	sbox::icon                        window_icon;
 };
 
 } // scuff::sbox
