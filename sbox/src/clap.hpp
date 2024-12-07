@@ -583,6 +583,30 @@ auto init_params(clap::device&& dev) -> clap::device {
 }
 
 [[nodiscard]] static
+auto make_local_param_flags(uint32_t clap_flags) -> uint32_t {
+	uint32_t out = 0;
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_AUTOMATABLE))             { out |= scuff::param_is_automatable; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_AUTOMATABLE_PER_CHANNEL)) { out |= scuff::param_is_automatable_per_channel; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_AUTOMATABLE_PER_KEY))     { out |= scuff::param_is_automatable_per_key; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_AUTOMATABLE_PER_NOTE_ID)) { out |= scuff::param_is_automatable_per_note_id; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_AUTOMATABLE_PER_PORT))    { out |= scuff::param_is_automatable_per_port; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_BYPASS))                  { out |= scuff::param_is_bypass; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_ENUM))                    { out |= scuff::param_is_enum; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_HIDDEN))                  { out |= scuff::param_is_hidden; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_MODULATABLE))             { out |= scuff::param_is_modulatable; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_MODULATABLE_PER_CHANNEL)) { out |= scuff::param_is_modulatable_per_channel; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_MODULATABLE_PER_KEY))     { out |= scuff::param_is_modulatable_per_key; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID)) { out |= scuff::param_is_modulatable_per_note_id; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_MODULATABLE_PER_PORT))    { out |= scuff::param_is_modulatable_per_port; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_PERIODIC))                { out |= scuff::param_is_periodic; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_READONLY))                { out |= scuff::param_is_readonly; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_PERIODIC))                { out |= scuff::param_is_periodic; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_IS_STEPPED))                 { out |= scuff::param_is_stepped; }
+	if (is_flag_set(clap_flags, CLAP_PARAM_REQUIRES_PROCESS))           { out |= scuff::param_requires_process; }
+	return out;
+}
+
+[[nodiscard]] static
 auto init_local_params(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
 	dev.param_info = {};
 	for (size_t i = 0; i < clap_dev.params.size(); i++) {
@@ -594,6 +618,7 @@ auto init_local_params(sbox::device&& dev, const clap::device& clap_dev) -> sbox
 		info.min_value     = param.info.min_value;
 		info.clap.cookie   = param.info.cookie;
 		info.name          = param.info.name;
+		info.flags         = make_local_param_flags(param.info.flags);
 		dev.param_info = dev.param_info.push_back(info);
 	}
 	return dev;
