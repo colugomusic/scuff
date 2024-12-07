@@ -60,6 +60,8 @@ struct device {
 	device_ui ui;
 	plugin_type type;
 	double sample_rate = 0.0;
+	std::optional<rgba32> track_color;
+	immer::box<std::string> track_name;
 	immer::box<std::string> name;
 	immer::flex_vector<port_conn> output_conns;
 	immer::vector<scuff::sbox_param_info> param_info;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common-colors.hpp"
 #include "common-constants.hpp"
 #include "common-device-info.hpp"
 #include "common-events.hpp"
@@ -8,6 +9,7 @@
 #include "common-render-mode.hpp"
 #include "common-types.hpp"
 #include <functional>
+#include <optional>
 #include <stdexcept>
 #include <source_location>
 #include <string_view>
@@ -455,6 +457,12 @@ auto scan(std::string_view scan_exe_path, scan_flags flags) -> void;
 
 // Set the render mode for the given group.
 auto set_render_mode(id::group group, render_mode mode) -> void;
+
+// Associate a track color with the device.
+auto set_track_color(id::device dev, std::optional<rgba32> color) -> void;
+
+// Associate a track name with the device.
+auto set_track_name(id::device dev, std::string_view name) -> void;
 
 // Return true if the device loaded successfully.
 [[nodiscard]]

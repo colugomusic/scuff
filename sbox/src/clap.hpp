@@ -138,26 +138,30 @@ auto cb_params_rescan(sbox::app* app, id::device dev_id, clap_param_rescan_flags
 
 static
 auto cb_request_param_flush(sbox::app* app, id::device dev_id) -> void {
-	const auto svc = app->model.read(ez::rt)->clap_devices.at(dev_id).service;
-	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_param_flush, std::memory_order_relaxed);
+	if (const auto dev = app->model.read(ez::rt)->clap_devices.find(dev_id)) {
+		dev->service.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_param_flush, std::memory_order_relaxed);
+	}
 }
 
 static
 auto cb_request_process(sbox::app* app, id::device dev_id) -> void {
-	const auto svc = app->model.read(ez::rt)->clap_devices.at(dev_id).service;
-	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_active | device_atomic_flags::schedule_process);
+	if (const auto dev = app->model.read(ez::rt)->clap_devices.find(dev_id)) {
+		dev->service.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_active | device_atomic_flags::schedule_process);
+	}
 }
 
 static
 auto cb_request_restart(sbox::app* app, id::device dev_id) -> void {
-	const auto svc = app->model.read(ez::rt)->clap_devices.at(dev_id).service;
-	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_restart);
+	if (const auto dev = app->model.read(ez::rt)->clap_devices.find(dev_id)) {
+		dev->service.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_restart);
+	}
 }
 
 static
 auto cb_request_callback(sbox::app* app, id::device dev_id) -> void {
-	const auto svc = app->model.read(ez::rt)->clap_devices.at(dev_id).service;
-	svc.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_callback);
+	if (const auto dev = app->model.read(ez::rt)->clap_devices.find(dev_id)) {
+		dev->service.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_callback);
+	}
 }
 
 static
@@ -183,6 +187,26 @@ auto cb_gui_request_resize(sbox::app* app, id::device dev_id, uint32_t width, ui
 static
 auto cb_gui_resize_hints_changed(sbox::app* app, id::device dev_id) -> void {
 	send_msg(app, dev_id, device_msg::gui_resize_hints_changed{});
+}
+
+static
+auto cb_get_track_info(ez::main_t, sbox::app* app, id::device dev_id, clap_track_info* out) -> void {
+	*out = {0};
+	if (const auto dev = app->model.read(ez::main).devices.find(dev_id)) {
+		if (dev->track_color) {
+			out->color.red   = dev->track_color->r;
+			out->color.green = dev->track_color->g;
+			out->color.blue  = dev->track_color->b;
+			out->color.alpha = dev->track_color->a;
+			out->flags |= CLAP_TRACK_INFO_HAS_TRACK_COLOR;
+		}
+		if (!dev->track_name->empty()) {
+			const auto length = std::min(dev->track_name->size(), size_t(CLAP_NAME_SIZE - 1));
+			std::copy_n(dev->track_name->c_str(), length, out->name);
+			out->name[length] = '\0';
+			out->flags |= CLAP_TRACK_INFO_HAS_TRACK_NAME;
+		}
+	}
 }
 
 static
@@ -844,8 +868,8 @@ auto make_host_for_instance(device_host_data* host_data) -> void {
 	// TRACK INFO _______________________________________________________________
 	host_data->iface.track_info.get = [](const clap_host* host, clap_track_info_t* info) -> bool {
 		const auto& hd = get_host_data(host);
-		// TOODOO: implement this
-		return false;
+		cb_get_track_info(ez::main, hd.app, hd.dev_id, info);
+		return true;
 	};
 }
 

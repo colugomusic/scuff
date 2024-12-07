@@ -855,6 +855,22 @@ auto set_render_mode(id::group group_id, render_mode mode) -> void {
 	});
 }
 
+static
+auto set_track_color(id::device dev, std::optional<rgba32> color) -> void {
+	const auto m = DATA_->model.read(ez::nort);
+	const auto& device = m.devices.at(dev);
+	const auto& sbox = m.sandboxes.at(device.sbox);
+	sbox.services->enqueue(scuff::msg::in::set_track_color{dev.value, color});
+}
+
+static
+auto set_track_name(id::device dev, std::string_view name) -> void {
+	const auto m = DATA_->model.read(ez::nort);
+	const auto& device = m.devices.at(dev);
+	const auto& sbox = m.sandboxes.at(device.sbox);
+	sbox.services->enqueue(scuff::msg::in::set_track_name{dev.value, std::string{name}});
+}
+
 [[nodiscard]] static
 auto get_broken_plugfiles() -> std::vector<id::plugfile> {
 	std::vector<id::plugfile> out;
@@ -1669,6 +1685,14 @@ auto scan(std::string_view scan_exe_path, scan_flags flags) -> void {
 
 auto set_render_mode(id::group group, render_mode mode) -> void {
 	try { impl::set_render_mode(group, mode); } SCUFF_EXCEPTION_WRAPPER;
+}
+
+auto set_track_color(id::device dev, std::optional<rgba32> color) -> void {
+	try { impl::set_track_color(dev, color); } SCUFF_EXCEPTION_WRAPPER;
+}
+
+auto set_track_name(id::device dev, std::string_view name) -> void {
+	try { impl::set_track_name(dev, name); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto was_loaded_successfully(id::device dev) -> bool {

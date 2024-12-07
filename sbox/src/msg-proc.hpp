@@ -174,6 +174,32 @@ auto process_input_msg_(sbox::app* app, const scuff::msg::in::heartbeat& msg) ->
 }
 
 static
+auto process_input_msg_(sbox::app* app, const scuff::msg::in::set_track_color& msg) -> void {
+	DLOG_S(INFO) << "msg::in::set_track_color:";
+	const auto dev_id = id::device{msg.dev_id};
+	app->model.update(ez::main, [dev_id, color = msg.color](scuff::sbox::model m) {
+		m.devices = m.devices.update_if_exists(dev_id, [color](scuff::sbox::device dev) {
+			dev.track_color = color;
+			return dev;
+		});
+		return m;
+	});
+}
+
+static
+auto process_input_msg_(sbox::app* app, const scuff::msg::in::set_track_name& msg) -> void {
+	DLOG_S(INFO) << "msg::in::set_track_name:";
+	const auto dev_id = id::device{msg.dev_id};
+	app->model.update(ez::main, [dev_id, name = msg.name](scuff::sbox::model m) {
+		m.devices = m.devices.update_if_exists(dev_id, [name](scuff::sbox::device dev) {
+			dev.track_name = name;
+			return dev;
+		});
+		return m;
+	});
+}
+
+static
 auto process_input_msg(sbox::app* app, const scuff::msg::in::msg& msg) -> void {
 	fast_visit([app](const auto& msg) { process_input_msg_(app, msg); }, msg);
 }

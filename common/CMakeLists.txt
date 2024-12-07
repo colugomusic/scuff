@@ -8,6 +8,7 @@ else()
 endif()
 list (APPEND scuff-common-hdr
 	${CMAKE_CURRENT_LIST_DIR}/include/common-clap.hpp
+	${CMAKE_CURRENT_LIST_DIR}/include/common-colors.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-constants.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-device-info.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-event-buffer.hpp

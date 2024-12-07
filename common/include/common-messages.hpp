@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common-colors.hpp"
 #include "common-device-info.hpp"
 #include "common-plugin-type.hpp"
 #include "common-render-mode.hpp"
@@ -35,6 +36,8 @@ struct get_param_value        { id::device::type dev_id; size_t param_idx; size_
 struct get_param_value_text   { id::device::type dev_id; size_t param_idx; double value; size_t callback; };
 struct heartbeat              {}; // Sandbox shuts itself down if this isn't received within a certain time.
 struct set_render_mode        { render_mode mode; };
+struct set_track_color        { id::device::type dev_id; std::optional<rgba32> color; };
+struct set_track_name         { id::device::type dev_id; std::string name; };
 
 using msg = std::variant<
 	activate,
@@ -53,7 +56,9 @@ using msg = std::variant<
 	get_param_value,
 	get_param_value_text,
 	heartbeat,
-	set_render_mode
+	set_render_mode,
+	set_track_color,
+	set_track_name
 >;
 
 } // scuff::msg::in
@@ -110,6 +115,24 @@ template <> inline
 auto deserialize<scuff::msg::in::device_load>(std::span<const std::byte>* bytes, scuff::msg::in::device_load* msg) -> void {
 	deserialize(bytes, &msg->dev_id);
 	deserialize(bytes, &msg->state);
+}
+
+template <> inline
+auto deserialize<scuff::msg::in::set_track_color>(std::span<const std::byte>* bytes, scuff::msg::in::set_track_color* msg) -> void {
+	bool engaged = false;
+	scuff::rgba32 color;
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &engaged);
+	if (engaged) {
+		deserialize(bytes, &color);
+		msg->color = color;
+	}
+}
+
+template <> inline
+auto deserialize<scuff::msg::in::set_track_name>(std::span<const std::byte>* bytes, scuff::msg::in::set_track_name* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->name);
 }
 
 template <> inline
@@ -205,6 +228,21 @@ template <> inline
 auto serialize<scuff::msg::in::device_load>(const scuff::msg::in::device_load& msg, std::vector<std::byte>* bytes) -> void {
 	serialize(msg.dev_id, bytes);
 	serialize(msg.state, bytes);
+}
+
+template <> inline
+auto serialize<scuff::msg::in::set_track_color>(const scuff::msg::in::set_track_color& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
+	serialize(msg.color.has_value(), bytes);
+	if (msg.color.has_value()) {
+		serialize(msg.color.value(), bytes);
+	}
+}
+
+template <> inline
+auto serialize<scuff::msg::in::set_track_name>(const scuff::msg::in::set_track_name& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
+	serialize(msg.name, bytes);
 }
 
 template <> inline
