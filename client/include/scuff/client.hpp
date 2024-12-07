@@ -39,7 +39,7 @@ namespace scuff {
 // - An error occurring during plugin scanning (this is reported via a callback instead.)
 // - A sandbox crashing (this is reported via a callback instead.)
 // - A device failing to load correctly (the device is created, but remains in an "unloaded" state.)
-// - One of the 'find(...)' overloads failing to find the requested thing (an special 'invalid' value is
+// - One of the 'find(...)' overloads failing to find the requested thing (a special 'invalid' value is
 //   returned instead, to indicate failure.)
 
 // EXCEPTION SAFETY
