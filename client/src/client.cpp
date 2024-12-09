@@ -1436,6 +1436,37 @@ auto unref(ez::nort_t, id::sandbox id) -> void {
 	}
 }
 
+auto init() -> void {
+	if (scuff::initialized_) { return; }
+	try {
+		scuff::DATA_               = std::make_unique<scuff::data>();
+		scuff::DATA_->instance_id  = "scuff+" + std::to_string(scuff::os::get_process_id());
+		scuff::DATA_->poll_thread  = std::jthread{impl::poll_thread};
+		scuff::DATA_->ui_thread_id = std::this_thread::get_id();
+		scuff::initialized_        = true;
+	} catch (const std::exception& err) {
+		scuff::DATA_.reset();
+		throw err;
+	} catch (...) {
+		scuff::DATA_.reset();
+		throw std::runtime_error("Unknown error during initialization");
+	}
+}
+
+auto shutdown() -> void {
+	if (!scuff::initialized_) { return; }
+	scuff::DATA_->poll_thread.request_stop();
+	scuff::DATA_->scan_thread.request_stop();
+	if (scuff::DATA_->poll_thread.joinable()) {
+		scuff::DATA_->poll_thread.join();
+	}
+	if (scuff::DATA_->scan_thread.joinable()) {
+		scuff::DATA_->scan_thread.join();
+	}
+	scuff::DATA_.reset();
+	scuff::initialized_ = false;
+}
+
 } // impl
 
 namespace scuff {
@@ -1459,41 +1490,11 @@ auto api_error(std::string_view what, const std::source_location& location = std
 }
 
 auto init() -> void {
-	if (scuff::initialized_) { return; }
-	try {
-		scuff::DATA_               = std::make_unique<scuff::data>();
-		scuff::DATA_->instance_id  = "scuff+" + std::to_string(scuff::os::get_process_id());
-		scuff::DATA_->poll_thread  = std::jthread{impl::poll_thread};
-		scuff::DATA_->ui_thread_id = std::this_thread::get_id();
-		scuff::initialized_        = true;
-	} catch (const std::exception& err) {
-		scuff::DATA_.reset();
-		throw err;
-	} catch (...) {
-		scuff::DATA_.reset();
-		throw std::runtime_error("Unknown error during initialization");
-	}
-}
-
-auto init(const scuff::on_error& on_error) -> void {
-	try { init(); } SCUFF_EXCEPTION_WRAPPER;
+	try { impl::init(); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto shutdown() -> void {
-	if (!scuff::initialized_) { return; }
-	try {
-		scuff::DATA_->poll_thread.request_stop();
-		scuff::DATA_->scan_thread.request_stop();
-		if (scuff::DATA_->poll_thread.joinable()) {
-			scuff::DATA_->poll_thread.join();
-		}
-		if (scuff::DATA_->scan_thread.joinable()) {
-			scuff::DATA_->scan_thread.join();
-		}
-		scuff::DATA_.reset();
-		scuff::initialized_ = false;
-	}
-	SCUFF_EXCEPTION_WRAPPER;
+	try { impl::shutdown(); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto activate(id::group group, double sr) -> void {
