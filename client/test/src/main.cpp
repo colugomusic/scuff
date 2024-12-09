@@ -48,7 +48,7 @@ auto make_empty_group_reporter() -> scuff::group_ui {
 	scuff::group_ui ui;
 	ui.on_device_editor_visible_changed = [](scuff::id::device dev, bool visible, int64_t native_handle) {};
 	ui.on_device_late_create = [](scuff::create_device_result result) {};
-	ui.on_device_load = [](scuff::load_device_result result) {};
+	ui.on_device_state_load = [](scuff::load_device_result result) {};
 	ui.on_device_params_changed = [](scuff::id::device dev) {};
 	ui.on_error = [](std::string_view err) {};
 	ui.on_sbox_crashed = [](scuff::id::sandbox sbox, std::string_view error) {};

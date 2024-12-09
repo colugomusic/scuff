@@ -268,13 +268,13 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_create
 
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_load_fail& msg) -> void {
-	ui::send(sbox, ui::msg::device_load{{msg.dev_id, false}});
+	ui::send(sbox, ui::msg::device_state_load{{msg.dev_id, false}});
 	ui::send(sbox, ui::msg::sbox_error{sbox.id, "Failed to load device."});
 }
 
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_load_success& msg) -> void {
-	ui::send(sbox, ui::msg::device_load{{msg.dev_id, true}});
+	ui::send(sbox, ui::msg::device_state_load{{msg.dev_id, true}});
 }
 
 static
@@ -406,7 +406,7 @@ auto save_async(ez::nort_t, const scuff::device& dev, return_bytes fn) -> void {
 	const auto sbox = m.sandboxes.at(dev.sbox);
 	auto wrapper_fn = [dev_id = dev.id, sbox, fn](const scuff::bytes& bytes){
 		update_saved_state_with_returned_bytes(ez::nort, dev_id, bytes);
-		ui::send(sbox, ui::msg::device_state{bytes, fn});
+		ui::send(sbox, ui::msg::return_device_state{bytes, fn});
 	};
 	sbox.services->enqueue(msg::in::device_save{dev.id.value, sbox.services->return_buffers.states.put(wrapper_fn)});
 }
@@ -1017,7 +1017,7 @@ auto get_value_async(ez::nort_t, id::device dev_id, idx::param param, return_dou
 	const auto& device  = m.devices.at(dev_id);
 	const auto& sbox    = m.sandboxes.at(device.sbox);
 	const auto wrapper = [sbox, fn](double value) -> void {
-		ui::send(sbox, ui::msg::param_value{value, fn});
+		ui::send(sbox, ui::msg::return_param_value{value, fn});
 	};
 	const auto callback = sbox.services->return_buffers.doubles.put(wrapper);
 	sbox.services->enqueue(scuff::msg::in::get_param_value{dev_id.value, param.value, callback});
@@ -1114,7 +1114,7 @@ auto get_value_text_async(ez::nort_t, id::device dev_id, idx::param param, doubl
 	const auto& dev  = m.devices.at(dev_id);
 	const auto& sbox = m.sandboxes.at(dev.sbox);
 	const auto wrapper = [sbox, fn](std::string_view text) -> void {
-		ui::send(sbox, ui::msg::param_value_text{std::string{text}, fn});
+		ui::send(sbox, ui::msg::return_param_value_text{std::string{text}, fn});
 	};
 	const auto callback = sbox.services->return_buffers.strings.put(wrapper);
 	sbox.services->enqueue(scuff::msg::in::get_param_value_text{dev_id.value, param.value, value, callback});

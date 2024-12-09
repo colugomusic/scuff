@@ -12,19 +12,19 @@ namespace scuff {
 namespace ui {
 namespace msg {
 
-struct device_editor_visible_changed { id::device dev; bool visible; int64_t native_handle; };
 struct device_create                 { create_device_result result; return_create_device_result callback; };
-struct device_load                   { load_device_result result; };
+struct device_editor_visible_changed { id::device dev; bool visible; int64_t native_handle; };
 struct device_late_create            { create_device_result result; };
 struct device_params_changed         { id::device dev; };
-struct device_state                  { scuff::bytes state; return_bytes callback; };
+struct device_state_load             { load_device_result result; };
 struct error                         { std::string error; };
-struct param_value                   { double value; return_double callback; };
-struct param_value_text              { std::string text; return_string callback; };
 struct plugfile_broken               { id::plugfile plugfile; };
 struct plugfile_scanned              { id::plugfile plugfile; };
 struct plugin_broken                 { id::plugin plugin; };
 struct plugin_scanned                { id::plugin plugin; };
+struct return_device_state           { scuff::bytes state; return_bytes callback; };
+struct return_param_value            { double value; return_double callback; };
+struct return_param_value_text       { std::string text; return_string callback; };
 struct sbox_crashed                  { id::sandbox sbox; std::string error; };
 struct sbox_error                    { id::sandbox sbox; std::string error; };
 struct sbox_info                     { id::sandbox sbox; std::string info; };
@@ -50,13 +50,13 @@ using general = std::variant<
 using group = std::variant<
 	device_editor_visible_changed,
 	device_create,
-	device_load,
+	device_state_load,
 	device_params_changed,
 	device_late_create,
-	device_state,
 	error,
-	param_value,
-	param_value_text,
+	return_device_state,
+	return_param_value,
+	return_param_value_text,
 	sbox_crashed,
 	sbox_error,
 	sbox_info,
