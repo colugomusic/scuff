@@ -19,8 +19,8 @@ auto make_client_param_info(const sbox::device& dev) -> std::vector<client_param
 
 namespace scuff::sbox::gui {
 
-static auto hide(sbox::app* app, sbox::device dev) -> void;
-static auto show(sbox::app* app, scuff::id::device dev_id, edwin::fn::on_window_closed on_closed) -> void;
+static auto hide(ez::main_t, sbox::app* app, sbox::device dev) -> void;
+static auto show(ez::main_t, sbox::app* app, scuff::id::device dev_id, edwin::fn::on_window_closed on_closed) -> void;
 
 } // namespace scuff::sbox::gui
 
@@ -61,59 +61,59 @@ auto unset_flags(device_atomic_flags* atomic_flags, uint32_t flags_to_unset) -> 
 }
 
 [[nodiscard]] static
-auto is_active(const device& device) -> bool {
+auto is_active(ez::safe_t, const device& device) -> bool {
 	return is_flag_set(device.flags.value, device_flags::active);
 }
 
 [[nodiscard]] static
-auto is_processing(const device& device) -> bool {
+auto is_processing(ez::safe_t, const device& device) -> bool {
 	return is_flag_set(device.service.data->atomic_flags, device_atomic_flags::processing);
 }
 
 [[nodiscard]] static
-auto is_scheduled_to_process(const device& device) -> bool {
+auto is_scheduled_to_process(ez::safe_t, const device& device) -> bool {
 	return is_flag_set(device.service.data->atomic_flags, device_atomic_flags::schedule_process);
 }
 
 static
-auto send_msg(const device& dev, const clap::device_msg::msg& msg) -> void {
+auto send_msg(ez::safe_t, const device& dev, const clap::device_msg::msg& msg) -> void {
 	dev.service.data->msg_q.enqueue(msg);
 }
 
 static
-auto send_msg(sbox::app* app, id::device dev_id, const clap::device_msg::msg& msg) -> void {
+auto send_msg(ez::safe_t, sbox::app* app, id::device dev_id, const clap::device_msg::msg& msg) -> void {
 	const auto m = app->model.read(ez::rt);
 	if (const auto dev = m->clap_devices.find(dev_id)) {
-		send_msg(*dev, msg);
+		send_msg(ez::safe, *dev, msg);
 	}
 }
 
 static
-auto log(sbox::app* app, id::device dev_id, clap_log_severity severity, const char* msg) -> void {
-	send_msg(app, dev_id, device_msg::log_begin{severity});
+auto log(ez::safe_t, sbox::app* app, id::device dev_id, clap_log_severity severity, const char* msg) -> void {
+	send_msg(ez::safe, app, dev_id, device_msg::log_begin{severity});
 	// Send the message in chunks of 64 characters
 	const auto len        = std::strlen(msg);
 	const auto chunk_size = device_msg::log_text::MAX;
 	for (size_t i = 0; i < len; i += chunk_size) {
 		const auto count = std::min(chunk_size, len - i);
 		const auto chunk = std::string_view{msg + i, count};
-		send_msg(app, dev_id, device_msg::log_text{{chunk.data(), count}});
+		send_msg(ez::safe, app, dev_id, device_msg::log_text{{chunk.data(), count}});
 	}
-	send_msg(app, dev_id, device_msg::log_end{});
+	send_msg(ez::safe, app, dev_id, device_msg::log_end{});
 }
 
 [[nodiscard]] static
-auto get_extension(sbox::app* app, const clap::iface_host& iface_host, id::device dev_id, std::string_view extension_id) -> const void* {
-	const auto m   = app->model.read(ez::rt);
+auto get_extension(ez::safe_t, sbox::app* app, const clap::iface_host& iface_host, id::device dev_id, std::string_view extension_id) -> const void* {
+	const auto m = app->model.read(ez::safe);
 	if (extension_id == std::string_view{CLAP_EXT_AUDIO_PORTS})         { return &iface_host.audio_ports; }
-	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU})        { return nullptr; } // Not implemented yet &iface.context_menu; }
-	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU_COMPAT}) { return nullptr; } // Not implemented yet &iface.context_menu; }
+	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU})        { return nullptr; } // Not implemented yet &iface.context_menu;
+	if (extension_id == std::string_view{CLAP_EXT_CONTEXT_MENU_COMPAT}) { return nullptr; } // Not implemented yet &iface.context_menu;
 	if (extension_id == std::string_view{CLAP_EXT_GUI})                 { return &iface_host.gui; }
 	if (extension_id == std::string_view{CLAP_EXT_LATENCY})             { return &iface_host.latency; }
 	if (extension_id == std::string_view{CLAP_EXT_LOG})                 { return &iface_host.log; }
 	if (extension_id == std::string_view{CLAP_EXT_PARAMS})              { return &iface_host.params; }
-	if (extension_id == std::string_view{CLAP_EXT_PRESET_LOAD})         { return nullptr; } // Not implemented yet &iface.preset_load; }
-	if (extension_id == std::string_view{CLAP_EXT_PRESET_LOAD_COMPAT})  { return nullptr; } // Not implemented yet &iface.preset_load; }
+	if (extension_id == std::string_view{CLAP_EXT_PRESET_LOAD})         { return nullptr; } // Not implemented yet &iface.preset_load;
+	if (extension_id == std::string_view{CLAP_EXT_PRESET_LOAD_COMPAT})  { return nullptr; } // Not implemented yet &iface.preset_load;
 	if (extension_id == std::string_view{CLAP_EXT_STATE})               { return &iface_host.state; }
 	if (extension_id == std::string_view{CLAP_EXT_THREAD_CHECK})        { return &iface_host.thread_check; }
 	if (extension_id == std::string_view{CLAP_EXT_TRACK_INFO})          { return &iface_host.track_info; }
@@ -123,6 +123,8 @@ auto get_extension(sbox::app* app, const clap::iface_host& iface_host, id::devic
 		// https://github.com/free-audio/clap/blob/main/include/clap/ext/tail.h
 		return nullptr;
 	}
+	// Doing a non-realtime-safe lock here. If this is actually a problem then the
+	// plugin is likely doing something completely insane anyway.
 	app->msgs_out.lock()->push_back(msg::out::report_warning{std::format("Device '{}' requested an unsupported extension: {}", dev_id.value, extension_id)});
 	return nullptr;
 }
@@ -133,61 +135,61 @@ auto get_host_data(const clap_host_t* host) -> device_host_data& {
 }
 
 static
-auto cb_params_rescan(sbox::app* app, id::device dev_id, clap_param_rescan_flags flags) -> void {
-	send_msg(app, dev_id, device_msg::params_rescan{flags});
+auto cb_params_rescan(ez::main_t, sbox::app* app, id::device dev_id, clap_param_rescan_flags flags) -> void {
+	send_msg(ez::main, app, dev_id, device_msg::params_rescan{flags});
 }
 
 static
-auto cb_request_param_flush(sbox::app* app, id::device dev_id) -> void {
-	if (const auto dev = app->model.read(ez::rt)->clap_devices.find(dev_id)) {
+auto cb_request_param_flush(ez::safe_t, sbox::app* app, id::device dev_id) -> void {
+	if (const auto dev = app->model.read(ez::safe)->clap_devices.find(dev_id)) {
 		dev->service.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_param_flush, std::memory_order_relaxed);
 	}
 }
 
 static
-auto cb_request_process(sbox::app* app, id::device dev_id) -> void {
-	if (const auto dev = app->model.read(ez::rt)->clap_devices.find(dev_id)) {
+auto cb_request_process(ez::safe_t, sbox::app* app, id::device dev_id) -> void {
+	if (const auto dev = app->model.read(ez::safe)->clap_devices.find(dev_id)) {
 		dev->service.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_active | device_atomic_flags::schedule_process);
 	}
 }
 
 static
-auto cb_request_restart(sbox::app* app, id::device dev_id) -> void {
-	if (const auto dev = app->model.read(ez::rt)->clap_devices.find(dev_id)) {
+auto cb_request_restart(ez::safe_t, sbox::app* app, id::device dev_id) -> void {
+	if (const auto dev = app->model.read(ez::safe)->clap_devices.find(dev_id)) {
 		dev->service.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_restart);
 	}
 }
 
 static
-auto cb_request_callback(sbox::app* app, id::device dev_id) -> void {
-	if (const auto dev = app->model.read(ez::rt)->clap_devices.find(dev_id)) {
+auto cb_request_callback(ez::safe_t, sbox::app* app, id::device dev_id) -> void {
+	if (const auto dev = app->model.read(ez::safe)->clap_devices.find(dev_id)) {
 		dev->service.data->atomic_flags.value.fetch_or(device_atomic_flags::schedule_callback);
 	}
 }
 
 static
-auto cb_gui_closed(sbox::app* app, id::device dev_id, bool was_destroyed) -> void {
-	send_msg(app, dev_id, device_msg::gui_closed{was_destroyed});
+auto cb_gui_closed(ez::safe_t, sbox::app* app, id::device dev_id, bool was_destroyed) -> void {
+	send_msg(ez::safe, app, dev_id, device_msg::gui_closed{was_destroyed});
 }
 
 static
-auto cb_gui_request_hide(sbox::app* app, id::device dev_id) -> void {
-	send_msg(app, dev_id, device_msg::gui_request_hide{});
+auto cb_gui_request_hide(ez::safe_t, sbox::app* app, id::device dev_id) -> void {
+	send_msg(ez::safe, app, dev_id, device_msg::gui_request_hide{});
 }
 
 static
-auto cb_gui_request_show(sbox::app* app, id::device dev_id) -> void {
-	send_msg(app, dev_id, device_msg::gui_request_show{});
+auto cb_gui_request_show(ez::safe_t, sbox::app* app, id::device dev_id) -> void {
+	send_msg(ez::safe, app, dev_id, device_msg::gui_request_show{});
 }
 
 static
-auto cb_gui_request_resize(sbox::app* app, id::device dev_id, uint32_t width, uint32_t height) -> void {
-	send_msg(app, dev_id, device_msg::gui_request_resize{{width, height}});
+auto cb_gui_request_resize(ez::safe_t, sbox::app* app, id::device dev_id, uint32_t width, uint32_t height) -> void {
+	send_msg(ez::safe, app, dev_id, device_msg::gui_request_resize{{width, height}});
 }
 
 static
-auto cb_gui_resize_hints_changed(sbox::app* app, id::device dev_id) -> void {
-	send_msg(app, dev_id, device_msg::gui_resize_hints_changed{});
+auto cb_gui_resize_hints_changed(ez::safe_t, sbox::app* app, id::device dev_id) -> void {
+	send_msg(ez::safe, app, dev_id, device_msg::gui_resize_hints_changed{});
 }
 
 static
@@ -211,7 +213,7 @@ auto cb_get_track_info(ez::main_t, sbox::app* app, id::device dev_id, clap_track
 }
 
 static
-auto convert_input_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
+auto convert_input_events(ez::safe_t, const sbox::device& dev, const clap::device& clap_dev) -> void {
 	auto get_cookie = [dev](idx::param param) -> void* {
 		return dev.param_info[param.value].clap.cookie;
 	};
@@ -228,7 +230,7 @@ auto convert_input_events(const sbox::device& dev, const clap::device& clap_dev)
 }
 
 static
-auto convert_output_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
+auto convert_output_events(ez::safe_t, const sbox::device& dev, const clap::device& clap_dev) -> void {
 	auto find_param = [dev](clap_id id) -> idx::param {
 		auto has_id = [id](const scuff::sbox_param_info& info) -> bool {
 			return info.id.value == id;
@@ -251,7 +253,7 @@ auto convert_output_events(const sbox::device& dev, const clap::device& clap_dev
 static
 // Could be called from main thread or audio thread, but
 // never both simultaneously, for the same device.
-auto flush_device_events(const sbox::device& dev, const clap::device& clap_dev) -> void {
+auto flush_device_events(ez::safe_t, const sbox::device& dev, const clap::device& clap_dev) -> void {
 	const auto& input_events  = clap_dev.service.audio->input_events;
 	const auto& output_events = clap_dev.service.audio->output_events;
 	const auto& iface         = clap_dev.iface->plugin;
@@ -259,17 +261,13 @@ auto flush_device_events(const sbox::device& dev, const clap::device& clap_dev) 
 		// May not actually be intialized
 		return;
 	}
-	convert_input_events(dev, clap_dev);
+	convert_input_events(ez::safe, dev, clap_dev);
 	iface.params->flush(iface.plugin, &input_events, &output_events);
-	convert_output_events(dev, clap_dev);
+	convert_output_events(ez::safe, dev, clap_dev);
 }
 
-} // namespace scuff::sbox::clap
-
-namespace scuff::sbox::clap::audio {
-
 [[nodiscard]] static
-auto can_render_audio(const clap::audio_buffers& buffers) -> bool {
+auto can_render_audio(ez::audio_t, const clap::audio_buffers& buffers) -> bool {
 	if (buffers.inputs.buffers.empty())                { return false; }
 	if (buffers.outputs.buffers.empty())               { return false; }
 	if (buffers.inputs.buffers[0].channel_count == 0)  { return false; }
@@ -278,7 +276,7 @@ auto can_render_audio(const clap::audio_buffers& buffers) -> bool {
 }
 
 [[nodiscard]] static
-auto try_to_wake_up(const clap::device& dev) -> bool {
+auto try_to_wake_up(ez::audio_t, const clap::device& dev) -> bool {
 	unset_flags(&dev.service.data->atomic_flags, device_atomic_flags::schedule_process);
 	if (!dev.iface->plugin.plugin->start_processing(dev.iface->plugin.plugin)) {
 		return false;
@@ -288,7 +286,7 @@ auto try_to_wake_up(const clap::device& dev) -> bool {
 }
 
 [[nodiscard]] static
-auto output_is_quiet(const shm::device& shm) -> bool {
+auto output_is_quiet(ez::audio_t, const shm::device& shm) -> bool {
 	static constexpr auto THRESHOLD = 0.0001f;
 	for (size_t i = 0; i < shm.data->audio_out.size(); i++) {
 		const auto& buffer = shm.data->audio_out[i];
@@ -303,20 +301,20 @@ auto output_is_quiet(const shm::device& shm) -> bool {
 }
 
 static
-auto go_to_sleep(const clap::device& dev) -> void {
+auto go_to_sleep(ez::audio_t, const clap::device& dev) -> void {
 	dev.iface->plugin.plugin->stop_processing(dev.iface->plugin.plugin);
 	unset_flags(&dev.service.data->atomic_flags, device_atomic_flags::processing);
 }
 
 static
-auto handle_audio_process_result(const shm::device& shm, const clap::device& dev, clap_process_status status) -> void {
+auto handle_audio_process_result(ez::audio_t, const shm::device& shm, const clap::device& dev, clap_process_status status) -> void {
 	switch (status) {
 		case CLAP_PROCESS_CONTINUE: {
 			return;
 		}
 		case CLAP_PROCESS_CONTINUE_IF_NOT_QUIET: {
-			if (output_is_quiet(shm)) {
-				go_to_sleep(dev);
+			if (output_is_quiet(ez::audio, shm)) {
+				go_to_sleep(ez::audio, dev);
 			}
 			return;
 		}
@@ -324,14 +322,14 @@ auto handle_audio_process_result(const shm::device& shm, const clap::device& dev
 		case CLAP_PROCESS_ERROR:
 		case CLAP_PROCESS_TAIL:
 		case CLAP_PROCESS_SLEEP: {
-			go_to_sleep(dev);
+			go_to_sleep(ez::audio, dev);
 			return;
 		}
 	}
 }
 
 static
-auto handle_event_process_result(const clap::device& dev, clap_process_status status) -> void {
+auto handle_event_process_result(ez::audio_t, const clap::device& dev, clap_process_status status) -> void {
 	switch (status) {
 		case CLAP_PROCESS_ERROR:
 		case CLAP_PROCESS_CONTINUE: {
@@ -340,69 +338,65 @@ auto handle_event_process_result(const clap::device& dev, clap_process_status st
 		case CLAP_PROCESS_CONTINUE_IF_NOT_QUIET:
 		case CLAP_PROCESS_TAIL:
 		case CLAP_PROCESS_SLEEP: {
-			go_to_sleep(dev);
+			go_to_sleep(ez::audio, dev);
 			return;
 		}
 	}
 }
 
 static
-auto process_audio_device(const sbox::device& dev, const clap::device& clap_dev) -> void {
+auto process_audio_device(ez::audio_t, const sbox::device& dev, const clap::device& clap_dev) -> void {
 	const auto& iface   = clap_dev.iface->plugin;
 	const auto& process = clap_dev.service.audio->process;
 	auto& flags         = clap_dev.service.data->atomic_flags;
 	auto& audio_buffers = clap_dev.service.audio->buffers;
-	convert_input_events(dev, clap_dev);
+	convert_input_events(ez::audio, dev, clap_dev);
 	const auto status = iface.plugin->process(iface.plugin, &process);
-	handle_audio_process_result(dev.service->shm, clap_dev, status);
-	convert_output_events(dev, clap_dev);
+	handle_audio_process_result(ez::audio, dev.service->shm, clap_dev, status);
+	convert_output_events(ez::audio, dev, clap_dev);
 }
 
 static
-auto process_event_device(const sbox::device& dev, const clap::device& clap_dev) -> void {
+auto process_event_device(ez::audio_t, const sbox::device& dev, const clap::device& clap_dev) -> void {
 	const auto& iface   = clap_dev.iface->plugin;
 	const auto& process = clap_dev.service.audio->process;
 	auto& flags         = clap_dev.service.data->atomic_flags;
-	convert_input_events(dev, clap_dev);
+	convert_input_events(ez::audio, dev, clap_dev);
 	const auto status   = iface.plugin->process(iface.plugin, &process);
-	handle_event_process_result(clap_dev, status);
-	convert_output_events(dev, clap_dev);
+	handle_event_process_result(ez::audio, clap_dev, status);
+	convert_output_events(ez::audio, dev, clap_dev);
 }
 
-auto process(const sbox::app& app, const sbox::device& dev) -> void {
+auto process(ez::audio_t, const sbox::app& app, const sbox::device& dev) -> void {
 	const auto& clap_dev = app.audio_model->clap_devices.at(dev.id);
 	const auto& iface    = clap_dev.iface->plugin;
-	if (!is_active(clap_dev)) {
+	if (!is_active(ez::audio, clap_dev)) {
 		return;
 	}
-	if (!is_processing(clap_dev)) {
-		flush_device_events(dev, clap_dev);
-		if (!is_scheduled_to_process(clap_dev)) {
+	if (!is_processing(ez::audio, clap_dev)) {
+		flush_device_events(ez::audio, dev, clap_dev);
+		if (!is_scheduled_to_process(ez::audio, clap_dev)) {
 			return;
 		}
-		if (!try_to_wake_up(clap_dev)) {
+		if (!try_to_wake_up(ez::audio, clap_dev)) {
 			return;
 		}
 	}
 	if (iface.audio_ports) {
-		if (can_render_audio(clap_dev.service.audio->buffers)) {
-			process_audio_device(dev, clap_dev);
+		if (can_render_audio(ez::audio, clap_dev.service.audio->buffers)) {
+			process_audio_device(ez::audio, dev, clap_dev);
 			return;
 		}
 		else {
-			flush_device_events(dev, clap_dev);
+			flush_device_events(ez::audio, dev, clap_dev);
 			return;
 		}
 	}
-	process_event_device(dev, clap_dev);
+	process_event_device(ez::audio, dev, clap_dev);
 }
 
-} // namespace scuff::sbox::clap::audio
-
-namespace scuff::sbox::clap::main {
-
 static
-auto make_audio_buffers(bc::static_vector<shm::audio_buffer, MAX_AUDIO_PORTS>* shm_buffers, const std::vector<clap_audio_port_info_t>& port_info, audio_buffers_detail* out) -> void {
+auto make_audio_buffers(ez::main_t, bc::static_vector<shm::audio_buffer, MAX_AUDIO_PORTS>* shm_buffers, const std::vector<clap_audio_port_info_t>& port_info, audio_buffers_detail* out) -> void {
 	out->arrays.resize(port_info.size());
 	out->buffers.resize(port_info.size());
 	for (size_t port_index = 0; port_index < port_info.size(); port_index++) {
@@ -427,14 +421,14 @@ auto make_audio_buffers(bc::static_vector<shm::audio_buffer, MAX_AUDIO_PORTS>* s
 }
 
 static
-auto make_audio_buffers(const shm::device& shm, const audio_port_info& port_info, clap::audio_buffers* out) -> void {
+auto make_audio_buffers(ez::main_t, const shm::device& shm, const audio_port_info& port_info, clap::audio_buffers* out) -> void {
 	*out = {};
-	make_audio_buffers(&shm.data->audio_in, port_info.inputs, &out->inputs);
-	make_audio_buffers(&shm.data->audio_out, port_info.outputs, &out->outputs);
+	make_audio_buffers(ez::main, &shm.data->audio_in, port_info.inputs, &out->inputs);
+	make_audio_buffers(ez::main, &shm.data->audio_out, port_info.outputs, &out->outputs);
 }
 
 [[nodiscard]] static
-auto retrieve_audio_port_info(const iface_plugin& iface) -> audio_port_info {
+auto retrieve_audio_port_info(ez::main_t, const iface_plugin& iface) -> audio_port_info {
 	auto out = audio_port_info{};
 	if (iface.audio_ports) {
 		const auto input_count  = iface.audio_ports->count(iface.plugin, true);
@@ -454,7 +448,7 @@ auto retrieve_audio_port_info(const iface_plugin& iface) -> audio_port_info {
 }
 
 [[nodiscard]] static
-auto make_input_event_list(const clap::device& dev) -> clap_input_events_t {
+auto make_input_event_list(ez::main_t, const clap::device& dev) -> clap_input_events_t {
 	clap_input_events_t list;
 	list.ctx = &dev.service.data->input_events_context;
 	list.size = [](const clap_input_events_t* list) -> uint32_t {
@@ -469,7 +463,7 @@ auto make_input_event_list(const clap::device& dev) -> clap_input_events_t {
 }
 
 [[nodiscard]] static
-auto make_output_event_list(const clap::device& dev) -> clap_output_events_t {
+auto make_output_event_list(ez::main_t, const clap::device& dev) -> clap_output_events_t {
 	clap_output_events_t list;
 	list.ctx = &dev.service.data->output_events_context;
 	list.try_push = [](const clap_output_events_t* list, const clap_event_header_t* hdr) -> bool {
@@ -482,9 +476,9 @@ auto make_output_event_list(const clap::device& dev) -> clap_output_events_t {
 
 static
 // AUDIO DEVICE
-auto initialize_process_struct_for_audio_device(const clap::device& dev, clap::device_service_audio* audio) -> void {
-	audio->input_events                = make_input_event_list(dev);
-	audio->output_events               = make_output_event_list(dev);
+auto initialize_process_struct_for_audio_device(ez::main_t, const clap::device& dev, clap::device_service_audio* audio) -> void {
+	audio->input_events                = make_input_event_list(ez::main, dev);
+	audio->output_events               = make_output_event_list(ez::main, dev);
 	audio->process.frames_count        = VECTOR_SIZE;
 	audio->process.audio_inputs_count  = static_cast<uint32_t>(audio->buffers.inputs.buffers.size());
 	audio->process.audio_inputs        = audio->buffers.inputs.buffers.data();
@@ -498,9 +492,9 @@ auto initialize_process_struct_for_audio_device(const clap::device& dev, clap::d
 
 static
 // EVENT-ONLY DEVICE
-auto initialize_process_struct_for_event_device(const clap::device& dev, clap::device_service_audio* audio) -> void {
-	audio->input_events                = make_input_event_list(dev);
-	audio->output_events               = make_output_event_list(dev);
+auto initialize_process_struct_for_event_device(ez::main_t, const clap::device& dev, clap::device_service_audio* audio) -> void {
+	audio->input_events                = make_input_event_list(ez::main, dev);
+	audio->output_events               = make_output_event_list(ez::main, dev);
 	static auto dummy_buffer           = clap_audio_buffer_t{0};
 	audio->process.frames_count        = VECTOR_SIZE;
 	audio->process.audio_inputs_count  = 0;
@@ -514,40 +508,40 @@ auto initialize_process_struct_for_event_device(const clap::device& dev, clap::d
 }
 
 [[nodiscard]] static
-auto init_audio(const sbox::device& dev, const clap::device& clap_dev) -> std::shared_ptr<const device_service_audio> {
+auto init_audio(ez::main_t, const sbox::device& dev, const clap::device& clap_dev) -> std::shared_ptr<const device_service_audio> {
 	auto out = std::make_shared<device_service_audio>();
 	if (clap_dev.iface->plugin.audio_ports) {
 		// AUDIO PLUGIN
-		make_audio_buffers(dev.service->shm, clap_dev.service.audio_port_info, &out->buffers);
-		initialize_process_struct_for_audio_device(clap_dev, out.get());
+		make_audio_buffers(ez::main, dev.service->shm, clap_dev.service.audio_port_info, &out->buffers);
+		initialize_process_struct_for_audio_device(ez::main, clap_dev, out.get());
 	}
 	else {
 		// EVENT-ONLY PLUGIN
-		initialize_process_struct_for_event_device(clap_dev, out.get());
+		initialize_process_struct_for_event_device(ez::main, clap_dev, out.get());
 	}
 	return out;
 }
 
 [[nodiscard]] static
-auto init_audio(clap::device&& clap_dev, const sbox::device& dev) -> device {
-	clap_dev.service.audio = init_audio(dev, clap_dev);
+auto init_audio(ez::main_t, clap::device&& clap_dev, const sbox::device& dev) -> device {
+	clap_dev.service.audio = init_audio(ez::main, dev, clap_dev);
 	return clap_dev;
 }
 
 static
-auto init_audio(sbox::app* app, id::device dev_id) -> void {
+auto init_audio(ez::main_t, sbox::app* app, id::device dev_id) -> void {
 	app->model.update_publish(ez::main, [=](model&& m) {
 		auto dev                         = m.devices.at(dev_id);
 		auto clap_dev                    = m.clap_devices.at(dev_id);
-		clap_dev.service.audio_port_info = retrieve_audio_port_info(clap_dev.iface->plugin);
-		clap_dev                         = init_audio(std::move(clap_dev), dev);
+		clap_dev.service.audio_port_info = retrieve_audio_port_info(ez::main, clap_dev.iface->plugin);
+		clap_dev                         = init_audio(ez::main, std::move(clap_dev), dev);
 		m.clap_devices                   = m.clap_devices.insert(clap_dev);
 		return m;
 	});
 }
 
 [[nodiscard]] static
-auto make_device_info(const clap::device& clap_dev) -> device_info {
+auto make_device_info(ez::main_t, const clap::device& clap_dev) -> device_info {
 	scuff::device_info info;
 	info.audio_input_port_count  = clap_dev.service.audio_port_info->inputs.size();
 	info.audio_output_port_count = clap_dev.service.audio_port_info->outputs.size();
@@ -555,13 +549,13 @@ auto make_device_info(const clap::device& clap_dev) -> device_info {
 }
 
 [[nodiscard]] static
-auto make_device_info(const sbox::app& app, id::device dev_id) -> device_info {
+auto make_device_info(ez::main_t, const sbox::app& app, id::device dev_id) -> device_info {
 	const auto& clap_dev = app.model.read(ez::main).clap_devices.at(dev_id);
-	return make_device_info(clap_dev);
+	return make_device_info(ez::main, clap_dev);
 }
 
 static
-auto rescan_audio_ports(sbox::app* app, id::device dev_id, uint32_t flags) -> void {
+auto rescan_audio_ports(ez::main_t, sbox::app* app, id::device dev_id, uint32_t flags) -> void {
 	const auto requires_not_active =
 		is_flag_set(flags, CLAP_AUDIO_PORTS_RESCAN_CHANNEL_COUNT) ||
 		is_flag_set(flags, CLAP_AUDIO_PORTS_RESCAN_FLAGS) ||
@@ -571,17 +565,17 @@ auto rescan_audio_ports(sbox::app* app, id::device dev_id, uint32_t flags) -> vo
 	const auto m   = app->model.read(ez::main);
 	const auto dev = m.clap_devices.at(dev_id);
 	if (requires_not_active) {
-		if (is_active(dev)) {
+		if (is_active(ez::main, dev)) {
 			app->msgs_out.lock()->push_back(scuff::msg::out::report_warning{std::format("Device '{}' tried to rescan audio ports while it is still active!", *dev.name)});
 			return;
 		}
 	}
-	init_audio(app, dev_id);
-	app->msgs_out.lock()->push_back(scuff::msg::out::device_info{dev_id.value, make_device_info(*app, dev_id)});
+	init_audio(ez::main, app, dev_id);
+	app->msgs_out.lock()->push_back(scuff::msg::out::device_info{dev_id.value, make_device_info(ez::main, *app, dev_id)});
 }
 
 [[nodiscard]] static
-auto init_params(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
+auto init_params(ez::main_t, sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
 	const auto& iface = clap_dev.iface->plugin;
 	if (iface.params) {
 		dev.service->shm.data->flags.value |= shm::device_flags::has_params;
@@ -590,7 +584,7 @@ auto init_params(sbox::device&& dev, const clap::device& clap_dev) -> sbox::devi
 }
 
 [[nodiscard]] static
-auto init_params(clap::device&& dev) -> clap::device {
+auto init_params(ez::main_t, clap::device&& dev) -> clap::device {
 	const auto& iface = dev.iface->plugin;
 	if (iface.params) {
 		const auto count = iface.params->count(iface.plugin);
@@ -632,7 +626,7 @@ auto make_local_param_flags(uint32_t clap_flags) -> uint32_t {
 }
 
 [[nodiscard]] static
-auto init_local_params(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
+auto init_local_params(ez::main_t, sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
 	dev.param_info = {};
 	for (size_t i = 0; i < clap_dev.params.size(); i++) {
 		const auto& param = clap_dev.params[i];
@@ -650,43 +644,43 @@ auto init_local_params(sbox::device&& dev, const clap::device& clap_dev) -> sbox
 }
 
 static
-auto process_msg_(sbox::app* app, const device& clap_dev, const clap::device_msg::gui_closed& msg) -> void {
+auto process_msg_(ez::main_t, sbox::app* app, const device& clap_dev, const clap::device_msg::gui_closed& msg) -> void {
 	if (msg.destroyed) {
 		clap_dev.iface->plugin.gui->destroy(clap_dev.iface->plugin.plugin);
 	}
 }
 
 static
-auto process_msg_(sbox::app* app, const device& clap_dev, const clap::device_msg::gui_request_hide& msg) -> void {
+auto process_msg_(ez::main_t, sbox::app* app, const device& clap_dev, const clap::device_msg::gui_request_hide& msg) -> void {
 	const auto& dev = app->model.read(ez::main).devices.at(clap_dev.id);
-	gui::hide(app, dev);
+	gui::hide(ez::main, app, dev);
 }
 
 static
-auto process_msg_(sbox::app* app, const device& clap_dev, const clap::device_msg::gui_request_resize& msg) -> void {
+auto process_msg_(ez::main_t, sbox::app* app, const device& clap_dev, const clap::device_msg::gui_request_resize& msg) -> void {
 	const auto& dev = app->model.read(ez::main).devices.at(clap_dev.id);
 	dev.service->scheduled_window_resize = msg.size;
 }
 
 static
-auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_request_show& msg) -> void {
-	gui::show(app, dev.id, {[]{}});
+auto process_msg_(ez::main_t, sbox::app* app, const device& dev, const clap::device_msg::gui_request_show& msg) -> void {
+	gui::show(ez::main, app, dev.id, {[]{}});
 }
 
 static
-auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::gui_resize_hints_changed& msg) -> void {
+auto process_msg_(ez::main_t, sbox::app* app, const device& dev, const clap::device_msg::gui_resize_hints_changed& msg) -> void {
 	// FIXME: Stop ignoring this
 	DLOG_S(WARNING) << "clap_host_gui.resize_hints_changed is currently ignored";
 }
 
 static
-auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log_begin& msg) -> void {
+auto process_msg_(ez::main_t, sbox::app* app, const device& dev, const clap::device_msg::log_begin& msg) -> void {
 	dev.service.data->log_collector.severity = msg.severity;
 	dev.service.data->log_collector.chunks.clear();
 }
 
 static
-auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log_end& msg) -> void {
+auto process_msg_(ez::main_t, sbox::app* app, const device& dev, const clap::device_msg::log_end& msg) -> void {
 	std::string text;
 	for (const auto& chunk : dev.service.data->log_collector.chunks) {
 		text.append(chunk.c_str());
@@ -715,16 +709,16 @@ auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log
 }
 
 static
-auto process_msg_(sbox::app* app, const device& dev, const clap::device_msg::log_text& msg) -> void {
+auto process_msg_(ez::main_t, sbox::app* app, const device& dev, const clap::device_msg::log_text& msg) -> void {
 	dev.service.data->log_collector.chunks.push_back(msg.text);
 }
 
 static
-auto process_msg_(sbox::app* app, clap::device clap_dev, const clap::device_msg::params_rescan& msg) -> void {
+auto process_msg_(ez::main_t, sbox::app* app, clap::device clap_dev, const clap::device_msg::params_rescan& msg) -> void {
 	const auto m = app->model.read(ez::main);
 	auto dev = m.devices.at(clap_dev.id);
-	clap_dev = init_params(std::move(clap_dev));
-	dev      = init_local_params(std::move(dev), clap_dev);
+	clap_dev = init_params(ez::main, std::move(clap_dev));
+	dev      = init_local_params(ez::main, std::move(dev), clap_dev);
 	app->model.update_publish(ez::main, [dev, clap_dev](model&& m){
 		m.clap_devices = m.clap_devices.insert(clap_dev);
 		m.devices      = m.devices.insert(dev);
@@ -734,27 +728,23 @@ auto process_msg_(sbox::app* app, clap::device clap_dev, const clap::device_msg:
 }
 
 static
-auto process_msg(sbox::app* app, const device& dev, const clap::device_msg::msg& msg) -> void {
-	fast_visit([app, dev](const auto& msg) { process_msg_(app, dev, msg); }, msg);
+auto process_msg(ez::main_t, sbox::app* app, const device& dev, const clap::device_msg::msg& msg) -> void {
+	fast_visit([app, dev](const auto& msg) { process_msg_(ez::main, app, dev, msg); }, msg);
 }
 
 static
-auto update(sbox::app* app) -> void {
+auto update(ez::main_t, sbox::app* app) -> void {
 	const auto m = app->model.read(ez::main);
 	for (const auto& dev : m.clap_devices) {
 		clap::device_msg::msg msg;
 		while (dev.service.data->msg_q.try_dequeue(msg)) {
-			process_msg(app, dev, msg);
+			process_msg(ez::main, app, dev, msg);
 		}
 	}
 }
 
-} // namespace scuff::sbox::clap::main
-
-namespace scuff::sbox::clap::main {
-
 static
-auto make_host_for_instance(device_host_data* host_data) -> void {
+auto make_host_for_instance(ez::main_t, device_host_data* host_data) -> void {
 	host_data->iface.host.clap_version = CLAP_VERSION;
 	host_data->iface.host.name         = "scuff-sbox";
 	host_data->iface.host.url          = "https://github.com/colugomusic/scuff";
@@ -762,19 +752,19 @@ auto make_host_for_instance(device_host_data* host_data) -> void {
 	host_data->iface.host.host_data    = host_data;
 	host_data->iface.host.get_extension = [](const clap_host_t* host, const char* extension_id) -> const void* {
 		const auto& hd = get_host_data(host);
-		return get_extension(hd.app, hd.iface, hd.dev_id, extension_id);
+		return get_extension(ez::safe, hd.app, hd.iface, hd.dev_id, extension_id);
 	};
 	host_data->iface.host.request_callback = [](const clap_host* host) {
 		const auto& hd = get_host_data(host);
-		cb_request_callback(hd.app, hd.dev_id);
+		cb_request_callback(ez::safe, hd.app, hd.dev_id);
 	};
 	host_data->iface.host.request_process = [](const clap_host* host) {
 		const auto& hd = get_host_data(host);
-		cb_request_process(hd.app, hd.dev_id);
+		cb_request_process(ez::safe, hd.app, hd.dev_id);
 	};
 	host_data->iface.host.request_restart = [](const clap_host* host) {
 		const auto& hd = get_host_data(host);
-		cb_request_restart(hd.app, hd.dev_id);
+		cb_request_restart(ez::safe, hd.app, hd.dev_id);
 	};
 	// AUDIO PORTS ______________________________________________________________
 	host_data->iface.audio_ports.is_rescan_flag_supported = [](const clap_host* host, uint32_t flag) -> bool {
@@ -782,7 +772,7 @@ auto make_host_for_instance(device_host_data* host_data) -> void {
 	};
 	host_data->iface.audio_ports.rescan = [](const clap_host* host, uint32_t flags) -> void {
 		const auto& hd = get_host_data(host);
-		main::rescan_audio_ports(hd.app, hd.dev_id, flags);
+		rescan_audio_ports(ez::main, hd.app, hd.dev_id, flags);
 	};
 	// CONTEXT MENU _____________________________________________________________
 	host_data->iface.context_menu.can_popup = [](const clap_host* host) -> bool {
@@ -804,26 +794,26 @@ auto make_host_for_instance(device_host_data* host_data) -> void {
 	// GUI ______________________________________________________________________
 	host_data->iface.gui.closed = [](const clap_host* host, bool was_destroyed) -> void {
 		const auto& hd = get_host_data(host);
-		cb_gui_closed(hd.app, hd.dev_id, was_destroyed);
+		cb_gui_closed(ez::safe, hd.app, hd.dev_id, was_destroyed);
 	};
 	host_data->iface.gui.request_hide = [](const clap_host* host) -> bool {
 		const auto& hd = get_host_data(host);
-		cb_gui_request_hide(hd.app, hd.dev_id);
+		cb_gui_request_hide(ez::safe, hd.app, hd.dev_id);
 		return true;
 	};
 	host_data->iface.gui.request_show = [](const clap_host* host) -> bool {
 		const auto& hd = get_host_data(host);
-		cb_gui_request_show(hd.app, hd.dev_id);
+		cb_gui_request_show(ez::safe, hd.app, hd.dev_id);
 		return true;
 	};
 	host_data->iface.gui.request_resize = [](const clap_host* host, uint32_t width, uint32_t height) -> bool {
 		const auto& hd = get_host_data(host);
-		cb_gui_request_resize(hd.app, hd.dev_id, width, height);
+		cb_gui_request_resize(ez::safe, hd.app, hd.dev_id, width, height);
 		return true;
 	};
 	host_data->iface.gui.resize_hints_changed = [](const clap_host* host) -> void {
 		const auto& hd = get_host_data(host);
-		cb_gui_resize_hints_changed(hd.app, hd.dev_id);
+		cb_gui_resize_hints_changed(ez::safe, hd.app, hd.dev_id);
 	};
 	// LATENCY __________________________________________________________________
 	host_data->iface.latency.changed = [](const clap_host* host) -> void {
@@ -832,7 +822,7 @@ auto make_host_for_instance(device_host_data* host_data) -> void {
 	// LOG ----------------------------------------------------------------------
 	host_data->iface.log.log = [](const clap_host* host, clap_log_severity severity, const char* msg) -> void {
 		const auto& hd = get_host_data(host);
-		clap::log(hd.app, hd.dev_id, severity, msg);
+		clap::log(ez::safe, hd.app, hd.dev_id, severity, msg);
 	};
 	// PARAMS ___________________________________________________________________
 	host_data->iface.params.clear = [](const clap_host* host, clap_id param_id, clap_param_clear_flags flags) -> void {
@@ -840,11 +830,11 @@ auto make_host_for_instance(device_host_data* host_data) -> void {
 	};
 	host_data->iface.params.request_flush = [](const clap_host* host) -> void {
 		const auto& hd = get_host_data(host);
-		cb_request_param_flush(hd.app, hd.dev_id);
+		cb_request_param_flush(ez::safe, hd.app, hd.dev_id);
 	};
 	host_data->iface.params.rescan = [](const clap_host* host, clap_param_rescan_flags flags) -> void {
 		const auto& hd = get_host_data(host);
-		cb_params_rescan(hd.app, hd.dev_id, flags);
+		cb_params_rescan(ez::main, hd.app, hd.dev_id, flags);
 	};
 	// PRESET LOAD ______________________________________________________________
 	host_data->iface.preset_load.loaded = [](const clap_host* host, uint32_t location_kind, const char* location, const char* load_key) -> void {
@@ -875,7 +865,7 @@ auto make_host_for_instance(device_host_data* host_data) -> void {
 }
 
 static
-auto get_extensions(clap::iface_plugin* iface) -> void {
+auto get_extensions(ez::main_t, clap::iface_plugin* iface) -> void {
 	iface->audio_ports  = scuff::get_plugin_ext<clap_plugin_audio_ports_t>(*iface->plugin, CLAP_EXT_AUDIO_PORTS);
 	iface->context_menu = scuff::get_plugin_ext<clap_plugin_context_menu_t>(*iface->plugin, CLAP_EXT_CONTEXT_MENU, CLAP_EXT_CONTEXT_MENU_COMPAT);
 	iface->gui          = scuff::get_plugin_ext<clap_plugin_gui_t>(*iface->plugin, CLAP_EXT_GUI);
@@ -886,7 +876,7 @@ auto get_extensions(clap::iface_plugin* iface) -> void {
 }
 
 [[nodiscard]] static
-auto init_gui(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
+auto init_gui(ez::main_t, sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
 	const auto& iface = clap_dev.iface->plugin;
 	if (iface.gui) {
 		if (iface.gui->is_api_supported(iface.plugin, scuff::os::get_clap_window_api(), false)) {
@@ -898,7 +888,7 @@ auto init_gui(sbox::device&& dev, const clap::device& clap_dev) -> sbox::device 
 }
 
 [[nodiscard]] static
-auto make_ext_data(sbox::app* app, id::device id) -> std::shared_ptr<clap::device_service_data> {
+auto make_ext_data(ez::main_t, sbox::app* app, id::device id) -> std::shared_ptr<clap::device_service_data> {
 	auto data = std::make_shared<clap::device_service_data>();
 	data->host_data.app    = app;
 	data->host_data.dev_id = id;
@@ -908,13 +898,13 @@ auto make_ext_data(sbox::app* app, id::device id) -> std::shared_ptr<clap::devic
 }
 
 [[nodiscard]] static
-auto make_shm_device(std::string_view sbox_shmid, id::device dev_id, sbox::mode mode) -> shm::device {
+auto make_shm_device(ez::main_t, std::string_view sbox_shmid, id::device dev_id, sbox::mode mode) -> shm::device {
 	const auto remove_when_done = mode != sbox::mode::sandbox;
 	return shm::open_or_create_device(shm::make_device_id(sbox_shmid, dev_id), remove_when_done);
 }
 
 static
-auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id) -> void {
+auto create_device(ez::main_t, sbox::app* app, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id) -> void {
 	const auto entry = scuff::os::dso::find_fn<clap_plugin_entry_t>({plugfile_path}, {CLAP_SYMBOL_ENTRY});
 	if (!entry) {
 		throw std::runtime_error("Couldn't resolve clap_entry");
@@ -934,8 +924,8 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 		}
 		plugin_id = factory->get_plugin_descriptor(factory, 0)->id;
 	}
-	auto ext_data = make_ext_data(app, dev_id);
-	make_host_for_instance(&ext_data->host_data);
+	auto ext_data = make_ext_data(ez::main, app, dev_id);
+	make_host_for_instance(ez::main, &ext_data->host_data);
 	clap::iface iface;
 	iface.plugin.plugin = factory->create_plugin(factory, &ext_data->host_data.iface.host, plugin_id.data());
 	if (!iface.plugin.plugin) {
@@ -945,13 +935,13 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	if (!iface.plugin.plugin->init(iface.plugin.plugin)) {
 		throw std::runtime_error("clap_plugin.init failed");
 	}
-	get_extensions(&iface.plugin);
+	get_extensions(ez::main, &iface.plugin);
 	auto dev                         = sbox::device{};
 	auto clap_dev                    = clap::device{};
 	dev.id                           = dev_id;
 	dev.type                         = plugin_type::clap;
-	dev.service->shm = make_shm_device(app->shm_sbox.seg.id, dev_id, app->mode);
-	clap_dev.service.audio_port_info = retrieve_audio_port_info(iface.plugin);
+	dev.service->shm = make_shm_device(ez::main, app->shm_sbox.seg.id, dev_id, app->mode);
+	clap_dev.service.audio_port_info = retrieve_audio_port_info(ez::main, iface.plugin);
 	const auto audio_in_count    = clap_dev.service.audio_port_info->inputs.size();
 	const auto audio_out_count   = clap_dev.service.audio_port_info->outputs.size();
 	dev.service->shm.data->audio_in.resize(audio_in_count);
@@ -961,11 +951,11 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 	clap_dev.name         = clap_dev.iface->plugin.plugin->desc->name;
 	dev.name              = clap_dev.name;
 	clap_dev.service.data = std::move(ext_data);
-	dev                   = init_gui(std::move(dev), clap_dev);
-	dev                   = init_params(std::move(dev), clap_dev);
-	clap_dev              = init_audio(std::move(clap_dev), dev);
-	clap_dev              = init_params(std::move(clap_dev));
-	dev                   = init_local_params(std::move(dev), clap_dev);
+	dev                   = init_gui(ez::main, std::move(dev), clap_dev);
+	dev                   = init_params(ez::main, std::move(dev), clap_dev);
+	clap_dev              = init_audio(ez::main, std::move(clap_dev), dev);
+	clap_dev              = init_params(ez::main, std::move(clap_dev));
+	dev                   = init_local_params(ez::main, std::move(dev), clap_dev);
 	app->model.update_publish(ez::main, [=](model&& m) {
 		m.devices      = m.devices.insert(dev);
 		m.clap_devices = m.clap_devices.insert(clap_dev);
@@ -974,7 +964,7 @@ auto create_device(sbox::app* app, id::device dev_id, std::string_view plugfile_
 }
 
 [[nodiscard]] static
-auto get_param_value(const sbox::app& app, id::device dev_id, idx::param param_idx) -> std::optional<double> {
+auto get_param_value(ez::main_t, const sbox::app& app, id::device dev_id, idx::param param_idx) -> std::optional<double> {
 	const auto dev = app.model.read(ez::main).clap_devices.at(dev_id);
 	if (dev.iface->plugin.params) {
 		const auto param = dev.params[param_idx.value];
@@ -987,7 +977,7 @@ auto get_param_value(const sbox::app& app, id::device dev_id, idx::param param_i
 }
 
 [[nodiscard]] static
-auto get_param_value_text(const sbox::app& app, id::device dev_id, idx::param param_idx, double value) -> std::string {
+auto get_param_value_text(ez::main_t, const sbox::app& app, id::device dev_id, idx::param param_idx, double value) -> std::string {
 	static constexpr auto BUFFER_SIZE = 50;
 	const auto dev = app.model.read(ez::main).clap_devices.at(dev_id);
 	if (dev.iface->plugin.params) {
@@ -1002,7 +992,7 @@ auto get_param_value_text(const sbox::app& app, id::device dev_id, idx::param pa
 }
 
 [[nodiscard]] static
-auto load(sbox::app* app, id::device dev_id, const std::vector<std::byte>& state) -> bool {
+auto load(ez::main_t, sbox::app* app, id::device dev_id, const std::vector<std::byte>& state) -> bool {
 	const auto dev = app->model.read(ez::main).clap_devices.at(dev_id);
 	if (dev.iface->plugin.state) {
 		auto bytes = std::span{state};
@@ -1022,7 +1012,7 @@ auto load(sbox::app* app, id::device dev_id, const std::vector<std::byte>& state
 }
 
 [[nodiscard]] static
-auto save(sbox::app* app, id::device dev_id) -> std::vector<std::byte> {
+auto save(ez::main_t, sbox::app* app, id::device dev_id) -> std::vector<std::byte> {
 	const auto dev = app->model.read(ez::main).clap_devices.at(dev_id);
 	if (dev.iface->plugin.state) {
 		std::vector<std::byte> bytes;
@@ -1043,7 +1033,7 @@ auto save(sbox::app* app, id::device dev_id) -> std::vector<std::byte> {
 }
 
 [[nodiscard]] static
-auto activate(sbox::app* app, id::device dev_id, double sr) -> bool {
+auto activate(ez::main_t, sbox::app* app, id::device dev_id, double sr) -> bool {
 	const auto m              = app->model.read(ez::main);
 	const auto dev            = m.devices.at(dev_id);
 	const auto clap_dev       = m.clap_devices.at(dev_id);
@@ -1075,7 +1065,7 @@ auto activate(sbox::app* app, id::device dev_id, double sr) -> bool {
 }
 
 static
-auto deactivate(sbox::app* app, id::device dev_id) -> void {
+auto deactivate(ez::main_t, sbox::app* app, id::device dev_id) -> void {
 	const auto m         = app->model.read(ez::main);
 	const auto clap_dev  = m.clap_devices.at(dev_id);
 	const auto is_active = clap_dev.flags.value & device_flags::active;
@@ -1094,7 +1084,7 @@ auto deactivate(sbox::app* app, id::device dev_id) -> void {
 }
 
 [[nodiscard]] static
-auto create_gui(sbox::app* app, const sbox::device& dev) -> sbox::create_gui_result {
+auto create_gui(ez::main_t, sbox::app* app, const sbox::device& dev) -> sbox::create_gui_result {
 	DLOG_S(INFO) << "clap::main::create_gui";
 	const auto m         = app->model.read(ez::main);
 	const auto clap_dev  = m.clap_devices.at(dev.id);
@@ -1122,7 +1112,7 @@ auto create_gui(sbox::app* app, const sbox::device& dev) -> sbox::create_gui_res
 }
 
 [[nodiscard]] static
-auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
+auto setup_editor_window(ez::main_t, sbox::app* app, const sbox::device& dev) -> bool {
 	DLOG_S(INFO) << "clap::main::setup_editor_window";
 	const auto m          = app->model.read(ez::main);
 	const auto clap_dev   = m.clap_devices.at(dev.id);
@@ -1140,7 +1130,7 @@ auto setup_editor_window(sbox::app* app, const sbox::device& dev) -> bool {
 }
 
 static
-auto shutdown_editor_window(sbox::app* app, const sbox::device& dev) -> void {
+auto shutdown_editor_window(ez::main_t, sbox::app* app, const sbox::device& dev) -> void {
 	const auto m        = app->model.read(ez::main);
 	const auto clap_dev = m.clap_devices.at(dev.id);
 	const auto iface     = clap_dev.iface->plugin;
@@ -1152,7 +1142,7 @@ auto shutdown_editor_window(sbox::app* app, const sbox::device& dev) -> void {
 }
 
 [[nodiscard]] static
-auto get_gui_size(const clap::iface_plugin& iface) -> std::optional<window_size_u32> {
+auto get_gui_size(ez::main_t, const clap::iface_plugin& iface) -> std::optional<window_size_u32> {
 	uint32_t old_width, old_height;
 	if (iface.gui->get_size(iface.plugin, &old_width, &old_height)) {
 		return window_size_u32{old_width, old_height};
@@ -1161,11 +1151,11 @@ auto get_gui_size(const clap::iface_plugin& iface) -> std::optional<window_size_
 }
 
 static
-auto on_native_window_resize(const sbox::app* app, const sbox::device& dev, edwin::size native_window_size) -> void {
+auto on_native_window_resize(ez::main_t, const sbox::app* app, const sbox::device& dev, edwin::size native_window_size) -> void {
 	const auto m                = app->model.read(ez::main);
 	const auto& clap_dev        = m.clap_devices.at(dev.id);
 	const auto iface            = clap_dev.iface->plugin;
-	const auto old_size         = get_gui_size(iface);
+	const auto old_size         = get_gui_size(ez::main, iface);
 	auto native_window_size_u32 = window_size_u32{native_window_size};
 	auto adjusted_size          = native_window_size_u32;
 	iface.gui->adjust_size(iface.plugin, &adjusted_size.width, &adjusted_size.height);
@@ -1182,7 +1172,7 @@ auto on_native_window_resize(const sbox::app* app, const sbox::device& dev, edwi
 	iface.gui->set_size(iface.plugin, adjusted_size.width, adjusted_size.height);
 }
 
-auto set_render_mode(sbox::app* app, id::device dev_id, scuff::render_mode mode) -> void {
+auto set_render_mode(ez::main_t, sbox::app* app, id::device dev_id, scuff::render_mode mode) -> void {
 	const auto m = app->model.read(ez::main);
 	const auto clap_dev = m.clap_devices.at(dev_id);
 	const auto iface = clap_dev.iface->plugin;
@@ -1196,4 +1186,4 @@ auto set_render_mode(sbox::app* app, id::device dev_id, scuff::render_mode mode)
 	iface.render->set(iface.plugin, clap_mode);
 }
 
-} // scuff::sbox::clap::main
+} // scuff::sbox::clap

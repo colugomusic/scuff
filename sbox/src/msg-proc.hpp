@@ -4,7 +4,7 @@
 #include "gui.hpp"
 #include "op.hpp"
 
-namespace scuff::sbox::main {
+namespace scuff::sbox {
 
 [[nodiscard]] static
 auto get_device_type(const sbox::app& app, id::device dev_id) -> plugin_type {
@@ -12,7 +12,7 @@ auto get_device_type(const sbox::app& app, id::device dev_id) -> plugin_type {
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::close_all_editors& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::close_all_editors& msg) -> void {
 	DLOG_S(INFO) << "msg::in::close_all_editors:";
 	const auto devices = app->model.read(ez::main).devices;
 	for (const auto& dev : devices) {
@@ -24,7 +24,7 @@ auto msg_from_client(sbox::app* app, const scuff::msg::in::close_all_editors& ms
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::crash& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::crash& msg) -> void {
 	DLOG_S(INFO) << "msg::in::device_crash:";
 	// Crash the process. This is used for testing the
 	// way the client responds to sandbox crashes.
@@ -33,7 +33,7 @@ auto msg_from_client(sbox::app* app, const scuff::msg::in::crash& msg) -> void {
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
 	DLOG_S(INFO) << "msg::in::device_create:";
 	try {
 		const auto dev = op::device_create(app, msg.type, id::device{msg.dev_id}, msg.plugfile_path, msg.plugin_id);
@@ -48,44 +48,44 @@ auto msg_from_client(sbox::app* app, const scuff::msg::in::device_create& msg) -
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::device_connect& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_connect& msg) -> void {
 	DLOG_S(INFO) << "msg::in::device_connect:";
 	op::device_connect(app, {msg.out_dev_id}, msg.out_port, {msg.in_dev_id}, msg.in_port);
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::device_disconnect& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_disconnect& msg) -> void {
 	DLOG_S(INFO) << "msg::in::device_disconnect:";
 	op::device_disconnect(app, {msg.out_dev_id}, msg.out_port, {msg.in_dev_id}, msg.in_port);
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::device_erase& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_erase& msg) -> void {
 	DLOG_S(INFO) << "msg::in::device_erase:";
 	op::device_erase(app, {msg.dev_id});
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::device_gui_hide& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_gui_hide& msg) -> void {
 	DLOG_S(INFO) << "msg::in::device_gui_hide:";
 	const auto devices = app->model.read(ez::main).devices;
 	auto device        = devices.at({msg.dev_id});
-	gui::hide(app, device);
+	gui::hide(ez::main, app, device);
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::device_gui_show& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_gui_show& msg) -> void {
 	DLOG_S(INFO) << "msg::in::device_gui_show:";
-	gui::show(app, {msg.dev_id}, {[]{}});
+	gui::show(ez::main, app, {msg.dev_id}, {[]{}});
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::device_load& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_load& msg) -> void {
 	DLOG_S(INFO) << "msg::in::device_load:";
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
-		if (clap::main::load(app, dev_id, msg.state)) {
+		if (clap::load(ez::main, app, dev_id, msg.state)) {
 			app->msgs_out.lock()->push_back(scuff::msg::out::device_load_success{dev_id.value});
 		}
 		else {
@@ -96,12 +96,12 @@ auto msg_from_client(sbox::app* app, const scuff::msg::in::device_load& msg) -> 
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::device_save& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_save& msg) -> void {
 	DLOG_S(INFO) << "msg::in::device_save:";
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
-		const auto state = clap::main::save(app, dev_id);
+		const auto state = clap::save(ez::main, app, dev_id);
 		if (state.empty()) {
 			app->msgs_out.lock()->push_back(scuff::msg::out::report_error{"Failed to save device state"});
 			return;
@@ -112,7 +112,7 @@ auto msg_from_client(sbox::app* app, const scuff::msg::in::device_save& msg) -> 
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::set_render_mode& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::set_render_mode& msg) -> void {
 	DLOG_S(INFO) << "msg::in::set_render_mode:";
 	app->render_mode = msg.mode;
 	const auto& devices = app->model.read(ez::main).devices;
@@ -122,7 +122,7 @@ auto msg_from_client(sbox::app* app, const scuff::msg::in::set_render_mode& msg)
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::event& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::event& msg) -> void {
 	DLOG_S(INFO) << "msg::in::event:";
 	const auto dev_id  = id::device{msg.dev_id};
 	const auto devices = app->model.read(ez::main).devices;
@@ -131,12 +131,12 @@ auto msg_from_client(sbox::app* app, const scuff::msg::in::event& msg) -> void {
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::get_param_value& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::get_param_value& msg) -> void {
 	DLOG_S(INFO) << "msg::in::get_param_value:";
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
-		if (const auto value = clap::main::get_param_value(*app, dev_id, {msg.param_idx})) {
+		if (const auto value = clap::get_param_value(ez::main, *app, dev_id, {msg.param_idx})) {
 			app->msgs_out.lock()->push_back(scuff::msg::out::return_param_value{*value, msg.callback});
 		}
 		return;
@@ -144,37 +144,37 @@ auto msg_from_client(sbox::app* app, const scuff::msg::in::get_param_value& msg)
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::get_param_value_text& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::get_param_value_text& msg) -> void {
 	DLOG_S(INFO) << "msg::in::get_param_value_text:";
 	const auto dev_id = id::device{msg.dev_id};
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
-		const auto text = clap::main::get_param_value_text(*app, dev_id, {msg.param_idx}, msg.value);
+		const auto text = clap::get_param_value_text(ez::main, *app, dev_id, {msg.param_idx}, msg.value);
 		app->msgs_out.lock()->push_back(scuff::msg::out::return_param_value_text{text, msg.callback});
 		return;
 	}
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::activate& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::activate& msg) -> void {
 	DLOG_S(INFO) << "msg::in::activate: " << msg.sr;
 	op::activate(app, msg.sr);
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::deactivate& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::deactivate& msg) -> void {
 	DLOG_S(INFO) << "msg::in::deactivate:";
 	op::deactivate(app);
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::heartbeat& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::heartbeat& msg) -> void {
 	//app->logger->debug("msg::in::heartbeat:");
 	app->last_heartbeat = std::chrono::steady_clock::now();
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::set_track_color& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::set_track_color& msg) -> void {
 	DLOG_S(INFO) << "msg::in::set_track_color:";
 	const auto dev_id = id::device{msg.dev_id};
 	app->model.update(ez::main, [dev_id, color = msg.color](scuff::sbox::model m) {
@@ -187,7 +187,7 @@ auto msg_from_client(sbox::app* app, const scuff::msg::in::set_track_color& msg)
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::set_track_name& msg) -> void {
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::set_track_name& msg) -> void {
 	DLOG_S(INFO) << "msg::in::set_track_name:";
 	const auto dev_id = id::device{msg.dev_id};
 	app->model.update(ez::main, [dev_id, name = msg.name](scuff::sbox::model m) {
@@ -200,12 +200,12 @@ auto msg_from_client(sbox::app* app, const scuff::msg::in::set_track_name& msg) 
 }
 
 static
-auto msg_from_client(sbox::app* app, const scuff::msg::in::msg& msg) -> void {
-	fast_visit([app](const auto& msg) { msg_from_client(app, msg); }, msg);
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::msg& msg) -> void {
+	fast_visit([app](const auto& msg) { msg_from_client(ez::main, app, msg); }, msg);
 }
 
 static
-auto process_client_messages(sbox::app* app) -> void {
+auto process_client_messages(ez::main_t, sbox::app* app) -> void {
 	try {
 		const auto receive = [app](std::byte* bytes, size_t count) -> size_t {
 			return shm::receive_bytes_from_client(app->shm_sbox, bytes, count);
@@ -215,7 +215,7 @@ auto process_client_messages(sbox::app* app) -> void {
 		};
 		const auto& input_msgs = app->client_msg_receiver.receive(receive);
 		for (const auto& msg : input_msgs) {
-			msg_from_client(app, msg);
+			msg_from_client(ez::main, app, msg);
 		}
 		app->client_msg_sender.send(send);
 	}
@@ -225,4 +225,4 @@ auto process_client_messages(sbox::app* app) -> void {
 	}
 }
 
-} // scuff::sbox::main
+} // scuff::sbox

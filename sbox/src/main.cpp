@@ -91,11 +91,11 @@ auto sandbox(sbox::app* app) -> int {
 	app->main_thread_id         = std::this_thread::get_id();
 	app->last_heartbeat         = std::chrono::steady_clock::now();
 	auto frame = [app]{
-		main::process_client_messages(app);
+		process_client_messages(ez::main, app);
 		do_scheduled_window_resizes(app);
 		edwin::process_messages();
 		check_heartbeat(app);
-		clap::main::update(app);
+		clap::update(ez::main, app);
 		send_msgs_out(app);
 		if (app->schedule_terminate) {
 			edwin::app_end();
@@ -122,11 +122,11 @@ auto gui_test(sbox::app* app) -> int {
 		app->schedule_terminate = true;
 	};
 	op::device_create(app, plugin_type::clap, id::device{1}, app->options.gui_file, app->options.gui_id);
-	gui::show(app, id::device{1}, {on_window_closed});
+	gui::show(ez::main, app, id::device{1}, {on_window_closed});
 	auto frame = [app]{
 		do_scheduled_window_resizes(app);
 		edwin::process_messages();
-		clap::main::update(app);
+		clap::update(ez::main, app);
 		send_msgs_out(app);
 		if (app->schedule_terminate) {
 			edwin::app_end();

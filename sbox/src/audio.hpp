@@ -4,24 +4,24 @@
 #include "common-shm.hpp"
 #include "data.hpp"
 
-namespace scuff::sbox::audio {
+namespace scuff::sbox {
 
 static
-auto copy_data_from_output(const shm::device& dest, size_t dest_port_index, const shm::device& source, size_t src_port_index) -> void {
+auto copy_data_from_output(ez::audio_t, const shm::device& dest, size_t dest_port_index, const shm::device& source, size_t src_port_index) -> void {
 	const auto& output_buffer = source.data->audio_out.at(src_port_index);
 	auto& input_buffer        = dest.data->audio_in.at(dest_port_index);
 	input_buffer = output_buffer;
 }
 
 static
-auto copy_data_from_connected_outputs(const sbox::app& app, const sbox::device& dev) -> void {
+auto copy_data_from_connected_outputs(ez::audio_t, const sbox::app& app, const sbox::device& dev) -> void {
 	for (const auto& conn : dev.output_conns) {
-		copy_data_from_output(app.audio_model->devices.at(conn.other_device).service->shm, conn.other_port_index, dev.service->shm, conn.this_port_index);
+		copy_data_from_output(ez::audio, app.audio_model->devices.at(conn.other_device).service->shm, conn.other_port_index, dev.service->shm, conn.this_port_index);
 	}
 }
 
 static
-auto transfer_input_events_from_main(const sbox::app& app, const sbox::device& dev) -> void {
+auto transfer_input_events_from_main(ez::audio_t, const sbox::app& app, const sbox::device& dev) -> void {
 	scuff::event event;
 	auto& events_in = dev.service->shm.data->events_in;
 	while (dev.service->input_events_from_main.try_dequeue(event)) {
@@ -34,11 +34,11 @@ auto transfer_input_events_from_main(const sbox::app& app, const sbox::device& d
 }
 
 static
-auto do_processing(const sbox::app& app, const sbox::device& dev) -> void {
-	transfer_input_events_from_main(app, dev);
+auto do_processing(ez::audio_t, const sbox::app& app, const sbox::device& dev) -> void {
+	transfer_input_events_from_main(ez::audio, app, dev);
 	switch (dev.type) {
 		case plugin_type::clap: {
-			scuff::sbox::clap::audio::process(app, dev);
+			scuff::sbox::clap::process(ez::audio, app, dev);
 			break;
 		}
 		case plugin_type::vst3: {
@@ -46,15 +46,15 @@ auto do_processing(const sbox::app& app, const sbox::device& dev) -> void {
 			break;
 		}
 	}
-	audio::copy_data_from_connected_outputs(app, dev);
+	copy_data_from_connected_outputs(ez::audio, app, dev);
 }
 
 static
-auto do_processing(sbox::app* app) -> void {
+auto do_processing(ez::audio_t, sbox::app* app) -> void {
 	app->audio_model = app->model.read(ez::audio);
 	for (const auto dev_id : app->audio_model->device_processing_order) {
 		const auto dev = app->audio_model->devices.at(dev_id);
-		do_processing(*app, dev);
+		do_processing(ez::audio, *app, dev);
 	}
 	if (!signaling::notify_sandbox_done(app->group_signaler)) {
 		throw std::runtime_error("Failed to signal sandbox processing complete!");
@@ -63,7 +63,7 @@ auto do_processing(sbox::app* app) -> void {
 }
 
 static
-auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
+auto thread_proc(std::stop_token stop_token, ez::audio_t, sbox::app* app) -> void {
 	try {
 		DLOG_S(INFO) << "Audio thread has started.";
 		for (;;) {
@@ -73,7 +73,7 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 			}
 			auto result = signaling::wait_for_work_begin(app->sandbox_signaler, stop_token);
 			if (result == signaling::sandbox_wait_result::signaled) {
-				do_processing(app);
+				do_processing(ez::audio, app);
 				continue;
 			}
 			if (result == signaling::sandbox_wait_result::stop_requested) {
@@ -91,25 +91,22 @@ auto thread_proc(std::stop_token stop_token, sbox::app* app) -> void {
 }
 
 static
-auto start(sbox::app* app) -> void {
-	DLOG_S(INFO) << "audio::start()";
+auto start_audio(ez::main_t, sbox::app* app) -> void {
+	DLOG_S(INFO) << "start_audio()";
 	if (app->audio_thread.joinable()) {
 		return;
 	}
-	app->audio_thread = std::jthread{audio::thread_proc, app};
+	app->audio_thread = std::jthread{thread_proc, ez::audio, app};
 	scuff::os::set_realtime_priority(&app->audio_thread);
 }
 
 static
-auto stop(sbox::app* app) -> void {
-	DLOG_S(INFO) << "audio::stop()";
+auto stop_audio(ez::main_t, sbox::app* app) -> void {
+	DLOG_S(INFO) << "stop_audio()";
 	if (app->audio_thread.joinable()) {
 		app->audio_thread.request_stop();
 		app->audio_thread.join();
 	}
 }
 
-} // scuff::sbox::audio
-
-
-
+} // scuff::sbox

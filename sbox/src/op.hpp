@@ -47,7 +47,7 @@ auto make_device_processing_order(immer::table<device> devices) -> immer::vector
 static
 auto activate(sbox::app* app, const sbox::device& dev, double sr) -> void {
 	if (dev.type == plugin_type::clap) {
-		if (!clap::main::activate(app, dev.id, sr)) {
+		if (!clap::activate(ez::main, app, dev.id, sr)) {
 			app->msgs_out.lock()->push_back(scuff::msg::out::report_error{std::format("Failed to activate device {}", dev.id.value)});
 		}
 		return;
@@ -56,7 +56,7 @@ auto activate(sbox::app* app, const sbox::device& dev, double sr) -> void {
 
 static
 auto activate(sbox::app* app, double sr) -> void {
-	audio::start(app);
+	start_audio(ez::main, app);
 	const auto m = app->model.read(ez::main);
 	for (const auto& dev : m.devices) {
 		activate(app, dev, sr);
@@ -69,7 +69,7 @@ auto activate(sbox::app* app, double sr) -> void {
 static
 auto deactivate(sbox::app* app, const sbox::device& dev) -> void {
 	if (dev.type == plugin_type::clap) {
-		clap::main::deactivate(app, dev.id);
+		clap::deactivate(ez::main, app, dev.id);
 	}
 }
 
@@ -79,7 +79,7 @@ auto deactivate(sbox::app* app) -> void {
 	for (const auto& dev : m.devices) {
 		deactivate(app, dev);
 	}
-	audio::stop(app);
+	stop_audio(ez::main, app);
 	app->active = false;
 }
 
@@ -128,7 +128,7 @@ auto device_disconnect(sbox::app* app, id::device out_dev_id, size_t out_port, i
 static
 auto device_create(sbox::app* app, plugin_type type, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id) -> sbox::device {
 	if (type == plugin_type::clap) {
-		clap::main::create_device(app, dev_id, plugfile_path, plugin_id);
+		clap::create_device(ez::main, app, dev_id, plugfile_path, plugin_id);
 		app->model.update_publish(ez::main, [dev_id](model&& m){
 			m.device_processing_order = make_device_processing_order(m.devices);
 			return m;
@@ -166,7 +166,7 @@ auto set_render_mode(sbox::app* app, id::device dev_id, scuff::render_mode mode)
 	const auto m = app->model.read(ez::main);
 	const auto dev = m.devices.at(dev_id);
 	switch (dev.type) {
-		case plugin_type::clap: { clap::main::set_render_mode(app, dev_id, mode); break; }
+		case plugin_type::clap: { clap::set_render_mode(ez::main, app, dev_id, mode); break; }
 		default:                { throw std::runtime_error("Unsupported device type"); }
 	}
 }
@@ -190,7 +190,7 @@ auto make_client_param_info(const sbox::device& dev) -> std::vector<client_param
 [[nodiscard]] static
 auto make_device_info(const sbox::app& app, const sbox::device& dev) -> device_info {
 	if (dev.type == plugin_type::clap) {
-		return clap::main::make_device_info(app, dev.id);
+		return clap::make_device_info(ez::main, app, dev.id);
 	}
 	throw std::runtime_error("Unsupported device type");
 }
