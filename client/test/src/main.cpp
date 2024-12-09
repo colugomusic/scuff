@@ -23,7 +23,6 @@ auto setup(int argc, const char* argv[]) -> void {
 	po::store(parsed_options, vm);
 	po::notify(vm);
 	scuff::init();
-	scuff::scan(scan_exe_path_.string(), {});
 }
 
 auto fatal(std::string_view err) -> int {
@@ -45,73 +44,78 @@ auto main(int argc, const char* argv[]) -> int {
 	catch (...)                       { return fatal("Unknown error"); }
 }
 
-auto make_ui_reporter() -> scuff::general_ui {
+auto make_empty_group_reporter() -> scuff::group_ui {
+	scuff::group_ui ui;
+	ui.on_device_editor_visible_changed = [](scuff::id::device dev, bool visible, int64_t native_handle) {};
+	ui.on_device_late_create = [](scuff::create_device_result result) {};
+	ui.on_device_load = [](scuff::load_device_result result) {};
+	ui.on_device_params_changed = [](scuff::id::device dev) {};
+	ui.on_error = [](std::string_view err) {};
+	ui.on_sbox_crashed = [](scuff::id::sandbox sbox, std::string_view error) {};
+	ui.on_sbox_error = [](scuff::id::sandbox sbox, std::string_view error) {};
+	ui.on_sbox_info = [](scuff::id::sandbox sbox, std::string_view info) {};
+	ui.on_sbox_started = [](scuff::id::sandbox sbox) {};
+	ui.on_sbox_warning = [](scuff::id::sandbox sbox, std::string_view warning) {};
+	return ui;
+
+}
+
+auto make_empty_ui_reporter() -> scuff::general_ui {
 	scuff::general_ui ui;
-	ui.on_error = [](std::string_view err) {
-		MESSAGE("error: ", err);
-	};
-	ui.on_plugfile_broken = [](scuff::id::plugfile pf) {
-		const auto path = std::string_view{scuff::get_path(pf)};
-		MESSAGE("broken plugfile: ", path);
-	};
-	ui.on_plugfile_scanned = [](scuff::id::plugfile pf) {
-		const auto path = std::string_view{scuff::get_path(pf)};
-		MESSAGE("working plugfile: ", path);
-	};
-	ui.on_plugin_broken = [](scuff::id::plugin plugin) {
-		const auto name = std::string_view{scuff::get_name(plugin)};
-		MESSAGE("broken plugin: ", name);
-	};
-	ui.on_plugin_scanned = [](scuff::id::plugin plugin) {
-		const auto name = std::string_view{scuff::get_name(plugin)};
-		MESSAGE("working plugin: ", name);
-	};
+	ui.on_error = [](std::string_view err) {};
+	ui.on_plugfile_broken = [](scuff::id::plugfile pf) {};
+	ui.on_plugfile_scanned = [](scuff::id::plugfile pf) {};
+	ui.on_plugin_broken = [](scuff::id::plugin plugin) {};
+	ui.on_plugin_scanned = [](scuff::id::plugin plugin) {};
 	ui.on_scan_complete = [] {};
-	ui.on_scan_error = [](std::string_view err) {
-		MESSAGE("scan error: ", err);
-	};
+	ui.on_scan_error = [](std::string_view err) {};
 	ui.on_scan_started = [] {};
-	ui.on_scan_warning = [](std::string_view warning) {
-		MESSAGE("scan warning: ", warning);
-	};
+	ui.on_scan_warning = [](std::string_view warning) {};
 	return ui;
 }
 
-TEST_CASE("finish scanning") {
-	bool done = false;
-	scuff::general_ui ui;
-	ui.on_error = [](std::string_view err) {
-		INFO("error: ", err);
-	};
-	ui.on_plugfile_broken = [](scuff::id::plugfile pf) {
-		const auto path = std::string_view{scuff::get_path(pf)};
-		INFO("broken plugfile: ", path);
-	};
-	ui.on_plugfile_scanned = [](scuff::id::plugfile pf) {
-		const auto path = std::string_view{scuff::get_path(pf)};
-		INFO("working plugfile: ", path);
-	};
-	ui.on_plugin_broken = [](scuff::id::plugin plugin) {
-		const auto name = std::string_view{scuff::get_name(plugin)};
-		INFO("broken plugin: ", name);
-	};
-	ui.on_plugin_scanned = [](scuff::id::plugin plugin) {
-		const auto name = std::string_view{scuff::get_name(plugin)};
-		INFO("working plugin: ", name);
-	};
-	ui.on_scan_complete = [&done] { done = true; };
-	ui.on_scan_error = [](std::string_view err) {
-		INFO("scan error: ", err);
-	};
-	ui.on_scan_started = [] {};
-	ui.on_scan_warning = [](std::string_view warning) {
-		INFO("scan warning: ", warning);
-	};
-	while (!done) {
-		scuff::ui_update(ui);
+TEST_CASE("reload failed device") {
+	scuff::id::group group_id;
+	scuff::id::sandbox sbox_id;
+	scuff::create_device_result device;
+	const auto ext_id = scuff::ext::id::plugin{"studio.kx.distrho.MaGigaverb"};
+	REQUIRE_NOTHROW(group_id = scuff::create_group(nullptr));
+	REQUIRE_NOTHROW(sbox_id = scuff::create_sandbox(group_id, sbox_exe_path_.string()));
+	REQUIRE_NOTHROW(device = scuff::create_device(sbox_id, scuff::plugin_type::clap, ext_id));
+	REQUIRE(!device.success);
+	REQUIRE(!scuff::was_created_successfully(device.id));
+	REQUIRE_NOTHROW(scuff::scan(scan_exe_path_.string(), {scuff::scan_flags::retry_failed_devices}));
+	bool scanning_done = false;
+	bool device_late_created = false;
+	auto ui = make_empty_ui_reporter();
+	ui.on_scan_complete = [&scanning_done] { scanning_done = true; };
+	while (!scanning_done) {
+		REQUIRE_NOTHROW(scuff::ui_update(ui));
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
+	auto grp_ui = make_empty_group_reporter();
+	grp_ui.on_device_late_create = [&device_late_created](scuff::create_device_result result) {
+		device_late_created = true;
+	};
+	while (!device_late_created) {
+		REQUIRE_NOTHROW(scuff::ui_update(group_id, grp_ui));
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+	REQUIRE(scuff::was_created_successfully(device.id));
+	CHECK_NOTHROW(scuff::erase(device.id));
+	CHECK_NOTHROW(scuff::erase(sbox_id));
+	CHECK_NOTHROW(scuff::erase(group_id));
 }
+
+//TEST_CASE("finish scanning") {
+//	bool done = false;
+//	auto ui = make_empty_ui_reporter();
+//	ui.on_scan_complete = [&done] { done = true; };
+//	while (!done) {
+//		scuff::ui_update(ui);
+//		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+//	}
+//}
 
 auto create_a_bunch_of_devices(scuff::id::sandbox sbox) -> std::vector<scuff::id::device> {
 	auto devices = std::vector<scuff::id::device>{};
@@ -124,10 +128,7 @@ auto create_a_bunch_of_devices(scuff::id::sandbox sbox) -> std::vector<scuff::id
 		const auto path   = scuff::get_path(pf);
 		INFO("creating device: ", path, " id: ", ext_id.value, " index: ", i);
 		const auto device = scuff::create_device(sbox, type, ext_id);
-		if (!device.was_loaded_successfully) {
-			scuff::ui_update(make_ui_reporter());
-		}
-		REQUIRE(device.was_loaded_successfully);
+		REQUIRE(device.success);
 		devices.push_back(device.id);
 		i++;
 	}
@@ -141,10 +142,7 @@ TEST_CASE("studio.kx.distrho.MaGigaverb") {
 	const auto plugin = scuff::find({ext_id});
 	for (int i = 0; i < 10; i++) {
 		const auto device = scuff::create_device(sbox.id(), scuff::plugin_type::clap, ext_id);
-		if (!device.was_loaded_successfully) {
-			MESSAGE(i);
-		}
-		REQUIRE(device.was_loaded_successfully);
+		REQUIRE(device.success);
 		const auto managed = scuff::managed_device{device.id};
 	}
 }
@@ -156,7 +154,7 @@ TEST_CASE("com.FabFilter.preset-discovery.Saturn.2") {
 	const auto ext_id = scuff::ext::id::plugin{"com.FabFilter.preset-discovery.Saturn.2"};
 	const auto plugin = scuff::find({ext_id});
 	const auto device = scuff::create_device(sbox.id(), scuff::plugin_type::clap, ext_id);
-	REQUIRE(device.was_loaded_successfully);
+	REQUIRE(device.success);
 }
 
 TEST_CASE("lifetimes") {
@@ -169,10 +167,10 @@ TEST_CASE("lifetimes") {
 	CHECK_NOTHROW(scuff::erase(group1));
 	CHECK_NOTHROW(sbox2 = scuff::create_sandbox(group1, sbox_exe_path_.string()));
 	CHECK_NOTHROW(device1 = scuff::create_device(sbox1, scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"}));
-	REQUIRE      (device1.was_loaded_successfully);
+	REQUIRE      (device1.success);
 	CHECK_NOTHROW(scuff::erase(sbox1));
 	CHECK_NOTHROW(device2 = scuff::create_device(sbox1, scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"}));
-	REQUIRE      (device2.was_loaded_successfully);
+	REQUIRE      (device2.success);
 	CHECK_NOTHROW(scuff::erase(device1.id));
 	CHECK_NOTHROW(scuff::erase(device2.id));
 	CHECK_THROWS (device3 = scuff::create_device(sbox1, scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"}));
@@ -193,10 +191,10 @@ TEST_CASE("single-sandbox rack connections") {
 	CHECK_NOTHROW(device2 = scuff::create_device(sbox1, scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"}));
 	CHECK_NOTHROW(device3 = scuff::create_device(sbox1, scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"}));
 	CHECK_NOTHROW(device4 = scuff::create_device(sbox1, scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"}));
-	REQUIRE      (device1.was_loaded_successfully);
-	REQUIRE      (device2.was_loaded_successfully);
-	REQUIRE      (device3.was_loaded_successfully);
-	REQUIRE      (device4.was_loaded_successfully);
+	REQUIRE      (device1.success);
+	REQUIRE      (device2.success);
+	REQUIRE      (device3.success);
+	REQUIRE      (device4.success);
 	CHECK_NOTHROW(scuff::connect(device1.id, 0, device2.id, 0));
 	CHECK_NOTHROW(scuff::connect(device2.id, 0, device3.id, 0));
 	CHECK_NOTHROW(scuff::connect(device3.id, 0, device4.id, 0));

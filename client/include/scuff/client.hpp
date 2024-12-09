@@ -58,22 +58,22 @@ struct runtime_error : public std::runtime_error {
 
 struct scan_flags {
 	enum e {
-		reload_failed_devices = 1 << 0, // If a plugin is scanned which wasn't previously known,
-		                                // and the user already tried to create a device with that
-		                                // plugin ID, try to create the device again now that the
-		                                // plugin is known.
+		retry_failed_devices = 1 << 0, // If a plugin is scanned which wasn't previously known,
+		                               // and the user already tried to create a device with that
+		                               // plugin ID, try to create the device again now that the
+		                               // plugin is known.
 	};
 	int value = 0;
 };
 
 struct create_device_result {
 	id::device id;
-	bool was_loaded_successfully = false;
+	bool success = false;
 };
 
 struct load_device_result {
 	id::device id;
-	bool was_loaded_successfully = false;
+	bool success = false;
 };
 
 using bytes = std::vector<std::byte>;
@@ -90,6 +90,7 @@ struct output_event {
 
 using on_device_editor_visible_changed = std::function<auto (id::device dev, bool visible, int64_t native_handle) -> void>;
 using on_device_load                   = std::function<auto (load_device_result result) -> void>;
+using on_device_late_create            = std::function<auto (create_device_result result) -> void>;
 using on_device_params_changed         = std::function<auto (id::device dev) -> void>;
 using on_error                         = std::function<auto (std::string_view error) -> void>;
 using on_plugfile_broken               = std::function<auto (id::plugfile plugfile) -> void>;
@@ -164,6 +165,7 @@ struct group_ui {
 	scuff::on_device_editor_visible_changed on_device_editor_visible_changed;
 	scuff::on_device_load on_device_load;
 	scuff::on_device_params_changed on_device_params_changed;
+	scuff::on_device_late_create on_device_late_create;
 	scuff::on_error on_error;
 	scuff::on_sbox_crashed on_sbox_crashed;
 	scuff::on_sbox_error on_sbox_error;
@@ -230,7 +232,7 @@ auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port
 //    state.
 //  - You can create a device with a plugin ID that hasn't been scanned yet. It will be
 //    created in an unloaded state and will remain that way until the plugin is found by
-//    a future scan where the reload_failed_devices flag is set.
+//    a future scan where the retry_failed_devices flag is set.
 [[nodiscard]]
 auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id) -> create_device_result;
 
@@ -305,6 +307,10 @@ auto get_broken_plugins() -> std::vector<id::plugin>;
 [[nodiscard]]
 auto get_devices(id::sandbox sbox) -> std::vector<id::device>;
 
+// If the device failed to load successfully, return the error string.
+[[nodiscard]]
+auto get_error(id::device dev) -> std::string_view;
+
 // If the plugin file failed to scan, return the error string.
 [[nodiscard]]
 auto get_error(id::plugfile plugfile) -> std::string_view;
@@ -353,10 +359,6 @@ auto get_vendor(id::plugin plugin) -> std::string_view;
 // Returns the plugin version string.
 [[nodiscard]]
 auto get_version(id::plugin plugin) -> std::string_view;
-
-// If the device failed to load successfully, return the error string.
-[[nodiscard]]
-auto get_error(id::device dev) -> std::string_view;
 
 // For CLAP plugins, return the list of feature strings.
 // Not sure how this will look for VST yet.
@@ -464,8 +466,8 @@ auto set_track_color(id::device dev, std::optional<rgba32> color) -> void;
 // Associate a track name with the device.
 auto set_track_name(id::device dev, std::string_view name) -> void;
 
-// Return true if the device loaded successfully.
+// Return true if the device was created successfully.
 [[nodiscard]]
-auto was_loaded_successfully(id::device dev) -> bool;
+auto was_created_successfully(id::device dev) -> bool;
 
 } // scuff

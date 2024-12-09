@@ -44,6 +44,7 @@ static auto cb_(const ui::msg::scan_error& msg, const general_ui& ui) -> void   
 static auto cb_(const ui::msg::scan_started& msg, const general_ui& ui) -> void        { ui.on_scan_started(); }
 static auto cb_(const ui::msg::scan_warning& msg, const general_ui& ui) -> void        { ui.on_scan_warning(msg.warning); }
 static auto cb_(const ui::msg::device_load& msg, const group_ui& ui) -> void           { ui.on_device_load(msg.result); }
+static auto cb_(const ui::msg::device_late_create& msg, const group_ui& ui) -> void    { ui.on_device_late_create(msg.result); }
 static auto cb_(const ui::msg::device_params_changed& msg, const group_ui& ui) -> void { ui.on_device_params_changed(msg.dev); }
 static auto cb_(const ui::msg::error& msg, const group_ui& ui) -> void                 { ui.on_error(msg.error); }
 static auto cb_(const ui::msg::sbox_crashed& msg, const group_ui& ui) -> void          { ui.on_sbox_crashed(msg.sbox, msg.error); }

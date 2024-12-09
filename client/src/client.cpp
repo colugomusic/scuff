@@ -49,7 +49,7 @@ auto intercept_output_event(const scuff::device& dev, const scuff::event& event)
 static
 auto write_audio_input(const scuff::model& m, const scuff::audio_input& input) -> void {
 	if (const auto dev = m.devices.find(input.dev_id)) {
-		if (dev->flags.value & device_flags::created_successfully) {
+		if (dev->flags.value & device_flags::has_remote) {
 			auto& buffer   = dev->services->shm.data->audio_in[input.port_index];
 			input.write_to(buffer.data());
 		}
@@ -87,7 +87,7 @@ auto process_inputs(const scuff::model& m, const scuff::audio_inputs& audio_inpu
 static
 auto read_audio_output(const scuff::model& m, const audio_output& output) -> void {
 	if (const auto dev = m.devices.find(output.dev_id)) {
-		if (dev->flags.value & device_flags::created_successfully) {
+		if (dev->flags.value & device_flags::has_remote) {
 			const auto& buffer = dev->services->shm.data->audio_out[output.port_index];
 			output.read_from(buffer.data());
 		}
@@ -115,7 +115,7 @@ auto read_output_events(const scuff::model& m, const scuff::group& group, const 
 		const auto& sbox = m.sandboxes.at(sbox_id);
 		for (const auto dev_id : sbox.devices) {
 			const auto& dev = m.devices.at(dev_id);
-			if (dev.flags.value & device_flags::created_successfully) {
+			if (dev.flags.value & device_flags::has_remote) {
 				auto& buffer = dev.services->shm.data->events_out;
 				for (const auto& event : buffer) {
 					intercept_output_event(dev, event);
@@ -132,7 +132,7 @@ auto process_cross_sbox_connections(const scuff::model& m, const scuff::group& g
 	for (const auto& conn : group.cross_sbox_conns) {
 		const auto& dev_out = m.devices.at(conn.out_dev_id);
 		const auto& dev_in  = m.devices.at(conn.in_dev_id);
-		if ((dev_out.flags.value & dev_in.flags.value) & device_flags::created_successfully) {
+		if ((dev_out.flags.value & dev_in.flags.value) & device_flags::has_remote) {
 			const auto& out_buf = dev_out.services->shm.data->audio_out[conn.out_port];
 			auto& in_buf        = dev_in.services->shm.data->audio_in[conn.in_port];
 			std::copy(out_buf.begin(), out_buf.end(), in_buf.begin());
@@ -222,7 +222,7 @@ auto do_sandbox_processing(const ez::immutable<model>& audio, const scuff::group
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::confirm_activated& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::confirm_activated& msg) -> void {
 	DATA_->model.update_publish(ez::nort, [sbox = sbox](model&& m) mutable {
 		sbox.flags.value |= sandbox_flags::confirmed_active;
 		m.sandboxes       = m.sandboxes.insert(sbox);
@@ -234,7 +234,7 @@ auto process_message_(const sandbox& sbox, const msg::out::confirm_activated& ms
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::device_create_fail& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::device_create_fail& msg) -> void {
 	// The sandbox failed to create the remote device.
 	DATA_->model.update_publish(ez::nort, [sbox, msg](model&& m){
 		m = set_error(std::move(m), {msg.dev_id}, "Failed to create remote device.");
@@ -244,7 +244,7 @@ auto process_message_(const sandbox& sbox, const msg::out::device_create_fail& m
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::device_create_success& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::device_create_success& msg) -> void {
 	// The sandbox succeeded in creating the remote device.
 	DATA_->model.update_publish(ez::nort, [sbox, msg](model&& m){
 		auto device             = m.devices.at({msg.dev_id});
@@ -256,7 +256,7 @@ auto process_message_(const sandbox& sbox, const msg::out::device_create_success
 			// open.
 			device.services->shm = shm::open_device(device_shmid, true);
 		}
-		device.flags.value |= device_flags::created_successfully;
+		device.flags.value |= device_flags::has_remote;
 		m.devices = m.devices.insert(device);
 		return m;
 	});
@@ -264,23 +264,23 @@ auto process_message_(const sandbox& sbox, const msg::out::device_create_success
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::device_load_fail& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::device_load_fail& msg) -> void {
 	ui::send(sbox, ui::msg::device_load{{msg.dev_id, false}});
 	ui::send(sbox, ui::msg::sbox_error{sbox.id, "Failed to load device."});
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::device_load_success& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::device_load_success& msg) -> void {
 	ui::send(sbox, ui::msg::device_load{{msg.dev_id, true}});
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::device_editor_visible_changed& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::device_editor_visible_changed& msg) -> void {
 	ui::send(sbox, ui::msg::device_editor_visible_changed{{msg.dev_id}, msg.visible, msg.native_handle});
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::device_info& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::device_info& msg) -> void {
 	DATA_->model.update(ez::nort, [msg](model&& m) {
 		m.devices = m.devices.update_if_exists({msg.dev_id}, [msg](device dev) {
 			dev.info = msg.info;
@@ -291,7 +291,7 @@ auto process_message_(const sandbox& sbox, const msg::out::device_info& msg) -> 
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::device_param_info& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::device_param_info& msg) -> void {
 	DATA_->model.update_publish(ez::nort, [msg](model&& m) {
 		m.devices = m.devices.update_if_exists({msg.dev_id}, [msg](device dev) {
 			dev.param_info = {};
@@ -306,38 +306,38 @@ auto process_message_(const sandbox& sbox, const msg::out::device_param_info& ms
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::report_error& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::report_error& msg) -> void {
 	ui::send(sbox, ui::msg::sbox_error{sbox.id, msg.text});
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::report_info& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::report_info& msg) -> void {
 	ui::send(sbox, ui::msg::sbox_info{sbox.id, msg.text});
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::report_warning& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::report_warning& msg) -> void {
 	ui::send(sbox, ui::msg::sbox_warning{sbox.id, msg.text});
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::return_param_value& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::return_param_value& msg) -> void {
 	sbox.services->return_buffers.doubles.take(msg.callback)(msg.value);
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::return_param_value_text& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::return_param_value_text& msg) -> void {
 	sbox.services->return_buffers.strings.take(msg.callback)(msg.text);
 }
 
 static
-auto process_message_(const sandbox& sbox, const msg::out::return_state& msg) -> void {
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::return_state& msg) -> void {
 	sbox.services->return_buffers.states.take(msg.callback)(msg.bytes);
 }
 
 static
-auto process_message(const sandbox& sbox, const msg::out::msg& msg) -> void {
-	 const auto proc = [sbox](const auto& msg) -> void { process_message_(sbox, msg); };
+auto msg_from_sandbox(const sandbox& sbox, const msg::out::msg& msg) -> void {
+	 const auto proc = [sbox](const auto& msg) -> void { msg_from_sandbox(sbox, msg); };
 	 try                               { fast_visit(proc, msg); }
 	 catch (const std::exception& err) { ui::send(sbox, ui::msg::error{err.what()}); }
 }
@@ -351,7 +351,7 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 			for (const auto dev_id : sbox.devices) {
 				m.devices = m.devices.update(dev_id, [](device dev) {
 					dev.editor_window_native_handle = nullptr;
-					dev.flags.value &= ~device_flags::created_successfully;
+					dev.flags.value &= ~device_flags::has_remote;
 					return dev;
 				});
 			}
@@ -372,7 +372,7 @@ auto process_sandbox_messages(const sandbox& sbox) -> void {
 		sbox.services->send_msgs_to_sandbox();
 		const auto& msgs = sbox.services->receive_msgs_from_sandbox();
 		for (const auto& msg : msgs) {
-			process_message(sbox, msg);
+			msg_from_sandbox(sbox, msg);
 		}
 	}
 }
@@ -553,30 +553,43 @@ auto find(ext::id::plugin plugin_id) -> id::plugin {
 }
 
 [[nodiscard]] static
-auto create_device_async(model&& m, id::device dev_id, const sandbox& sbox, plugin_type type, ext::id::plugin plugin_ext_id, id::plugin plugin_id, return_create_device_result return_fn) -> model {
+auto set_creation_callback(model&& m, id::device dev_id, return_create_device_result return_fn) -> model {
+	auto device = m.devices.at(dev_id);
+	device.creation_callback = return_fn;
+	m.devices = m.devices.insert(device);
+	return m;
+}
+
+[[nodiscard]] static
+auto create_plugin_device_async(model&& m, id::device dev_id, const sandbox& sbox, const scuff::plugin& plugin, return_create_device_result return_fn) -> model {
 	scuff::device dev;
 	dev.id            = dev_id;
 	dev.sbox          = {sbox.id};
-	dev.plugin_ext_id = plugin_ext_id;
-	dev.plugin        = plugin_id;
-	dev.type          = type;
+	dev.plugin_ext_id = plugin.ext_id;
+	dev.plugin        = plugin.id;
+	dev.type          = plugin.type;
 	dev.services      = std::make_shared<device_services>();
 	m = scuff::add_device_to_sandbox(std::move(m), {sbox.id}, dev.id);
 	m.devices = m.devices.insert(dev);
-	if (!dev.plugin) {
-		// We don't have this plugin yet so put the device into an error
-		// state and call the return function immediately. The device can
-		// be loaded later after the required plugin is scanned.
-		const auto err = "Plugin not found.";
-		m = set_error(std::move(m), dev.id, err);
-		ui::send(sbox, ui::msg::device_create{{dev.id, false}, return_fn});
-		return m;
-	}
 	// Plugin is available so we need to send a message to the sandbox to create the remote device.
 	const auto callback = sbox.services->return_buffers.device_create_results.put(return_fn);
-	const auto plugin   = m.plugins.at(dev.plugin);
 	const auto plugfile = m.plugfiles.at(plugin.plugfile);
-	sbox.services->enqueue(msg::in::device_create{dev.id.value, type, plugfile.path, plugin_ext_id.value, callback});
+	sbox.services->enqueue(msg::in::device_create{dev.id.value, plugin.type, plugfile.path, plugin.ext_id.value, callback});
+	return m;
+}
+
+[[nodiscard]] static
+auto create_unknown_plugin_device(model&& m, id::device dev_id, const sandbox& sbox, plugin_type type, scuff::ext::id::plugin plugin_ext_id, return_create_device_result return_fn) -> model {
+	scuff::device dev;
+	dev.id                = dev_id;
+	dev.sbox              = {sbox.id};
+	dev.plugin_ext_id     = plugin_ext_id;
+	dev.type              = type;
+	dev.services          = std::make_shared<device_services>();
+	dev.error             = "Plugin not found.";
+	dev.creation_callback = return_fn;
+	m = scuff::add_device_to_sandbox(std::move(m), {sbox.id}, dev.id);
+	m.devices = m.devices.insert(dev);
 	return m;
 }
 
@@ -591,8 +604,10 @@ auto create_device_async(id::sandbox sbox_id, plugin_type type, ext::id::plugin 
 		const auto wrapper = [sbox, return_fn](create_device_result result) {
 			ui::send(sbox, ui::msg::device_create{result, return_fn});
 		};
-		m = create_device_async(std::move(m), dev_id, sbox, type, plugin_ext_id, plugin_id, return_fn);
-		return m;
+		if (!plugin_id) {
+			return create_unknown_plugin_device(std::move(m), dev_id, sbox, type, plugin_ext_id, wrapper);
+		}
+		return create_plugin_device_async(std::move(m), dev_id, sbox, m.plugins.at(plugin_id), wrapper);
 	});
 	return dev_id;
 }
@@ -621,6 +636,16 @@ private:
 
 [[nodiscard]] static
 auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id) -> create_device_result {
+	auto m = DATA_->model.read(ez::nort);
+	const auto dev_id    = id::device{scuff::id_gen_++};
+	const auto plugin_id = id::plugin{find(m, plugin_ext_id)};
+	const auto sbox      = m.sandboxes.at(sbox_id);
+	if (!plugin_id) {
+		DATA_->model.update(ez::nort, [dev_id, sbox, type, plugin_ext_id](model&& m) {
+			return create_unknown_plugin_device(std::move(m), dev_id, sbox, type, plugin_ext_id, nullptr);
+		});
+		return create_device_result{dev_id, false};
+	}
 	std::optional<create_device_result> result;
 	blocking_sandbox_operation bso;
 	auto fn = bso.make_fn([&result](create_device_result remote_result) -> void {
@@ -629,12 +654,8 @@ auto create_device(id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin
 	auto ready = [&result] {
 		return result.has_value();
 	};
-	const auto dev_id = id::device{scuff::id_gen_++};
-	DATA_->model.update(ez::nort, [dev_id, sbox_id, type, plugin_ext_id, fn](model&& m){
-		const auto sbox      = m.sandboxes.at(sbox_id);
-		const auto plugin_id = id::plugin{find(m, plugin_ext_id)};
-		m = create_device_async(std::move(m), dev_id, sbox, type, plugin_ext_id, plugin_id, fn);
-		return m;
+	DATA_->model.update(ez::nort, [dev_id, sbox, plugin_id, fn](model&& m) {
+		return create_plugin_device_async(std::move(m), dev_id, sbox, m.plugins.at(plugin_id), fn);
 	});
 	if (!bso.wait_for(ready)) {
 		throw std::runtime_error("Timed out waiting for device creation.");
@@ -676,9 +697,9 @@ auto device_disconnect(id::device dev_out_id, size_t port_out, id::device dev_in
 	});
 }
 
-static
-auto debug__check_we_are_in_the_ui_thread() -> void {
-	assert (std::this_thread::get_id() == DATA_->ui_thread_id);
+[[nodiscard]]
+auto has_remote(const device& dev) -> bool {
+	return dev.flags.value & device_flags::has_remote;
 }
 
 static
@@ -689,19 +710,33 @@ auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_crea
 	const auto src_sbox      = m.sandboxes.at(src_dev.sbox);
 	const auto dst_sbox      = m.sandboxes.at({dst_sbox_id});
 	const auto plugin_ext_id = src_dev.plugin_ext_id;
-	const auto plugin        = src_dev.plugin;
+	const auto plugin        = src_dev.plugin ? src_dev.plugin : find(plugin_ext_id);
 	const auto type          = src_dev.type;
+	fn = [dst_sbox, fn](create_device_result result) {
+		ui::send(dst_sbox, ui::msg::device_create{result, fn});
+	};
+	if (!plugin) {
+		// Plugin isn't known yet.
+		DATA_->model.update(ez::nort, [new_dev_id, dst_sbox, type, plugin_ext_id, fn](model&& m) {
+			return create_unknown_plugin_device(std::move(m), new_dev_id, dst_sbox, type, plugin_ext_id, fn);
+		});
+		return new_dev_id;
+	}
+	if (!has_remote(src_dev)) {
+		// Plugin is known but the source device hasn't been created remotely yet.
+		DATA_->model.update(ez::nort, [new_dev_id, dst_sbox, src_dev_id, plugin, fn](model&& m) {
+			return create_plugin_device_async(std::move(m), new_dev_id, dst_sbox, m.plugins.at(plugin), fn);
+		});
+		return new_dev_id;
+	}
 	// We're going to send a message to the source sandbox to save the source device.
 	// When the saved state is returned, call this function with it:
-	const auto save_cb = src_sbox.services->return_buffers.states.put([=](const std::vector<std::byte>& src_state) {
-		// Now we're going to send a message to the destination sandbox to actually create the new device,
-		// if the plugin is available.
+	const auto save_cb = src_sbox.services->return_buffers.states.put([fn, new_dev_id, dst_sbox, plugin](const std::vector<std::byte>& src_state) mutable {
+		// Now we're going to send a message to the destination sandbox to actually create the new device.
 		// When the new device is created, call this function with it:
-		const auto return_fn = [=](create_device_result result) {
-			// We should be in the UI thread at this point.
-			debug__check_we_are_in_the_ui_thread();
-			if (result.was_loaded_successfully) {
-				// Remote device was loaded successfully.
+		fn = [fn, dst_sbox, src_state](create_device_result result) {
+			if (result.success) {
+				// Remote device was created successfully.
 				// Now send a message to the destination sandbox to load the saved state into the new device.
 				dst_sbox.services->enqueue(msg::in::device_load{result.id.value, src_state});
 			}
@@ -709,7 +744,7 @@ auto duplicate_async(id::device src_dev_id, id::sandbox dst_sbox_id, return_crea
 			fn(result);
 		};
 		DATA_->model.update(ez::nort, [=](model&& m){
-			return create_device_async(std::move(m), new_dev_id, dst_sbox, type, plugin_ext_id, plugin, return_fn);
+			return create_plugin_device_async(std::move(m), new_dev_id, dst_sbox, m.plugins.at(plugin), fn);
 		});
 	});
 	src_sbox.services->enqueue(msg::in::device_save{src_dev_id.value, save_cb});
@@ -744,11 +779,6 @@ auto find(id::device dev_id, ext::id::param param_id) -> idx::param {
 		}
 	}
 	return {};
-}
-
-[[nodiscard]] static
-auto get_error(id::device dev) -> std::string_view {
-	return *DATA_->model.read(ez::nort).devices.at(dev).error;
 }
 
 [[nodiscard]] static
@@ -923,8 +953,8 @@ auto gui_show(id::device dev) -> void {
 }
 
 [[nodiscard]] static
-auto was_loaded_successfully(id::device dev) -> bool {
-	return DATA_->model.read(ez::nort).devices.at(dev).flags.value & device_flags::created_successfully;
+auto was_created_successfully(id::device dev) -> bool {
+	return DATA_->model.read(ez::nort).devices.at(dev).flags.value & device_flags::has_remote;
 }
 
 [[nodiscard]] static
@@ -1015,6 +1045,11 @@ auto get_path(id::plugfile plugfile) -> std::string_view {
 [[nodiscard]] static
 auto get_plugfile(id::plugin plugin) -> id::plugfile {
 	return DATA_->model.read(ez::nort).plugins.at({plugin}).plugfile;
+}
+
+[[nodiscard]] static
+auto get_error(id::device dev) -> std::string_view {
+	return *DATA_->model.read(ez::nort).devices.at(dev).error;
 }
 
 [[nodiscard]] static
@@ -1114,7 +1149,7 @@ auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 	for (const auto dev_id : sandbox.devices) {
 		const auto& dev = m.devices.at(dev_id);
 		const auto with_created_device = [m, dev](create_device_result result){
-			if (result.was_loaded_successfully) {
+			if (result.success) {
 				load_async(m, dev, dev.last_saved_state, [](load_device_result){});
 			}
 			else {
@@ -1141,7 +1176,7 @@ auto load(id::device dev, const scuff::bytes& bytes) -> bool {
 	blocking_sandbox_operation bso;
 	auto fn = bso.make_fn([&done, &success](load_device_result result) -> void {
 		done    = true;
-		success = result.was_loaded_successfully;
+		success = result.success;
 	});
 	auto ready = [&done] {
 		return done;
@@ -1515,10 +1550,6 @@ auto find(ext::id::plugin plugin_id) -> id::plugin {
 	try { return impl::find(plugin_id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
-auto get_error(id::device device) -> std::string_view {
-	try { return impl::get_error(device); } SCUFF_EXCEPTION_WRAPPER;
-}
-
 auto get_param_count(id::device dev) -> size_t {
 	try { return impl::get_param_count(dev); } SCUFF_EXCEPTION_WRAPPER;
 }
@@ -1553,6 +1584,10 @@ auto get_broken_plugins() -> std::vector<id::plugin> {
 
 auto get_devices(id::sandbox sbox) -> std::vector<id::device> {
 	try { return impl::get_devices(sbox); } SCUFF_EXCEPTION_WRAPPER;
+}
+
+auto get_error(id::device device) -> std::string_view {
+	try { return impl::get_error(device); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_error(id::plugfile plugfile) -> std::string_view {
@@ -1695,8 +1730,8 @@ auto set_track_name(id::device dev, std::string_view name) -> void {
 	try { impl::set_track_name(dev, name); } SCUFF_EXCEPTION_WRAPPER;
 }
 
-auto was_loaded_successfully(id::device dev) -> bool {
-	try { return impl::was_loaded_successfully(dev); } SCUFF_EXCEPTION_WRAPPER;
+auto was_created_successfully(id::device dev) -> bool {
+	try { return impl::was_created_successfully(dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto managed(id::device id) -> managed_device {

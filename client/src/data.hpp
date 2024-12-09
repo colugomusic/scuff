@@ -86,7 +86,8 @@ struct group_services {
 
 struct device_flags {
 	enum e {
-		created_successfully = 1 << 0,
+		has_remote = 1 << 0, // If set, this means the device has an active
+		                     // 'remote' counterpart in a sandbox process.
 	};
 	int value = 0;
 };
@@ -107,6 +108,7 @@ struct device {
 	id::sandbox sbox;
 	device_flags flags;
 	plugin_type type;
+	return_create_device_result creation_callback;
 	void* editor_window_native_handle = nullptr;
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;

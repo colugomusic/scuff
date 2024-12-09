@@ -26,6 +26,7 @@ static auto show(sbox::app* app, scuff::id::device dev_id, edwin::fn::on_window_
 
 namespace scuff::sbox::clap {
 
+// FIXME: move these operations into common lib
 [[nodiscard]] static
 auto is_flag_set(uint32_t flags, uint32_t flag) -> bool {
 	return (flags & flag) == flag;

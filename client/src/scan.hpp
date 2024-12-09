@@ -191,7 +191,32 @@ auto find_existing_plugin(const scuff::model& m, std::string_view id) -> std::op
 }
 
 static
-auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
+auto retry_failed_devices(scuff::plugin plugin, scuff::scan_flags flags) -> void {
+	if (flags.value & scuff::scan_flags::retry_failed_devices) {
+		auto m = DATA_->model.read(ez::nort);
+		for (auto dev : m.devices) {
+			if (!dev.plugin && dev.plugin_ext_id == plugin.ext_id && dev.type == plugin.type) {
+				const auto sbox     = m.sandboxes.at(dev.sbox);
+				const auto plugfile = m.plugfiles.at(plugin.plugfile);
+				const auto fn = [group = m.groups.at(sbox.group), cb = dev.creation_callback](scuff::create_device_result result) {
+					if (cb) {
+						cb(result);
+					}
+					ui::send(group, ui::msg::device_late_create{result});
+				};
+				const auto callback = sbox.services->return_buffers.device_create_results.put(fn);
+				dev.plugin            = plugin.id;
+				dev.creation_callback = {};
+				m.devices = m.devices.insert(dev);
+				DATA_->model.set(ez::nort, m);
+				sbox.services->enqueue(msg::in::device_create{dev.id.value, dev.type, plugfile.path, plugin.ext_id.value, callback});
+			}
+		}
+	}
+}
+
+static
+auto read_plugin(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 	const std::string plugfile_type = j["plugfile-type"];
 	const std::string path          = j["path"];
 	const auto type = scuff::plugin_type_from_string(plugfile_type);
@@ -210,7 +235,7 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 			// If it is, check if the version is higher.
 			// If it is, update the existing plugin entry.
 			// If it isn't ignore this plugin.
-			const auto m = DATA_->model.read(ez::nort);
+			auto m = DATA_->model.read(ez::nort);
 			if (const auto existing_plugin = find_existing_plugin(m, id)) {
 				ui::send(ui::msg::scan_warning{std::format("The scanner found multiple plugins with the same id: '{}'", id)});
 				if (version.compare(existing_plugin->version) <= 0) {
@@ -226,13 +251,12 @@ auto read_plugin(scan_::scanner*, const nlohmann::json& j) -> void {
 			plugin.version       = version;
 			plugin.clap_features = to_immer(features);
 			plugin.plugfile      = find_plugfile_from_path(path);
-			DATA_->model.update(ez::nort, [plugin](model&& m){
+			m = DATA_->model.update(ez::nort, [plugin](model&& m) {
 				m.plugins = m.plugins.insert(plugin);
 				return m;
 			});
 			ui::send(ui::msg::plugin_scanned{plugin.id});
-			// TOODOO: if flags & scuff_scan_flag_reload_failed_devices,
-			//       reload any unloaded devices which use this plugin 
+			retry_failed_devices(plugin, scanner->flags);
 			return;
 		}
 		case scuff::plugin_type::vst3: {
