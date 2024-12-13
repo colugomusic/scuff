@@ -71,7 +71,8 @@ struct confirm_activated             {};
 struct device_create_fail            { id::device::type dev_id; std::string error; size_t callback; };
 struct device_create_success         { id::device::type dev_id; std::string ports_shmid; size_t callback; };
 struct device_editor_visible_changed { id::device::type dev_id; bool visible; int64_t native_handle; };
-struct device_info                   { id::device::type dev_id; scuff::device_info info; };
+struct device_flags                  { id::device::type dev_id; int flags; };
+struct device_port_info              { id::device::type dev_id; scuff::device_port_info info; };
 struct device_load_fail              { id::device::type dev_id; std::string error; };
 struct device_load_success           { id::device::type dev_id; };
 struct device_param_info             { id::device::type dev_id; std::vector<client_param_info> info; };
@@ -87,7 +88,8 @@ using msg = std::variant<
 	device_create_fail,
 	device_create_success,
 	device_editor_visible_changed,
-	device_info,
+	device_flags,
+	device_port_info,
 	device_load_fail,
 	device_load_success,
 	device_param_info,
@@ -156,7 +158,7 @@ auto deserialize<scuff::msg::out::device_create_success>(std::span<const std::by
 }
 
 template <> inline
-auto deserialize<scuff::msg::out::device_info>(std::span<const std::byte>* bytes, scuff::msg::out::device_info* msg) -> void {
+auto deserialize<scuff::msg::out::device_port_info>(std::span<const std::byte>* bytes, scuff::msg::out::device_port_info* msg) -> void {
 	deserialize(bytes, &msg->dev_id);
 	deserialize(bytes, &msg->info.audio_input_port_count);
 	deserialize(bytes, &msg->info.audio_output_port_count);
@@ -266,7 +268,7 @@ auto serialize<scuff::msg::out::device_create_success>(const scuff::msg::out::de
 }
 
 template <> inline
-auto serialize<scuff::msg::out::device_info>(const scuff::msg::out::device_info& msg, std::vector<std::byte>* bytes) -> void {
+auto serialize<scuff::msg::out::device_port_info>(const scuff::msg::out::device_port_info& msg, std::vector<std::byte>* bytes) -> void {
 	serialize(msg.dev_id, bytes);
 	serialize(msg.info.audio_input_port_count, bytes);
 	serialize(msg.info.audio_output_port_count, bytes);

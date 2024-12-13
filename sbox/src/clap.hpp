@@ -541,17 +541,18 @@ auto init_audio(ez::main_t, sbox::app* app, id::device dev_id) -> void {
 }
 
 [[nodiscard]] static
-auto make_device_info(ez::main_t, const clap::device& clap_dev) -> device_info {
-	scuff::device_info info;
+auto make_device_port_info(ez::main_t, const clap::device& clap_dev) -> device_port_info {
+	scuff::device_port_info info;
 	info.audio_input_port_count  = clap_dev.service.audio_port_info->inputs.size();
 	info.audio_output_port_count = clap_dev.service.audio_port_info->outputs.size();
 	return info;
 }
 
 [[nodiscard]] static
-auto make_device_info(ez::main_t, const sbox::app& app, id::device dev_id) -> device_info {
-	const auto& clap_dev = app.model.read(ez::main).clap_devices.at(dev_id);
-	return make_device_info(ez::main, clap_dev);
+auto make_device_port_info(ez::main_t, const sbox::app& app, id::device dev_id) -> device_port_info {
+	const auto m         = app.model.read(ez::main);
+	const auto& clap_dev = m.clap_devices.at(dev_id);
+	return make_device_port_info(ez::main, clap_dev);
 }
 
 static
@@ -571,14 +572,14 @@ auto rescan_audio_ports(ez::main_t, sbox::app* app, id::device dev_id, uint32_t 
 		}
 	}
 	init_audio(ez::main, app, dev_id);
-	app->msgs_out.lock()->push_back(scuff::msg::out::device_info{dev_id.value, make_device_info(ez::main, *app, dev_id)});
+	app->msgs_out.lock()->push_back(scuff::msg::out::device_port_info{dev_id.value, make_device_port_info(ez::main, *app, dev_id)});
 }
 
 [[nodiscard]] static
 auto init_params(ez::main_t, sbox::device&& dev, const clap::device& clap_dev) -> sbox::device {
 	const auto& iface = clap_dev.iface->plugin;
 	if (iface.params) {
-		dev.service->shm.data->flags.value |= shm::device_flags::has_params;
+		dev.flags.value |= scuff::device_flags::has_params;
 	}
 	return dev;
 }
@@ -880,7 +881,7 @@ auto init_gui(ez::main_t, sbox::device&& dev, const clap::device& clap_dev) -> s
 	const auto& iface = clap_dev.iface->plugin;
 	if (iface.gui) {
 		if (iface.gui->is_api_supported(iface.plugin, scuff::os::get_clap_window_api(), false)) {
-			dev.service->shm.data->flags.value |= shm::device_flags::has_gui;
+			dev.flags.value |= scuff::device_flags::has_gui;
 			return dev;
 		}
 	}

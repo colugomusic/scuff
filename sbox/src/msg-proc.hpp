@@ -39,7 +39,8 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_cr
 		const auto dev = op::device_create(app, msg.type, id::device{msg.dev_id}, msg.plugfile_path, msg.plugin_id);
 		op::set_render_mode(app, dev.id, app->render_mode);
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_create_success{msg.dev_id, dev.service->shm.seg.id.data(), msg.callback});
-		app->msgs_out.lock()->push_back(scuff::msg::out::device_info{msg.dev_id, op::make_device_info(*app, dev)});
+		app->msgs_out.lock()->push_back(scuff::msg::out::device_flags{msg.dev_id, dev.flags.value});
+		app->msgs_out.lock()->push_back(scuff::msg::out::device_port_info{msg.dev_id, op::make_device_port_info(*app, dev)});
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_param_info{msg.dev_id, op::make_client_param_info(dev)});
 	}
 	catch (const std::exception& err) {

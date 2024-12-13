@@ -54,7 +54,7 @@ static
 auto show(ez::main_t, sbox::app* app, scuff::id::device dev_id, edwin::fn::on_window_closed on_closed) -> void {
 	const auto devices   = app->model.read(ez::main).devices;
 	auto device          = devices.at({dev_id});
-	const auto has_gui   = device.service->shm.data->flags.value & shm::device_flags::has_gui;
+	const auto has_gui   = device.flags.value & device_flags::has_gui;
 	if (!has_gui) {
 		LOG_S(WARNING) << "Device " << dev_id.value << " does not have a GUI";
 		return;

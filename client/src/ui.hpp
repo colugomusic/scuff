@@ -45,6 +45,8 @@ static auto cb_(const ui::msg::scan_started& msg, const general_ui& ui) -> void 
 static auto cb_(const ui::msg::scan_warning& msg, const general_ui& ui) -> void          { ui.on_scan_warning(msg.warning); }
 static auto cb_(const ui::msg::device_state_load& msg, const group_ui& ui) -> void       { ui.on_device_state_load(msg.result); }
 static auto cb_(const ui::msg::device_late_create& msg, const group_ui& ui) -> void      { ui.on_device_late_create(msg.result); }
+static auto cb_(const ui::msg::device_flags_changed& msg, const group_ui& ui) -> void    { if (ui.on_device_flags_changed) { ui.on_device_flags_changed(msg.dev); } }
+static auto cb_(const ui::msg::device_ports_changed& msg, const group_ui& ui) -> void    { if (ui.on_device_ports_changed) { ui.on_device_ports_changed(msg.dev); } }
 static auto cb_(const ui::msg::device_params_changed& msg, const group_ui& ui) -> void   { ui.on_device_params_changed(msg.dev); }
 static auto cb_(const ui::msg::error& msg, const group_ui& ui) -> void                   { ui.on_error(msg.error); }
 static auto cb_(const ui::msg::sbox_crashed& msg, const group_ui& ui) -> void            { ui.on_sbox_crashed(msg.sbox, msg.error); }
@@ -68,7 +70,7 @@ static auto cb_(const ui::msg::device_editor_visible_changed& msg, const group_u
 }
 
 static auto cb(const ui::msg::general& msg, const general_ui& ui) -> void { fast_visit([&ui](const auto& msg) { cb_(msg, ui); }, msg); } 
-static auto cb(const ui::msg::group& msg, const group_ui& ui) -> void { fast_visit([&ui](const auto& msg)     { cb_(msg, ui); }, msg); }
+static auto cb(const ui::msg::group& msg, const group_ui& ui) -> void     { fast_visit([&ui](const auto& msg) { cb_(msg, ui); }, msg); }
 
 static
 auto call_callbacks(const general_ui& ui) -> void {

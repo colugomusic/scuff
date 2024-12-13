@@ -114,24 +114,7 @@ private:
 
 using audio_buffer = std::array<float, VECTOR_SIZE * CHANNEL_COUNT>;
 
-struct device_flags {
-	enum e {
-		has_gui       = 1 << 0,
-		has_params    = 1 << 1,
-	};
-	int value = 0;
-};
-
-struct device_atomic_flags {
-	enum e {
-		is_active = 1 << 0,
-	};
-	std::atomic_int value = 0;
-};
-
 struct device_data {
-	device_flags flags;
-	device_atomic_flags atomic_flags;
 	scuff::event_buffer events_in;
 	scuff::event_buffer events_out;
 	bc::static_vector<audio_buffer, MAX_AUDIO_PORTS> audio_in;

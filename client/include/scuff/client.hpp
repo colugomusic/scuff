@@ -91,6 +91,8 @@ struct output_event {
 using on_device_editor_visible_changed = std::function<auto (id::device dev, bool visible, int64_t native_handle) -> void>;
 using on_device_state_load             = std::function<auto (load_device_result result) -> void>;
 using on_device_late_create            = std::function<auto (create_device_result result) -> void>;
+using on_device_flags_changed          = std::function<auto (id::device dev) -> void>;
+using on_device_ports_changed          = std::function<auto (id::device dev) -> void>;
 using on_device_params_changed         = std::function<auto (id::device dev) -> void>;
 using on_error                         = std::function<auto (std::string_view error) -> void>;
 using on_plugfile_broken               = std::function<auto (id::plugfile plugfile) -> void>;
@@ -164,6 +166,8 @@ struct general_ui {
 struct group_ui {
 	scuff::on_device_editor_visible_changed on_device_editor_visible_changed;
 	scuff::on_device_state_load on_device_state_load;
+	scuff::on_device_flags_changed on_device_flags_changed;
+	scuff::on_device_ports_changed on_device_ports_changed;
 	scuff::on_device_params_changed on_device_params_changed;
 	scuff::on_device_late_create on_device_late_create;
 	scuff::on_error on_error;
@@ -323,9 +327,9 @@ auto get_error(id::plugin plugin) -> std::string_view;
 [[nodiscard]]
 auto get_ext_id(id::plugin plugin) -> ext::id::plugin;
 
-// Return device info.
+// Return device port info.
 [[nodiscard]]
-auto get_info(id::device dev) -> device_info;
+auto get_port_info(id::device dev) -> device_port_info;
 
 // Return the parameter info.
 [[nodiscard]]

@@ -52,7 +52,7 @@ auto intercept_output_event(ez::safe_t, const scuff::device& dev, const scuff::e
 static
 auto write_audio_input(ez::audio_t, const scuff::model& m, const scuff::audio_input& input) -> void {
 	if (const auto dev = m.devices.find(input.dev_id)) {
-		if (dev->flags.value & device_flags::has_remote) {
+		if (dev->flags.value & client_device_flags::has_remote) {
 			auto& buffer   = dev->services->shm.data->audio_in[input.port_index];
 			input.write_to(buffer.data());
 		}
@@ -90,7 +90,7 @@ auto process_inputs(ez::audio_t, const scuff::model& m, const scuff::audio_input
 static
 auto read_audio_output(ez::audio_t, const scuff::model& m, const audio_output& output) -> void {
 	if (const auto dev = m.devices.find(output.dev_id)) {
-		if (dev->flags.value & device_flags::has_remote) {
+		if (dev->flags.value & client_device_flags::has_remote) {
 			const auto& buffer = dev->services->shm.data->audio_out[output.port_index];
 			output.read_from(buffer.data());
 		}
@@ -118,7 +118,7 @@ auto read_output_events(ez::audio_t, const scuff::model& m, const scuff::group& 
 		const auto& sbox = m.sandboxes.at(sbox_id);
 		for (const auto dev_id : sbox.devices) {
 			const auto& dev = m.devices.at(dev_id);
-			if (dev.flags.value & device_flags::has_remote) {
+			if (dev.flags.value & client_device_flags::has_remote) {
 				auto& buffer = dev.services->shm.data->events_out;
 				for (const auto& event : buffer) {
 					intercept_output_event(ez::audio, dev, event);
@@ -135,7 +135,7 @@ auto process_cross_sbox_connections(ez::audio_t, const scuff::model& m, const sc
 	for (const auto& conn : group.cross_sbox_conns) {
 		const auto& dev_out = m.devices.at(conn.out_dev_id);
 		const auto& dev_in  = m.devices.at(conn.in_dev_id);
-		if ((dev_out.flags.value & dev_in.flags.value) & device_flags::has_remote) {
+		if ((dev_out.flags.value & dev_in.flags.value) & client_device_flags::has_remote) {
 			const auto& out_buf = dev_out.services->shm.data->audio_out[conn.out_port];
 			auto& in_buf        = dev_in.services->shm.data->audio_in[conn.in_port];
 			std::copy(out_buf.begin(), out_buf.end(), in_buf.begin());
@@ -174,6 +174,7 @@ auto get_active_sandbox_count(const model& m, const scuff::group& group) -> int 
 
 static
 auto zero_inactive_device_outputs(ez::audio_t, const ez::immutable<model>& audio, const scuff::group& group) -> void {
+	const auto group_is_active = group.flags.value & group_flags::is_active;
 	for (const auto sbox_id : group.sandboxes) {
 		const auto& sbox = audio->sandboxes.at(sbox_id);
 		for (const auto dev_id : sbox.devices) {
@@ -183,7 +184,7 @@ auto zero_inactive_device_outputs(ez::audio_t, const ez::immutable<model>& audio
 				// Device may not have finished being created yet.
 				continue;
 			}
-			if (shm.data->atomic_flags.value & shm::device_atomic_flags::is_active) {
+			if (group_is_active) {
 				// Device is active so it should be outputting audio.
 				continue;
 			}
@@ -259,7 +260,7 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_create
 			// open.
 			device.services->shm = shm::open_device(device_shmid, true);
 		}
-		device.flags.value |= device_flags::has_remote;
+		device.flags.value |= client_device_flags::has_remote;
 		m.devices = m.devices.insert(device);
 		return m;
 	});
@@ -283,14 +284,28 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_editor
 }
 
 static
-auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_info& msg) -> void {
+auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_flags& msg) -> void {
 	DATA_->model.update(ez::nort, [msg](model&& m) {
-		m.devices = m.devices.update_if_exists({msg.dev_id}, [msg](device dev) {
-			dev.info = msg.info;
+		m.devices = m.devices.update({msg.dev_id}, [msg](device dev) {
+			if (msg.flags & device_flags::has_gui)    { dev.flags.value |= client_device_flags::has_gui; }
+			if (msg.flags & device_flags::has_params) { dev.flags.value |= client_device_flags::has_params; }
 			return dev;
 		});
 		return m;
 	});
+	ui::send(sbox, ui::msg::device_flags_changed{{msg.dev_id}});
+}
+
+static
+auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_port_info& msg) -> void {
+	DATA_->model.update(ez::nort, [msg](model&& m) {
+		m.devices = m.devices.update_if_exists({msg.dev_id}, [msg](device dev) {
+			dev.port_info = msg.info;
+			return dev;
+		});
+		return m;
+	});
+	ui::send(sbox, ui::msg::device_ports_changed{{msg.dev_id}});
 }
 
 static
@@ -354,7 +369,7 @@ auto process_sandbox_messages(poll_t, const sandbox& sbox) -> void {
 			for (const auto dev_id : sbox.devices) {
 				m.devices = m.devices.update(dev_id, [](device dev) {
 					dev.editor_window_native_handle = nullptr;
-					dev.flags.value &= ~device_flags::has_remote;
+					dev.flags.value &= ~client_device_flags::has_remote;
 					return dev;
 				});
 			}
@@ -730,7 +745,7 @@ auto device_disconnect(ez::nort_t, id::device dev_out_id, size_t port_out, id::d
 
 [[nodiscard]]
 auto has_remote(const device& dev) -> bool {
-	return dev.flags.value & device_flags::has_remote;
+	return dev.flags.value & client_device_flags::has_remote;
 }
 
 static
@@ -854,24 +869,14 @@ auto get_type(ez::nort_t, id::plugin id) -> plugin_type {
 auto has_gui(ez::nort_t, id::device dev) -> bool {
 	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
-	if (!shm::is_valid(device.services->shm.seg)) {
-		// Device wasn't successfully created by the sandbox process (yet?)
-		return false;
-	}
-	const auto flags   = device.services->shm.data->flags;
-	return flags.value & flags.has_gui;
+	return device.flags.value & device_flags::has_gui;
 }
 
 [[nodiscard]] static
 auto has_params(ez::nort_t, id::device dev) -> bool {
 	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
-	if (!shm::is_valid(device.services->shm.seg)) {
-		// Device wasn't successfully created by the sandbox process (yet?)
-		return false;
-	}
-	const auto flags   = device.services->shm.data->flags;
-	return flags.value & flags.has_params;
+	return device.flags.value & device_flags::has_params;
 }
 
 [[nodiscard]] static
@@ -987,7 +992,7 @@ auto gui_show(ez::nort_t, id::device dev) -> void {
 
 [[nodiscard]] static
 auto was_created_successfully(ez::nort_t, id::device dev) -> bool {
-	return DATA_->model.read(ez::nort).devices.at(dev).flags.value & device_flags::has_remote;
+	return DATA_->model.read(ez::nort).devices.at(dev).flags.value & client_device_flags::has_remote;
 }
 
 [[nodiscard]] static
@@ -1047,8 +1052,8 @@ auto get_value(ez::nort_t, id::device dev_id, idx::param param) -> double {
 }
 
 [[nodiscard]] static
-auto get_info(ez::nort_t, id::device dev_id) -> device_info {
-	return DATA_->model.read(ez::nort).devices.at(dev_id).info;
+auto get_port_info(ez::nort_t, id::device dev_id) -> device_port_info {
+	return DATA_->model.read(ez::nort).devices.at(dev_id).port_info;
 }
 
 [[nodiscard]] static
@@ -1613,8 +1618,8 @@ auto get_features(id::plugin plugin) -> std::vector<std::string> {
 	try { return impl::get_features(ez::nort, plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
-auto get_info(id::device dev) -> device_info {
-	try { return impl::get_info(ez::nort, dev); } SCUFF_EXCEPTION_WRAPPER;
+auto get_port_info(id::device dev) -> device_port_info {
+	try { return impl::get_port_info(ez::nort, dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_info(id::device dev, idx::param param) -> client_param_info {

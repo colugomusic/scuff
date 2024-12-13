@@ -188,9 +188,9 @@ auto make_client_param_info(const sbox::device& dev) -> std::vector<client_param
 }
 
 [[nodiscard]] static
-auto make_device_info(const sbox::app& app, const sbox::device& dev) -> device_info {
+auto make_device_port_info(const sbox::app& app, const sbox::device& dev) -> device_port_info {
 	if (dev.type == plugin_type::clap) {
-		return clap::make_device_info(ez::main, app, dev.id);
+		return clap::make_device_port_info(ez::main, app, dev.id);
 	}
 	throw std::runtime_error("Unsupported device type");
 }

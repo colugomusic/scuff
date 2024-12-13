@@ -14,8 +14,10 @@ namespace msg {
 
 struct device_create                 { create_device_result result; return_create_device_result callback; };
 struct device_editor_visible_changed { id::device dev; bool visible; int64_t native_handle; };
+struct device_flags_changed          { id::device dev; };
 struct device_late_create            { create_device_result result; };
 struct device_params_changed         { id::device dev; };
+struct device_ports_changed          { id::device dev; };
 struct device_state_load             { load_device_result result; };
 struct error                         { std::string error; };
 struct plugfile_broken               { id::plugfile plugfile; };
@@ -48,11 +50,13 @@ using general = std::variant<
 >;
 
 using group = std::variant<
-	device_editor_visible_changed,
 	device_create,
-	device_state_load,
-	device_params_changed,
+	device_editor_visible_changed,
+	device_flags_changed,
 	device_late_create,
+	device_params_changed,
+	device_ports_changed,
+	device_state_load,
 	error,
 	return_device_state,
 	return_param_value,

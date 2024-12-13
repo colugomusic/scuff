@@ -84,10 +84,12 @@ struct group_services {
 	std::atomic_int ref_count = 0;
 };
 
-struct device_flags {
+struct client_device_flags {
 	enum e {
 		has_remote = 1 << 0, // If set, this means the device has an active
 		                     // 'remote' counterpart in a sandbox process.
+		has_gui    = 1 << 1,
+		has_params = 1 << 2,
 	};
 	int value = 0;
 };
@@ -106,7 +108,7 @@ struct device {
 	id::device id;
 	id::plugin plugin;
 	id::sandbox sbox;
-	device_flags flags;
+	client_device_flags flags;
 	plugin_type type;
 	return_create_device_result creation_callback;
 	void* editor_window_native_handle = nullptr;
@@ -114,7 +116,7 @@ struct device {
 	immer::box<std::string> error;
 	immer::box<scuff::bytes> last_saved_state;
 	immer::vector<client_param_info> param_info;
-	device_info info;
+	device_port_info port_info;
 	std::shared_ptr<device_services> services;
 };
 

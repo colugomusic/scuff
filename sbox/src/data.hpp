@@ -29,14 +29,6 @@ struct create_gui_result {
 	uint32_t height = 0;
 };
 
-struct device_flags {
-	enum e {
-		was_created_successfully   = 1 << 0,
-		nappgui_window_was_resized = 1 << 1,
-	};
-	int value = 0;
-};
-
 struct device_ui {
 	edwin::window* window = nullptr;
 };
