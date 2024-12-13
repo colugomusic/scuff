@@ -1169,40 +1169,12 @@ namespace loguru
 		std::ostringstream _ss;
 	};
 
-	class LOGURU_EXPORT AbortLogger
-	{
-	public:
-		AbortLogger(const char* expr, const char* file, unsigned line) : _expr(expr), _file(file), _line(line) { }
-		LOGURU_NORETURN ~AbortLogger() noexcept(false);
-
-		template<typename T>
-		AbortLogger& operator<<(const T& t)
-		{
-			_ss << t;
-			return *this;
-		}
-
-		// std::endl and other iomanip:s.
-		AbortLogger& operator<<(std::ostream&(*f)(std::ostream&))
-		{
-			f(_ss);
-			return *this;
-		}
-
-	private:
-		const char*        _expr;
-		const char*        _file;
-		unsigned           _line;
-		std::ostringstream _ss;
-	};
-
 	class LOGURU_EXPORT Voidify
 	{
 	public:
 		Voidify() {}
 		// This has to be an operator with a precedence lower than << but higher than ?:
 		void operator&(const StreamLogger&) { }
-		void operator&(const AbortLogger&)  { }
 	};
 
 	/*  Helper functions for CHECK_OP_S macro.
@@ -1258,35 +1230,6 @@ namespace loguru
 #define LOG_IF_S(verbosity_name, cond) VLOG_IF_S(loguru::Verbosity_ ## verbosity_name, cond)
 #define VLOG_S(verbosity)              VLOG_IF_S(verbosity, true)
 #define LOG_S(verbosity_name)          VLOG_S(loguru::Verbosity_ ## verbosity_name)
-
-// -----------------------------------------------
-// ABORT_S macro. Usage:  ABORT_S() << "Causo of error: " << details;
-
-#define ABORT_S() loguru::Voidify() & loguru::AbortLogger("ABORT: ", __FILE__, __LINE__)
-
-// -----------------------------------------------
-// CHECK_S macros:
-
-#define CHECK_WITH_INFO_S(cond, info)                                                              \
-	LOGURU_PREDICT_TRUE((cond) == true)                                                            \
-		? (void)0                                                                                  \
-		: loguru::Voidify() & loguru::AbortLogger("CHECK FAILED:  " info "  ", __FILE__, __LINE__)
-
-#define CHECK_S(cond) CHECK_WITH_INFO_S(cond, #cond)
-#define CHECK_NOTNULL_S(x) CHECK_WITH_INFO_S((x) != nullptr, #x " != nullptr")
-
-#define CHECK_OP_S(function_name, expr1, op, expr2)                                                \
-	while (auto error_string = loguru::function_name(#expr1 " " #op " " #expr2,                    \
-													 loguru::referenceable_value(expr1), #op,      \
-													 loguru::referenceable_value(expr2)))          \
-		loguru::AbortLogger(error_string->c_str(), __FILE__, __LINE__)
-
-#define CHECK_EQ_S(expr1, expr2) CHECK_OP_S(check_EQ_impl, expr1, ==, expr2)
-#define CHECK_NE_S(expr1, expr2) CHECK_OP_S(check_NE_impl, expr1, !=, expr2)
-#define CHECK_LE_S(expr1, expr2) CHECK_OP_S(check_LE_impl, expr1, <=, expr2)
-#define CHECK_LT_S(expr1, expr2) CHECK_OP_S(check_LT_impl, expr1, < , expr2)
-#define CHECK_GE_S(expr1, expr2) CHECK_OP_S(check_GE_impl, expr1, >=, expr2)
-#define CHECK_GT_S(expr1, expr2) CHECK_OP_S(check_GT_impl, expr1, > , expr2)
 
 #if LOGURU_DEBUG_LOGGING
 	// Debug logging enabled:

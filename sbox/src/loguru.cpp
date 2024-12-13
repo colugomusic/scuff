@@ -1502,12 +1502,6 @@ namespace loguru
 		log(_verbosity, _file, _line, LOGURU_FMT(s), message.c_str());
 	}
 
-	AbortLogger::~AbortLogger() noexcept(false)
-	{
-		auto message = _ss.str();
-		loguru::log_and_abort(1, _expr, _file, _line, LOGURU_FMT(s), message.c_str());
-	}
-
 	#endif // LOGURU_WITH_STREAMS
 
 	// ----------------------------------------------------------------------------
