@@ -57,7 +57,6 @@ auto make_empty_group_reporter() -> scuff::group_ui {
 	ui.on_sbox_started = [](scuff::id::sandbox sbox) {};
 	ui.on_sbox_warning = [](scuff::id::sandbox sbox, std::string_view warning) {};
 	return ui;
-
 }
 
 auto make_empty_ui_reporter() -> scuff::general_ui {
@@ -105,6 +104,28 @@ TEST_CASE("reload failed device") {
 	CHECK_NOTHROW(scuff::erase(device.id));
 	CHECK_NOTHROW(scuff::erase(sbox_id));
 	CHECK_NOTHROW(scuff::erase(group_id));
+}
+
+TEST_CASE("synchronous device duplication") {
+	scuff::id::group group1_id, group2_id;
+	scuff::id::sandbox sbox1_id, sbox2_id;
+	scuff::create_device_result src_device, dst_device;
+	REQUIRE_NOTHROW(group1_id = scuff::create_group(nullptr));
+	REQUIRE_NOTHROW(group2_id = scuff::create_group(nullptr));
+	REQUIRE_NOTHROW(sbox1_id = scuff::create_sandbox(group1_id, sbox_exe_path_.string()));
+	REQUIRE_NOTHROW(sbox2_id = scuff::create_sandbox(group2_id, sbox_exe_path_.string()));
+	REQUIRE_NOTHROW(src_device = scuff::create_device(sbox1_id, scuff::plugin_type::clap, {"studio.kx.distrho.MaGigaverb"}));
+	REQUIRE(src_device.success);
+	REQUIRE(scuff::was_created_successfully(src_device.id));
+	REQUIRE_NOTHROW(dst_device = scuff::duplicate(src_device.id, sbox2_id));
+	REQUIRE(dst_device.success);
+	REQUIRE(scuff::was_created_successfully(dst_device.id));
+	CHECK_NOTHROW(scuff::erase(src_device.id));
+	CHECK_NOTHROW(scuff::erase(dst_device.id));
+	CHECK_NOTHROW(scuff::erase(sbox1_id));
+	CHECK_NOTHROW(scuff::erase(sbox2_id));
+	CHECK_NOTHROW(scuff::erase(group1_id));
+	CHECK_NOTHROW(scuff::erase(group2_id));
 }
 
 //TEST_CASE("finish scanning") {

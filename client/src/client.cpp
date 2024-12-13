@@ -734,7 +734,7 @@ auto has_remote(const device& dev) -> bool {
 }
 
 static
-auto duplicate_async(ez::nort_t, id::device src_dev_id, id::sandbox dst_sbox_id, return_create_device_result fn) -> id::device {
+auto duplicate_async(ez::nort_t, id::device src_dev_id, id::sandbox dst_sbox_id, return_create_device_result return_fn, bool return_to_ui) -> id::device {
 	auto m                   = DATA_->model.read(ez::nort);
 	const auto new_dev_id    = id::device{scuff::id_gen_++};
 	const auto src_dev       = m.devices.at({src_dev_id});
@@ -743,29 +743,31 @@ auto duplicate_async(ez::nort_t, id::device src_dev_id, id::sandbox dst_sbox_id,
 	const auto plugin_ext_id = src_dev.plugin_ext_id;
 	const auto plugin        = src_dev.plugin ? src_dev.plugin : find(ez::nort, plugin_ext_id);
 	const auto type          = src_dev.type;
-	fn = [dst_sbox, fn](create_device_result result) {
-		ui::send(dst_sbox, ui::msg::device_create{result, fn});
-	};
+	if (return_to_ui) {
+		return_fn = [dst_sbox, return_fn](create_device_result result) {
+			ui::send(dst_sbox, ui::msg::device_create{result, return_fn});
+		};
+	}
 	if (!plugin) {
 		// Plugin isn't known yet.
-		DATA_->model.update(ez::nort, [new_dev_id, dst_sbox, type, plugin_ext_id, fn](model&& m) {
-			return create_unknown_plugin_device(std::move(m), new_dev_id, dst_sbox, type, plugin_ext_id, fn);
+		DATA_->model.update(ez::nort, [new_dev_id, dst_sbox, type, plugin_ext_id, return_fn](model&& m) {
+			return create_unknown_plugin_device(std::move(m), new_dev_id, dst_sbox, type, plugin_ext_id, return_fn);
 		});
 		return new_dev_id;
 	}
 	if (!has_remote(src_dev)) {
 		// Plugin is known but the source device hasn't been created remotely yet.
-		DATA_->model.update(ez::nort, [new_dev_id, dst_sbox, src_dev_id, plugin, fn](model&& m) {
-			return create_plugin_device_async(std::move(m), new_dev_id, dst_sbox, m.plugins.at(plugin), fn);
+		DATA_->model.update(ez::nort, [new_dev_id, dst_sbox, src_dev_id, plugin, return_fn](model&& m) {
+			return create_plugin_device_async(std::move(m), new_dev_id, dst_sbox, m.plugins.at(plugin), return_fn);
 		});
 		return new_dev_id;
 	}
 	// We're going to send a message to the source sandbox to save the source device.
 	// When the saved state is returned, call this function with it:
-	const auto save_cb = src_sbox.services->return_buffers.states.put([fn, new_dev_id, dst_sbox, plugin](const std::vector<std::byte>& src_state) mutable {
+	const auto save_cb = src_sbox.services->return_buffers.states.put([return_fn, new_dev_id, dst_sbox, plugin](const std::vector<std::byte>& src_state) mutable {
 		// Now we're going to send a message to the destination sandbox to actually create the new device.
 		// When the new device is created, call this function with it:
-		fn = [fn, dst_sbox, src_state](create_device_result result) {
+		auto wrapper = [fn = return_fn, dst_sbox, src_state](create_device_result result) {
 			if (result.success) {
 				// Remote device was created successfully.
 				// Now send a message to the destination sandbox to load the saved state into the new device.
@@ -774,8 +776,8 @@ auto duplicate_async(ez::nort_t, id::device src_dev_id, id::sandbox dst_sbox_id,
 			// Call user's callback
 			fn(result);
 		};
-		DATA_->model.update(ez::nort, [=](model&& m){
-			return create_plugin_device_async(std::move(m), new_dev_id, dst_sbox, m.plugins.at(plugin), fn);
+		DATA_->model.update(ez::nort, [new_dev_id, dst_sbox, plugin, wrapper](model&& m){
+			return create_plugin_device_async(std::move(m), new_dev_id, dst_sbox, m.plugins.at(plugin), wrapper);
 		});
 	});
 	src_sbox.services->enqueue(msg::in::device_save{src_dev_id.value, save_cb});
@@ -792,7 +794,7 @@ auto duplicate(ez::nort_t, id::device src_dev_id, id::sandbox dst_sbox_id) -> cr
 	auto ready = [&result] {
 		return result.has_value();
 	};
-	duplicate_async(ez::nort, src_dev_id, dst_sbox_id, fn);
+	duplicate_async(ez::nort, src_dev_id, dst_sbox_id, fn, false);
 	if (!bso.wait_for(ready)) {
 		throw std::runtime_error("Timed out waiting for device duplication.");
 	}
@@ -1180,6 +1182,8 @@ auto restart(ez::nort_t, id::sandbox sbox, std::string_view sbox_exe_path) -> vo
 	for (const auto dev_id : sandbox.devices) {
 		const auto& dev = m.devices.at(dev_id);
 		const auto with_created_device = [m, dev](create_device_result result){
+			const auto sbox = m.sandboxes.at(dev.sbox);
+			ui::send(sbox, ui::msg::device_late_create{result});
 			if (result.success) {
 				load_async(ez::nort, m, dev, dev.last_saved_state, [](load_device_result){});
 			}
@@ -1534,7 +1538,7 @@ auto duplicate(id::device dev, id::sandbox sbox) -> create_device_result {
 }
 
 auto duplicate_async(id::device dev, id::sandbox sbox, return_create_device_result fn) -> id::device {
-	try { return impl::duplicate_async(ez::nort, dev, sbox, fn); } SCUFF_EXCEPTION_WRAPPER;
+	try { return impl::duplicate_async(ez::nort, dev, sbox, fn, true); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto erase(id::device dev) -> void {

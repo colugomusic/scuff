@@ -139,16 +139,37 @@ auto gui_test(sbox::app* app) -> int {
 }
 
 static
-auto run_tests(sbox::app* app) -> int {
+auto run_tests(sbox::app* app, int pid) -> int {
 	app_for_tests_only_ = app;
-	app->options.sbox_shmid = "scuff-sbox-test+" + std::to_string(scuff::os::get_process_id());
+	app->options.sbox_shmid = "scuff-sbox-test+" + std::to_string(pid);
 	doctest::Context ctx;
 	return ctx.run();
 }
 
 static
-auto get_log_file_path() -> fs::path {
-	return fs::path(sago::getDataHome()) / "scuff-sbox" / "log.txt";
+auto cleanup_old_log_files(const fs::path& dir) -> void {
+	const auto now = std::chrono::system_clock::now();
+	for (const auto& entry : fs::directory_iterator(dir)) {
+		if (fs::is_regular_file(entry)) {
+			const auto last_write_time = fs::last_write_time(entry);
+			const auto last_write_time_system = std::chrono::clock_cast<std::chrono::system_clock>(last_write_time);
+			const auto age = now - last_write_time_system;
+			if (age > std::chrono::hours{48}) {
+				fs::remove(entry);
+			}
+		}
+	}
+}
+
+static
+auto get_log_dir() -> fs::path {
+	return fs::path(sago::getDataHome()) / "scuff-sbox";
+}
+
+static
+auto get_log_file_path(const fs::path& dir, int pid) -> fs::path {
+	auto filename = std::format("{}.txt", pid);
+	return dir / filename;
 }
 
 auto make_window_icon() -> sbox::icon {
@@ -186,10 +207,13 @@ auto make_window_icon() -> sbox::icon {
 }
 
 auto go(int argc, const char* argv[]) -> int {
+	const auto pid = scuff::os::get_process_id();
+	const auto log_dir = get_log_dir();
+	cleanup_old_log_files(log_dir);
 	sbox::app app;
 	loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
 	loguru::init(argc, const_cast<char**>(argv));
-	loguru::add_file(get_log_file_path().string().c_str(), loguru::Truncate, loguru::Verbosity_MAX);
+	loguru::add_file(get_log_file_path(log_dir, pid).string().c_str(), loguru::Truncate, loguru::Verbosity_MAX);
 	try {
 		LOG_S(INFO) << "scuff-sbox started";
 		app.options     = cmdline::get_options(app, argc, argv);
@@ -197,7 +221,7 @@ auto go(int argc, const char* argv[]) -> int {
 		app.window_icon = make_window_icon();
 		if (app.mode == sbox::mode::sandbox)  { return sandbox(&app); }
 		if (app.mode == sbox::mode::gui_test) { return gui_test(&app); }
-		if (app.mode == sbox::mode::test)     { return run_tests(&app); }
+		if (app.mode == sbox::mode::test)     { return run_tests(&app, pid); }
 	}
 	catch (const std::exception& err) {
 		LOG_S(ERROR) << err.what();
