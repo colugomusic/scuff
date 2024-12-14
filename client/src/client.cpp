@@ -7,6 +7,7 @@
 #include "scan.hpp"
 #include <clap/plugin-features.h>
 #include <mutex>
+#include <platform_folders.h>
 #include <readerwriterqueue.h>
 #include <source_location>
 #include <string>
@@ -17,6 +18,7 @@
 	catch (...)                       { throw scuff::runtime_error(std::source_location::current().function_name(), "Unknown error"); }
 
 namespace bip = boost::interprocess;
+namespace fs  = std::filesystem;
 
 namespace scuff::impl {
 
@@ -24,8 +26,10 @@ using poll_t = ez::nort_t;
 static constexpr auto poll = poll_t{};
 
 [[nodiscard]] static
-auto make_sbox_exe_args(std::string_view group_id, std::string_view sandbox_id, uint64_t parent_window) -> std::vector<std::string> {
+auto make_sbox_exe_args(std::string_view pid, std::string_view group_id, std::string_view sandbox_id, uint64_t parent_window) -> std::vector<std::string> {
 	std::vector<std::string> args;
+	args.push_back("--pid");
+	args.push_back(std::string{pid});
 	args.push_back("--group");
 	args.push_back(std::string{group_id});
 	args.push_back("--sandbox");
@@ -869,14 +873,14 @@ auto get_type(ez::nort_t, id::plugin id) -> plugin_type {
 auto has_gui(ez::nort_t, id::device dev) -> bool {
 	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
-	return device.flags.value & device_flags::has_gui;
+	return device.flags.value & client_device_flags::has_gui;
 }
 
 [[nodiscard]] static
 auto has_params(ez::nort_t, id::device dev) -> bool {
 	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
-	return device.flags.value & device_flags::has_params;
+	return device.flags.value & client_device_flags::has_params;
 }
 
 [[nodiscard]] static
@@ -1181,7 +1185,7 @@ auto restart(ez::nort_t, id::sandbox sbox, std::string_view sbox_exe_path) -> vo
 	}
 	const auto group_shmid   = group.services->shm.seg.id;
 	const auto sandbox_shmid = sandbox.services->get_shmid();
-	const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, reinterpret_cast<uint64_t>(group.parent_window_handle));
+	const auto exe_args      = make_sbox_exe_args(std::to_string(os::get_process_id()), group_shmid, sandbox_shmid, reinterpret_cast<uint64_t>(group.parent_window_handle));
 	sandbox.services->proc   = bp::child{std::string{sbox_exe_path}, exe_args};
 	sandbox.flags.value     |= sandbox_flags::launched;
 	for (const auto dev_id : sandbox.devices) {
@@ -1289,7 +1293,7 @@ auto create_sandbox(ez::nort_t, id::group group_id, std::string_view sbox_exe_pa
 		const auto& group        = m.groups.at({group_id});
 		const auto group_shmid   = group.services->shm.seg.id;
 		const auto sandbox_shmid = shm::make_sandbox_id(DATA_->instance_id, sbox.id);
-		const auto exe_args      = make_sbox_exe_args(group_shmid, sandbox_shmid, reinterpret_cast<uint64_t>(group.parent_window_handle));
+		const auto exe_args      = make_sbox_exe_args(std::to_string(os::get_process_id()), group_shmid, sandbox_shmid, reinterpret_cast<uint64_t>(group.parent_window_handle));
 		auto proc                = bp::child{std::string{sbox_exe_path}, exe_args};
 		if (!proc.running()) {
 			throw std::runtime_error("Failed to launch sandbox process.");
@@ -1445,13 +1449,23 @@ auto unref(ez::nort_t, id::sandbox id) -> void {
 	}
 }
 
+auto make_shm_emulation_process_folder() -> void {
+	fs::create_directories(shm::get_shm_emulation_process_dir(sago::getDataHome(), std::to_string(os::get_process_id())));
+}
+
+//auto remove_shm_emulation_process_folder() -> void {
+//	fs::remove_all(shm::get_shm_emulation_process_dir(sago::getDataHome(), std::to_string(os::get_process_id())));
+//}
+
 auto init() -> void {
+	// TOODOO: figure out if we need to handle cleanup of old shm emulation files
 	if (scuff::initialized_) { return; }
 	try {
 		scuff::DATA_               = std::make_unique<scuff::data>();
 		scuff::DATA_->instance_id  = "scuff+" + std::to_string(scuff::os::get_process_id());
 		scuff::DATA_->poll_thread  = std::jthread{impl::poll_thread};
 		scuff::DATA_->ui_thread_id = std::this_thread::get_id();
+		make_shm_emulation_process_folder();
 		scuff::initialized_        = true;
 	} catch (const std::exception& err) {
 		scuff::DATA_.reset();
@@ -1473,6 +1487,7 @@ auto shutdown() -> void {
 		scuff::DATA_->scan_thread.join();
 	}
 	scuff::DATA_.reset();
+	//remove_shm_emulation_process_folder();
 	scuff::initialized_ = false;
 }
 
@@ -1783,3 +1798,15 @@ auto unref(id::sandbox id) -> void {
 }
 
 } // scuff
+
+namespace boost::interprocess::ipcdetail {
+
+auto get_shared_dir(std::string& shared_dir) -> void  {
+	shared_dir = scuff::shm::get_shm_emulation_process_dir(sago::getDataHome(), std::to_string(scuff::os::get_process_id())).string();
+} 
+
+auto get_shared_dir(std::wstring& shared_dir) -> void {
+	shared_dir = scuff::shm::get_shm_emulation_process_dir(sago::getDataHome(), std::to_string(scuff::os::get_process_id())).wstring();
+} 
+
+} // namespace boost::interprocess::ipcdetail

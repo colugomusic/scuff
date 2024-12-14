@@ -20,7 +20,7 @@ namespace fs = std::filesystem;
 
 namespace scuff::sbox::main {
 
-static sbox::app* app_for_tests_only_ = nullptr;
+static sbox::app* app_ = nullptr;
 
 static
 auto destroy_all_editor_windows(const sbox::app& app) -> void {
@@ -80,6 +80,7 @@ auto send_msgs_out(sbox::app* app) -> void {
 }
 
 auto sandbox(sbox::app* app) -> int {
+	LOG_S(INFO) << "client PID: " << app->options.client_pid;
 	LOG_S(INFO) << "group: " << app->options.group_shmid;
 	LOG_S(INFO) << "sandbox: " << app->options.sbox_shmid;
 	app->shm_group              = shm::open_group(app->options.group_shmid);
@@ -140,7 +141,6 @@ auto gui_test(sbox::app* app) -> int {
 
 static
 auto run_tests(sbox::app* app, int pid) -> int {
-	app_for_tests_only_ = app;
 	app->options.sbox_shmid = "scuff-sbox-test+" + std::to_string(pid);
 	doctest::Context ctx;
 	return ctx.run();
@@ -149,6 +149,9 @@ auto run_tests(sbox::app* app, int pid) -> int {
 static
 auto cleanup_old_log_files(const fs::path& dir) -> void {
 	const auto now = std::chrono::system_clock::now();
+	if (!fs::exists(dir)) {
+		return;
+	}
 	for (const auto& entry : fs::directory_iterator(dir)) {
 		if (fs::is_regular_file(entry)) {
 			const auto last_write_time = fs::last_write_time(entry);
@@ -211,6 +214,7 @@ auto go(int argc, const char* argv[]) -> int {
 	const auto log_dir = get_log_dir();
 	cleanup_old_log_files(log_dir);
 	sbox::app app;
+	app_ = &app;
 	loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
 	loguru::init(argc, const_cast<char**>(argv));
 	loguru::add_file(get_log_file_path(log_dir, pid).string().c_str(), loguru::Truncate, loguru::Verbosity_MAX);
@@ -233,12 +237,25 @@ auto go(int argc, const char* argv[]) -> int {
 }
 
 TEST_CASE("com.FabFilter.preset-discovery.Saturn.2") {
-	const auto app = app_for_tests_only_;
 	const auto plugfile_path = "C:\\Program Files\\Common Files\\CLAP\\FabFilter Saturn 2.clap";
-	op::device_create(app, plugin_type::clap, id::device{1}, plugfile_path, "com.FabFilter.preset-discovery.Saturn.2");
+	op::device_create(app_, plugin_type::clap, id::device{1}, plugfile_path, "com.FabFilter.preset-discovery.Saturn.2");
 }
 
 } // scuff::sbox::main
+
+namespace boost::interprocess::ipcdetail {
+
+auto get_shared_dir(std::string& shared_dir) -> void  {
+	const auto pid = scuff::sbox::main::app_->options.client_pid;
+	shared_dir = scuff::shm::get_shm_emulation_process_dir(sago::getDataHome(), pid).string();
+} 
+
+auto get_shared_dir(std::wstring& shared_dir) -> void {
+	const auto pid = scuff::sbox::main::app_->options.client_pid;
+	shared_dir = scuff::shm::get_shm_emulation_process_dir(sago::getDataHome(), pid).wstring();
+} 
+
+} // namespace boost::interprocess::ipcdetail
 
 auto main(int argc, const char* argv[]) -> int {
 	return scuff::sbox::main::go(argc, argv);

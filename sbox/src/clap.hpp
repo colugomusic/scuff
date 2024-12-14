@@ -581,6 +581,7 @@ auto init_params(ez::main_t, sbox::device&& dev, const clap::device& clap_dev) -
 	if (iface.params) {
 		dev.flags.value |= scuff::device_flags::has_params;
 	}
+	LOG_S(INFO) << "flags is now: " << dev.flags.value;
 	return dev;
 }
 
@@ -885,6 +886,7 @@ auto init_gui(ez::main_t, sbox::device&& dev, const clap::device& clap_dev) -> s
 			return dev;
 		}
 	}
+	LOG_S(INFO) << "flags is now: " << dev.flags.value;
 	return dev;
 }
 

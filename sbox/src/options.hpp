@@ -11,6 +11,7 @@ struct options {
 	std::string sbox_shmid;
 	std::string gui_file;
 	std::string gui_id;
+	std::string client_pid;
 	bool test = false;
 	edwin::native_handle parent_window;
 };

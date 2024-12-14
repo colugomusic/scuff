@@ -16,7 +16,8 @@ auto get_options(const sbox::app& app, int argc, const char* argv[]) -> sbox::op
 		("sandbox",       po::value<std::string>(&options.sbox_shmid), "Sandbox shared memory ID")
 		("gui-file",      po::value<std::string>(&options.gui_file), "Path to plugfile to open for GUI testing")
 		("gui-id",        po::value<std::string>(&options.gui_id)->default_value("ANY"), "ID of the plugin to open for GUI testing. If not set, the first plugin in the file will be used")
-		("test", po::bool_switch(&options.test), "Run tests")
+		("pid",           po::value<std::string>(&options.client_pid), "Client process ID")
+		("test",          po::bool_switch(&options.test), "Run tests")
 		("parent-window", po::value<uint64_t>(&parent_window), "Parent window handle")
 		;
 	po::variables_map vm;

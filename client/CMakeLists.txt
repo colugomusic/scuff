@@ -21,6 +21,7 @@ CPMAddPackage(NAME clap              GITHUB_REPOSITORY free-audio/clap          
 CPMAddPackage(NAME ez                GITHUB_REPOSITORY colugomusic/ez               GIT_TAG master                   )
 CPMAddPackage(NAME immer             GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                   )
 CPMAddPackage(NAME json              GITHUB_REPOSITORY nlohmann/json                GIT_TAG v3.11.3                  )
+CPMAddPackage(NAME PlatformFolders   GITHUB_REPOSITORY sago007/PlatformFolders      GIT_TAG 4.2.0                    )
 CPMAddPackage(NAME readerwriterqueue GITHUB_REPOSITORY cameron314/readerwriterqueue GIT_TAG v1.0.6                   )
 source_group(common REGULAR_EXPRESSION [[scuff/common/]])
 # Library ######################################################################
@@ -52,6 +53,7 @@ target_link_libraries(scuff-client PRIVATE
 	immer
 	nlohmann_json::nlohmann_json
 	readerwriterqueue
+	sago::platform_folders
 	scuff::common::sources
 )
 target_link_libraries(scuff-client PUBLIC
@@ -62,6 +64,9 @@ target_compile_features(scuff-client PUBLIC
 )
 target_compile_options(scuff-client PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
+)
+target_compile_definitions(scuff-client PRIVATE
+	BOOST_INTERPROCESS_SHARED_DIR_FUNC 
 )
 # Tests ########################################################################
 list (APPEND scuff-client-test-src

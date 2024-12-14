@@ -42,6 +42,7 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_cr
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_flags{msg.dev_id, dev.flags.value});
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_port_info{msg.dev_id, op::make_device_port_info(*app, dev)});
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_param_info{msg.dev_id, op::make_client_param_info(dev)});
+		DLOG_S(INFO) << "passing flags to client: " << dev.flags.value;
 	}
 	catch (const std::exception& err) {
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_create_fail{msg.dev_id, err.what(), msg.callback});

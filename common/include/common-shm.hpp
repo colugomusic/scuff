@@ -18,6 +18,7 @@
 
 namespace bc  = boost::container;
 namespace bip = boost::interprocess;
+namespace fs  = std::filesystem;
 
 namespace scuff::shm {
 
@@ -285,6 +286,16 @@ auto open_or_create_device(std::string_view id, bool remove_when_done) -> device
 [[nodiscard]] static
 auto make_device_id(std::string_view sbox_shmid, id::device dev_id) -> std::string {
 	return std::format("{}+dev+{}", sbox_shmid, dev_id.value);
+}
+
+[[nodiscard]] static
+auto get_shm_emulation_root_dir(fs::path data_home_dir) -> fs::path {
+	return data_home_dir / "scuff";
+}
+
+[[nodiscard]] static
+auto get_shm_emulation_process_dir(fs::path data_home_dir, std::string_view pid) -> fs::path {
+	return get_shm_emulation_root_dir(data_home_dir) / pid;
 }
 
 } // scuff::shm
