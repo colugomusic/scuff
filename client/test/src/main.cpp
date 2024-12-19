@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <scuff/client.hpp>
 #include <scuff/managed.hpp>
+#include <thread>
 #include <vector>
 
 namespace fs = std::filesystem;
