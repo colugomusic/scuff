@@ -6,6 +6,8 @@
 #include <flux.hpp>
 #include <pthread.h>
 #include <sched.h>
+#include <signal.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 namespace scuff::os::dso {
@@ -64,6 +66,23 @@ auto is_clap_file(const std::filesystem::path& path) -> bool {
 
 auto is_vst3_file(const std::filesystem::path& path) -> bool {
 	return util::has_extension_case_insensitive(path, VST3_EXT);
+}
+
+auto process_is_running(int pid) -> bool {
+	if (kill(pid, 0) == 0) {
+		return true; // Process is running
+	}
+	else {
+		if (errno == ESRCH) {
+			// ESRCH: No such process
+			return false;
+		}
+		else if (errno == EPERM) {
+			// EPERM: Process exists but no permission to signal it
+			return true;
+		}
+	}
+	return false;
 }
 
 auto redirect_stream(FILE* stream) -> int {

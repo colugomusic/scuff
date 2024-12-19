@@ -171,7 +171,7 @@ auto set_render_mode(sbox::app* app, id::device dev_id, scuff::render_mode mode)
 	}
 }
 
-[[nodiscard]] static
+[[nodiscard]]
 auto make_client_param_info(const sbox::device& dev) -> std::vector<client_param_info> {
 	std::vector<client_param_info> client_infos;
 	for (const auto& info : dev.param_info) {

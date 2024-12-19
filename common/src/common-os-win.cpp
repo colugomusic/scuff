@@ -5,7 +5,10 @@
 #include <flux.hpp>
 #include <io.h>
 #include <optional>
+#include <Windows.h>
+#include <Psapi.h>
 #include <ShlObj.h>
+
 
 namespace scuff::os::dso {
 
@@ -83,6 +86,26 @@ auto is_clap_file(const std::filesystem::path& path) -> bool {
 
 auto is_vst3_file(const std::filesystem::path& path) -> bool {
 	return scuff::util::has_extension_case_insensitive(path, VST3_EXT);
+}
+
+auto process_is_running(int pid) -> bool {
+	DWORD pid_count;
+	if (!EnumProcesses(nullptr, 0, &pid_count)) {
+		return false;
+	}
+	if (pid_count == 0) {
+		return false;
+	}
+	auto pid_buf = std::vector<DWORD>(pid_count);
+	if (!EnumProcesses(pid_buf.data(), pid_count * sizeof(DWORD), &pid_count)) {
+		return false;
+	}
+	for (const auto p : pid_buf) {
+		if (p == pid) {
+			return true;
+		}
+	}
+	return false;
 }
 
 auto redirect_stream(FILE* stream) -> int {

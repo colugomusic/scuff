@@ -204,12 +204,12 @@ auto retry_failed_devices(scuff::plugin plugin, scuff::scan_flags flags) -> void
 					}
 					ui::send(group, ui::msg::device_late_create{result});
 				};
-				const auto callback = sbox.services->return_buffers.device_create_results.put(fn);
+				const auto callback = sbox.service->return_buffers.device_create_results.put(fn);
 				dev.plugin            = plugin.id;
 				dev.creation_callback = {};
 				m.devices = m.devices.insert(dev);
 				DATA_->model.set(ez::nort, m);
-				sbox.services->enqueue(msg::in::device_create{dev.id.value, dev.type, plugfile.path, plugin.ext_id.value, callback});
+				sbox.service->enqueue(msg::in::device_create{dev.id.value, dev.type, plugfile.path, plugin.ext_id.value, callback});
 			}
 		}
 	}

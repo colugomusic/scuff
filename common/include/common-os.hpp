@@ -16,6 +16,7 @@ namespace scuff::os {
 [[nodiscard]] auto get_system_search_paths() -> std::vector<std::filesystem::path>;
 [[nodiscard]] auto is_clap_file(const std::filesystem::path& path) -> bool;
 [[nodiscard]] auto is_vst3_file(const std::filesystem::path& path) -> bool;
+[[nodiscard]] auto process_is_running(int pid) -> bool;
 [[nodiscard]] auto redirect_stream(FILE* stream) -> int;
 auto restore_stream(FILE* stream, int old) -> void;
 auto set_realtime_priority(std::jthread* thread) -> void;

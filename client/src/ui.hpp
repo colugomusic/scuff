@@ -13,7 +13,7 @@ auto send(const ui::msg::general& msg) -> void {
 
 static
 auto send(const scuff::group& group, const ui::msg::group& msg) -> void {
-	group.services->ui.lock()->push_back(msg);
+	group.service->ui.lock()->push_back(msg);
 }
 
 static
@@ -83,7 +83,7 @@ static
 auto call_callbacks(scuff::id::group group_id, const group_ui& ui) -> void {
 	const auto m      = DATA_->model.read(ez::ui);
 	const auto& group = m.groups.at(group_id);
-	while (const auto msg = pop_msg(&group.services->ui)) {
+	while (const auto msg = pop_msg(&group.service->ui)) {
 		cb(*msg, ui);
 	}
 }

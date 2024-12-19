@@ -42,14 +42,14 @@ auto make_sbox_exe_args(std::string_view pid, std::string_view group_id, std::st
 static
 auto intercept_input_event(ez::safe_t, const scuff::device& dev, const scuff::event& event) -> void {
 	if (std::holds_alternative<scuff::events::param_value>(event)) {
-		dev.services->dirty_marker++;
+		dev.service->dirty_marker++;
 	}
 }
 
 static
 auto intercept_output_event(ez::safe_t, const scuff::device& dev, const scuff::event& event) -> void {
 	if (std::holds_alternative<scuff::events::param_value>(event)) {
-		dev.services->dirty_marker++;
+		dev.service->dirty_marker++;
 	}
 }
 
@@ -57,7 +57,7 @@ static
 auto write_audio_input(ez::audio_t, const scuff::model& m, const scuff::audio_input& input) -> void {
 	if (const auto dev = m.devices.find(input.dev_id)) {
 		if (dev->flags.value & client_device_flags::has_remote) {
-			auto& buffer   = dev->services->shm.data->audio_in[input.port_index];
+			auto& buffer   = dev->service->shm.data->audio_in[input.port_index];
 			input.write_to(buffer.data());
 		}
 	}
@@ -80,7 +80,7 @@ auto write_input_events(ez::audio_t, const scuff::model& m, const scuff::input_e
 	for (const auto& event : event_buffer) {
 		if (const auto dev = m.devices.find(event.device_id)) {
 			intercept_input_event(ez::audio, *dev, event.event);
-			dev->services->shm.data->events_in.push_back(event.event);
+			dev->service->shm.data->events_in.push_back(event.event);
 		}
 	}
 }
@@ -95,7 +95,7 @@ static
 auto read_audio_output(ez::audio_t, const scuff::model& m, const audio_output& output) -> void {
 	if (const auto dev = m.devices.find(output.dev_id)) {
 		if (dev->flags.value & client_device_flags::has_remote) {
-			const auto& buffer = dev->services->shm.data->audio_out[output.port_index];
+			const auto& buffer = dev->service->shm.data->audio_out[output.port_index];
 			output.read_from(buffer.data());
 		}
 	}
@@ -123,7 +123,7 @@ auto read_output_events(ez::audio_t, const scuff::model& m, const scuff::group& 
 		for (const auto dev_id : sbox.devices) {
 			const auto& dev = m.devices.at(dev_id);
 			if (dev.flags.value & client_device_flags::has_remote) {
-				auto& buffer = dev.services->shm.data->events_out;
+				auto& buffer = dev.service->shm.data->events_out;
 				for (const auto& event : buffer) {
 					intercept_output_event(ez::audio, dev, event);
 					output_events.push({dev_id, event});
@@ -140,8 +140,8 @@ auto process_cross_sbox_connections(ez::audio_t, const scuff::model& m, const sc
 		const auto& dev_out = m.devices.at(conn.out_dev_id);
 		const auto& dev_in  = m.devices.at(conn.in_dev_id);
 		if ((dev_out.flags.value & dev_in.flags.value) & client_device_flags::has_remote) {
-			const auto& out_buf = dev_out.services->shm.data->audio_out[conn.out_port];
-			auto& in_buf        = dev_in.services->shm.data->audio_in[conn.in_port];
+			const auto& out_buf = dev_out.service->shm.data->audio_out[conn.out_port];
+			auto& in_buf        = dev_in.service->shm.data->audio_in[conn.in_port];
 			std::copy(out_buf.begin(), out_buf.end(), in_buf.begin());
 		}
 	}
@@ -169,7 +169,7 @@ auto get_active_sandbox_count(const model& m, const scuff::group& group) -> int 
 	int total = 0;
 	for (const auto sbox_id : group.sandboxes) {
 		const auto& sbox = m.sandboxes.at(sbox_id);
-		if (launched(sbox) && confirmed_active(sbox) && sbox.services->proc.running()) {
+		if (launched(sbox) && confirmed_active(sbox) && sbox.service->proc.running()) {
 			total++;
 		}
 	}
@@ -183,7 +183,7 @@ auto zero_inactive_device_outputs(ez::audio_t, const ez::immutable<model>& audio
 		const auto& sbox = audio->sandboxes.at(sbox_id);
 		for (const auto dev_id : sbox.devices) {
 			const auto& dev = audio->devices.at(dev_id);
-			const auto& shm = dev.services->shm;
+			const auto& shm = dev.service->shm;
 			if (!shm::is_valid(shm.seg)) {
 				// Device may not have finished being created yet.
 				continue;
@@ -206,16 +206,16 @@ auto do_sandbox_processing(ez::audio_t, const ez::immutable<model>& audio, const
 	auto next_sandbox_signal = [&sandbox_iterator, &audio]() -> const ipc::local_event& {
 		const auto sandbox_id = *sandbox_iterator;
 		const auto& sandbox = audio->sandboxes.at(sandbox_id);
-		return sandbox.services->shm.signaling.work_begin;
+		return sandbox.service->shm.signaling.work_begin;
 	};
-	if (!signaling::sandboxes_work_begin(group.services->signaler, group.total_active_sandboxes, next_sandbox_signal)) {
+	if (!signaling::sandboxes_work_begin(group.service->signaler, group.total_active_sandboxes, next_sandbox_signal)) {
 		return false;
 	}
 	zero_inactive_device_outputs(ez::audio, audio, group);
 	if (group.total_active_sandboxes <= 0) {
 		return true;
 	}
-	const auto result = signaling::wait_for_all_sandboxes_done(group.services->signaler);
+	const auto result = signaling::wait_for_all_sandboxes_done(group.service->signaler);
 	switch (result) {
 		case signaling::client_wait_result::done: {
 			return true;
@@ -248,7 +248,7 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_create
 		m = set_error(std::move(m), {msg.dev_id}, "Failed to create remote device.");
 		return m;
 	});
-	sbox.services->return_buffers.device_create_results.take(msg.callback)({msg.dev_id, false});
+	sbox.service->return_buffers.device_create_results.take(msg.callback)({msg.dev_id, false});
 }
 
 static
@@ -257,18 +257,18 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_create
 	DATA_->model.update_publish(ez::nort, [sbox, msg](model&& m){
 		auto device             = m.devices.at({msg.dev_id});
 		const auto& sbox        = m.sandboxes.at(device.sbox);
-		const auto device_shmid = shm::make_device_id(sbox.services->get_shmid(), {msg.dev_id});
-		if (!shm::is_valid(device.services->shm.seg)) {
+		const auto device_shmid = shm::make_device_id(sbox.service->get_shmid(), {msg.dev_id});
+		if (!shm::is_valid(device.service->shm.seg)) {
 			// Only open the shared memory segment if it's not already open. If we got here as
 			// the result of a sandbox being restarted then we will already have the shared memory
 			// open.
-			device.services->shm = shm::open_device(device_shmid, true);
+			device.service->shm = shm::open_device(device_shmid, true);
 		}
 		device.flags.value |= client_device_flags::has_remote;
 		m.devices = m.devices.insert(device);
 		return m;
 	});
-	sbox.services->return_buffers.device_create_results.take(msg.callback)({msg.dev_id, true});
+	sbox.service->return_buffers.device_create_results.take(msg.callback)({msg.dev_id, true});
 }
 
 static
@@ -344,17 +344,17 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::report_warnin
 
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::return_param_value& msg) -> void {
-	sbox.services->return_buffers.doubles.take(msg.callback)(msg.value);
+	sbox.service->return_buffers.doubles.take(msg.callback)(msg.value);
 }
 
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::return_param_value_text& msg) -> void {
-	sbox.services->return_buffers.strings.take(msg.callback)(msg.text);
+	sbox.service->return_buffers.strings.take(msg.callback)(msg.text);
 }
 
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::return_state& msg) -> void {
-	sbox.services->return_buffers.states.take(msg.callback)(msg.bytes);
+	sbox.service->return_buffers.states.take(msg.callback)(msg.bytes);
 }
 
 static
@@ -366,7 +366,7 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::msg& msg) -> 
 
 static
 auto process_sandbox_messages(poll_t, const sandbox& sbox) -> void {
-	if (launched(sbox) && !sbox.services->proc.running()) {
+	if (launched(sbox) && !sbox.service->proc.running()) {
 		DATA_->model.update_publish(poll, [sbox = sbox](model&& m) mutable {
 			sbox.flags.value &= ~sandbox_flags::launched;
 			m.sandboxes       = m.sandboxes.insert(sbox);
@@ -385,14 +385,14 @@ auto process_sandbox_messages(poll_t, const sandbox& sbox) -> void {
 		});
 		const auto m = DATA_->model.read(poll);
 		if (const auto group = m.groups.find(sbox.group)) {
-			auto _ = signaling::unblock_self(group->services->signaler);
+			auto _ = signaling::unblock_self(group->service->signaler);
 		}
 		ui::send(sbox, ui::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
 		return;
 	}
-	if (sbox.services) {
-		sbox.services->send_msgs_to_sandbox();
-		const auto& msgs = sbox.services->receive_msgs_from_sandbox();
+	if (sbox.service) {
+		sbox.service->send_msgs_to_sandbox();
+		const auto& msgs = sbox.service->receive_msgs_from_sandbox();
 		for (const auto& msg : msgs) {
 			msg_from_sandbox(poll, sbox, msg);
 		}
@@ -427,7 +427,7 @@ auto save_async(ez::nort_t, const scuff::device& dev, return_bytes fn) -> void {
 		update_saved_state_with_returned_bytes(ez::nort, dev_id, bytes);
 		ui::send(sbox, ui::msg::return_device_state{bytes, fn});
 	};
-	sbox.services->enqueue(msg::in::device_save{dev.id.value, sbox.services->return_buffers.states.put(wrapper_fn)});
+	sbox.service->enqueue(msg::in::device_save{dev.id.value, sbox.service->return_buffers.states.put(wrapper_fn)});
 }
 
 static
@@ -438,19 +438,19 @@ auto save_async(ez::nort_t, id::device dev_id, return_bytes fn) -> void {
 
 static
 auto save_dirty_device_state(poll_t, const scuff::device& dev) -> void {
-	const auto dirty_marker = dev.services->dirty_marker.load();
-	const auto saved_marker = dev.services->saved_marker.load();
+	const auto dirty_marker = dev.service->dirty_marker.load();
+	const auto saved_marker = dev.service->saved_marker.load();
 	if (dirty_marker > saved_marker) {
 		auto with_bytes = [dev_id = dev.id, dirty_marker](const scuff::bytes& bytes){
 			DATA_->model.update(poll, [dev_id, dirty_marker, &bytes](model&& m){
 				if (const auto ptr = m.devices.find(dev_id)) {
-					if (ptr->services->dirty_marker.load() > dirty_marker) {
+					if (ptr->service->dirty_marker.load() > dirty_marker) {
 						// These bytes are already out of date
 						return m;
 					}
 					auto dev = *ptr;
 					dev.last_saved_state = bytes;
-					dev.services->saved_marker = dirty_marker;
+					dev.service->saved_marker = dirty_marker;
 					m.devices = m.devices.insert(dev);
 				}
 				return m;
@@ -474,7 +474,7 @@ auto save_dirty_device_states(poll_t) -> void {
 
 [[nodiscard]] static
 auto is_running(const sandbox& sbox) -> bool {
-	return sbox.services && launched(sbox) && sbox.services->proc.running();
+	return sbox.service && launched(sbox) && sbox.service->proc.running();
 }
 
 [[nodiscard]] static
@@ -487,7 +487,7 @@ auto send_heartbeat(poll_t) -> void {
 	const auto m = DATA_->model.read(poll);
 	for (const auto& sbox : m.sandboxes) {
 		if (is_running(sbox)) {
-			sbox.services->enqueue(msg::in::heartbeat{});
+			sbox.service->enqueue(msg::in::heartbeat{});
 		}
 	}
 }
@@ -525,8 +525,8 @@ auto activate(ez::nort_t, id::group group_id, double sr) -> void {
 		group.sample_rate = sr;
 		for (const auto sbox_id : group.sandboxes) {
 			const auto& sbox = m.sandboxes.at(sbox_id);
-			sbox.services->enqueue(scuff::msg::in::activate{sr});
-			sbox.services->enqueue(scuff::msg::in::set_render_mode{group.render_mode});
+			sbox.service->enqueue(scuff::msg::in::activate{sr});
+			sbox.service->enqueue(scuff::msg::in::set_render_mode{group.render_mode});
 		}
 		m.groups = m.groups.insert(group);
 		return m;
@@ -540,7 +540,7 @@ auto deactivate(ez::nort_t, id::group group_id) -> void {
 		group.flags.value &= ~group_flags::is_active;
 		m.groups = m.groups.insert(group);
 		for (const auto sbox_id : group.sandboxes) {
-			m.sandboxes.at(sbox_id).services->enqueue(scuff::msg::in::deactivate{});
+			m.sandboxes.at(sbox_id).service->enqueue(scuff::msg::in::deactivate{});
 		}
 		return m;
 	});
@@ -551,7 +551,7 @@ auto close_all_editors(ez::nort_t) -> void {
 	const auto sandboxes = scuff::DATA_->model.read(ez::nort).sandboxes;
 	for (const auto& sandbox : sandboxes) {
 		if (is_running(sandbox)) {
-			sandbox.services->enqueue(scuff::msg::in::close_all_editors{});
+			sandbox.service->enqueue(scuff::msg::in::close_all_editors{});
 		}
 	}
 }
@@ -564,7 +564,7 @@ auto connect(ez::nort_t, id::device dev_out_id, size_t port_out, id::device dev_
 		if (dev_out.sbox == dev_in.sbox) {
 			// Devices are in the same sandbox
 			const auto& sbox = m.sandboxes.at(dev_out.sbox);
-			sbox.services->enqueue(scuff::msg::in::device_connect{dev_out_id.value, port_out, dev_in_id.value, port_in});
+			sbox.service->enqueue(scuff::msg::in::device_connect{dev_out_id.value, port_out, dev_in_id.value, port_in});
 			return m;
 		}
 		// Devices are in different sandboxes
@@ -618,13 +618,13 @@ auto create_plugin_device_async(model&& m, id::device dev_id, const sandbox& sbo
 	dev.plugin_ext_id = plugin.ext_id;
 	dev.plugin        = plugin.id;
 	dev.type          = plugin.type;
-	dev.services      = std::make_shared<device_services>();
+	dev.service      = std::make_shared<device_service>();
 	m = scuff::add_device_to_sandbox(std::move(m), {sbox.id}, dev.id);
 	m.devices = m.devices.insert(dev);
 	// Plugin is available so we need to send a message to the sandbox to create the remote device.
-	const auto callback = sbox.services->return_buffers.device_create_results.put(return_fn);
+	const auto callback = sbox.service->return_buffers.device_create_results.put(return_fn);
 	const auto plugfile = m.plugfiles.at(plugin.plugfile);
-	sbox.services->enqueue(msg::in::device_create{dev.id.value, plugin.type, plugfile.path, plugin.ext_id.value, callback});
+	sbox.service->enqueue(msg::in::device_create{dev.id.value, plugin.type, plugfile.path, plugin.ext_id.value, callback});
 	return m;
 }
 
@@ -635,7 +635,7 @@ auto create_unknown_plugin_device(model&& m, id::device dev_id, const sandbox& s
 	dev.sbox              = {sbox.id};
 	dev.plugin_ext_id     = plugin_ext_id;
 	dev.type              = type;
-	dev.services          = std::make_shared<device_services>();
+	dev.service          = std::make_shared<device_service>();
 	dev.error             = "Plugin not found.";
 	dev.creation_callback = return_fn;
 	m = scuff::add_device_to_sandbox(std::move(m), {sbox.id}, dev.id);
@@ -724,7 +724,7 @@ auto device_disconnect(ez::nort_t, id::device dev_out_id, size_t port_out, id::d
 		if (dev_out.sbox == dev_in.sbox) {
 			// Devices are in the same sandbox.
 			const auto& sbox = m.sandboxes.at(dev_out.sbox);
-			sbox.services->enqueue(scuff::msg::in::device_disconnect{dev_out_id.value, port_out, dev_in_id.value, port_in});
+			sbox.service->enqueue(scuff::msg::in::device_disconnect{dev_out_id.value, port_out, dev_in_id.value, port_in});
 			return m;
 		}
 		// Devices are in different sandboxes.
@@ -783,14 +783,14 @@ auto duplicate_async(ez::nort_t, id::device src_dev_id, id::sandbox dst_sbox_id,
 	}
 	// We're going to send a message to the source sandbox to save the source device.
 	// When the saved state is returned, call this function with it:
-	const auto save_cb = src_sbox.services->return_buffers.states.put([return_fn, new_dev_id, dst_sbox, plugin](const std::vector<std::byte>& src_state) mutable {
+	const auto save_cb = src_sbox.service->return_buffers.states.put([return_fn, new_dev_id, dst_sbox, plugin](const std::vector<std::byte>& src_state) mutable {
 		// Now we're going to send a message to the destination sandbox to actually create the new device.
 		// When the new device is created, call this function with it:
 		auto wrapper = [fn = return_fn, dst_sbox, src_state](create_device_result result) {
 			if (result.success) {
 				// Remote device was created successfully.
 				// Now send a message to the destination sandbox to load the saved state into the new device.
-				dst_sbox.services->enqueue(msg::in::device_load{result.id.value, src_state});
+				dst_sbox.service->enqueue(msg::in::device_load{result.id.value, src_state});
 			}
 			// Call user's callback
 			fn(result);
@@ -799,7 +799,7 @@ auto duplicate_async(ez::nort_t, id::device src_dev_id, id::sandbox dst_sbox_id,
 			return create_plugin_device_async(std::move(m), new_dev_id, dst_sbox, m.plugins.at(plugin), wrapper);
 		});
 	});
-	src_sbox.services->enqueue(msg::in::device_save{src_dev_id.value, save_cb});
+	src_sbox.service->enqueue(msg::in::device_save{src_dev_id.value, save_cb});
 	return new_dev_id;
 }
 
@@ -855,8 +855,8 @@ auto get_param_value_text(ez::nort_t, id::device dev, idx::param param, double v
 	const auto m        = DATA_->model.read(ez::nort);
 	const auto& device  = m.devices.at({dev});
 	const auto& sbox    = m.sandboxes.at(device.sbox);
-	const auto callback = sbox.services->return_buffers.strings.put(fn);
-	sbox.services->enqueue(msg::in::get_param_value_text{dev.value, param.value, value, callback});
+	const auto callback = sbox.service->return_buffers.strings.put(fn);
+	sbox.service->enqueue(msg::in::get_param_value_text{dev.value, param.value, value, callback});
 }
 
 [[nodiscard]] static
@@ -918,7 +918,7 @@ auto set_render_mode(ez::nort_t, id::group group_id, render_mode mode) -> void {
 	for (const auto sbox_id : group.sandboxes) {
 		const auto& sbox = m.sandboxes.at(sbox_id);
 		if (is_running(sbox)) {
-			sbox.services->enqueue(scuff::msg::in::set_render_mode{mode});
+			sbox.service->enqueue(scuff::msg::in::set_render_mode{mode});
 		}
 	}
 	DATA_->model.update(ez::nort, [group](model&& m){
@@ -932,7 +932,7 @@ auto set_track_color(ez::nort_t, id::device dev, std::optional<rgba32> color) ->
 	const auto m = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
 	const auto& sbox = m.sandboxes.at(device.sbox);
-	sbox.services->enqueue(scuff::msg::in::set_track_color{dev.value, color});
+	sbox.service->enqueue(scuff::msg::in::set_track_color{dev.value, color});
 }
 
 static
@@ -940,7 +940,7 @@ auto set_track_name(ez::nort_t, id::device dev, std::string_view name) -> void {
 	const auto m = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
 	const auto& sbox = m.sandboxes.at(device.sbox);
-	sbox.services->enqueue(scuff::msg::in::set_track_name{dev.value, std::string{name}});
+	sbox.service->enqueue(scuff::msg::in::set_track_name{dev.value, std::string{name}});
 }
 
 [[nodiscard]] static
@@ -983,7 +983,7 @@ auto gui_hide(ez::nort_t, id::device dev) -> void {
 	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
 	const auto& sbox   = m.sandboxes.at(device.sbox);
-	sbox.services->enqueue(scuff::msg::in::device_gui_hide{dev.value});
+	sbox.service->enqueue(scuff::msg::in::device_gui_hide{dev.value});
 }
 
 static
@@ -991,7 +991,7 @@ auto gui_show(ez::nort_t, id::device dev) -> void {
 	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
 	const auto& sbox   = m.sandboxes.at(device.sbox);
-	sbox.services->enqueue(scuff::msg::in::device_gui_show{dev.value});
+	sbox.service->enqueue(scuff::msg::in::device_gui_show{dev.value});
 }
 
 [[nodiscard]] static
@@ -1007,10 +1007,10 @@ auto create_group(ez::nort_t, void* parent_window_handle) -> id::group {
 		group.id                   = group_id;
 		group.parent_window_handle = parent_window_handle;
 		const auto shmid    = shm::make_group_id(DATA_->instance_id, group.id);
-		group.services      = std::make_shared<group_services>();
-		group.services->shm = shm::create_group(shmid, true);
-		group.services->signaler.local = &group.services->shm.signaling;
-		group.services->signaler.shm   = &group.services->shm.data->signaling;
+		group.service      = std::make_shared<group_service>();
+		group.service->shm = shm::create_group(shmid, true);
+		group.service->signaler.local = &group.service->shm.signaling;
+		group.service->signaler.shm   = &group.service->shm.data->signaling;
 		m.groups = m.groups.insert(group);
 		return m;
 	});
@@ -1030,8 +1030,8 @@ auto get_value_async(ez::nort_t, id::device dev_id, idx::param param, return_dou
 	const auto wrapper = [sbox, fn](double value) -> void {
 		ui::send(sbox, ui::msg::return_param_value{value, fn});
 	};
-	const auto callback = sbox.services->return_buffers.doubles.put(wrapper);
-	sbox.services->enqueue(scuff::msg::in::get_param_value{dev_id.value, param.value, callback});
+	const auto callback = sbox.service->return_buffers.doubles.put(wrapper);
+	sbox.service->enqueue(scuff::msg::in::get_param_value{dev_id.value, param.value, callback});
 }
 
 static
@@ -1047,8 +1047,8 @@ auto get_value(ez::nort_t, id::device dev_id, idx::param param) -> double {
 	const auto& m       = DATA_->model.read(ez::nort);
 	const auto& device  = m.devices.at(dev_id);
 	const auto& sbox    = m.sandboxes.at(device.sbox);
-	const auto callback = sbox.services->return_buffers.doubles.put(fn);
-	sbox.services->enqueue(scuff::msg::in::get_param_value{dev_id.value, param.value, callback});
+	const auto callback = sbox.service->return_buffers.doubles.put(fn);
+	sbox.service->enqueue(scuff::msg::in::get_param_value{dev_id.value, param.value, callback});
 	if (!bso.wait_for(ready)) {
 		throw std::runtime_error("Timed out waiting for value.");
 	}
@@ -1076,7 +1076,7 @@ auto push_event(ez::nort_t, id::device dev, const scuff::event& event) -> void {
 	const auto& device = m.devices.at({dev});
 	const auto& sbox   = m.sandboxes.at(device.sbox);
 	intercept_input_event(ez::nort, device, event);
-	sbox.services->enqueue(scuff::msg::in::event{dev.value, event});
+	sbox.service->enqueue(scuff::msg::in::event{dev.value, event});
 }
 
 [[nodiscard]] static
@@ -1127,8 +1127,8 @@ auto get_value_text_async(ez::nort_t, id::device dev_id, idx::param param, doubl
 	const auto wrapper = [sbox, fn](std::string_view text) -> void {
 		ui::send(sbox, ui::msg::return_param_value_text{std::string{text}, fn});
 	};
-	const auto callback = sbox.services->return_buffers.strings.put(wrapper);
-	sbox.services->enqueue(scuff::msg::in::get_param_value_text{dev_id.value, param.value, value, callback});
+	const auto callback = sbox.service->return_buffers.strings.put(wrapper);
+	sbox.service->enqueue(scuff::msg::in::get_param_value_text{dev_id.value, param.value, value, callback});
 }
 
 [[nodiscard]] static
@@ -1144,8 +1144,8 @@ auto get_value_text(ez::nort_t, id::device dev_id, idx::param param, double valu
 	const auto m     = DATA_->model.read(ez::nort);
 	const auto& dev  = m.devices.at(dev_id);
 	const auto& sbox = m.sandboxes.at(dev.sbox);
-	const auto callback = sbox.services->return_buffers.strings.put(fn);
-	sbox.services->enqueue(scuff::msg::in::get_param_value_text{dev_id.value, param.value, value, callback});
+	const auto callback = sbox.service->return_buffers.strings.put(fn);
+	sbox.service->enqueue(scuff::msg::in::get_param_value_text{dev_id.value, param.value, value, callback});
 	if (!bso.wait_for(ready)) {
 		throw std::runtime_error("Timed out waiting for value text.");
 	}
@@ -1165,7 +1165,7 @@ auto get_version(ez::nort_t, id::plugin plugin) -> std::string_view {
 static
 auto load_async(ez::nort_t, const model& m, const scuff::device& dev, const scuff::bytes& state, return_load_device_result fn) -> void {
 	const auto sbox = m.sandboxes.at(dev.sbox);
-	sbox.services->enqueue(msg::in::device_load{dev.id.value, state, sbox.services->return_buffers.device_load_results.put(fn)});
+	sbox.service->enqueue(msg::in::device_load{dev.id.value, state, sbox.service->return_buffers.device_load_results.put(fn)});
 }
 
 static
@@ -1180,13 +1180,13 @@ auto restart(ez::nort_t, id::sandbox sbox, std::string_view sbox_exe_path) -> vo
 	const auto m      = DATA_->model.read(ez::nort);
 	auto sandbox      = m.sandboxes.at({sbox});
 	const auto& group = m.groups.at(sandbox.group);
-	if (sandbox.services->proc.running()) {
-		sandbox.services->proc.terminate();
+	if (sandbox.service->proc.running()) {
+		sandbox.service->proc.terminate();
 	}
-	const auto group_shmid   = group.services->shm.seg.id;
-	const auto sandbox_shmid = sandbox.services->get_shmid();
+	const auto group_shmid   = group.service->shm.seg.id;
+	const auto sandbox_shmid = sandbox.service->get_shmid();
 	const auto exe_args      = make_sbox_exe_args(std::to_string(os::get_process_id()), group_shmid, sandbox_shmid, reinterpret_cast<uint64_t>(group.parent_window_handle));
-	sandbox.services->proc   = bp::child{std::string{sbox_exe_path}, exe_args};
+	sandbox.service->proc   = bp::child{std::string{sbox_exe_path}, exe_args};
 	sandbox.flags.value     |= sandbox_flags::launched;
 	for (const auto dev_id : sandbox.devices) {
 		const auto& dev = m.devices.at(dev_id);
@@ -1200,13 +1200,13 @@ auto restart(ez::nort_t, id::sandbox sbox, std::string_view sbox_exe_path) -> vo
 				ui::send(ui::msg::error{std::format("Failed to restore device {} after sandbox restart.", dev.id.value)});
 			}
 		};
-		const auto callback = sandbox.services->return_buffers.device_create_results.put(with_created_device);
+		const auto callback = sandbox.service->return_buffers.device_create_results.put(with_created_device);
 		const auto plugin   = m.plugins.at(dev.plugin);
 		const auto plugfile = m.plugfiles.at(plugin.plugfile);
-		sandbox.services->enqueue(msg::in::device_create{dev.id.value, dev.type, plugfile.path, dev.plugin_ext_id.value, callback});
+		sandbox.service->enqueue(msg::in::device_create{dev.id.value, dev.type, plugfile.path, dev.plugin_ext_id.value, callback});
 	}
-	sandbox.services->enqueue(msg::in::activate{group.sample_rate});
-	sandbox.services->enqueue(msg::in::set_render_mode{group.render_mode});
+	sandbox.service->enqueue(msg::in::activate{group.sample_rate});
+	sandbox.service->enqueue(msg::in::set_render_mode{group.render_mode});
 	DATA_->model.update(ez::nort, [sandbox](model&& m){
 		m.sandboxes = m.sandboxes.insert(sandbox);
 		return m;
@@ -1251,7 +1251,7 @@ auto save(ez::nort_t, id::device dev_id) -> scuff::bytes {
 		update_saved_state_with_returned_bytes(ez::nort, dev_id, bytes);
 		fn(bytes);
 	};
-	sbox.services->enqueue(msg::in::device_save{dev.id.value, sbox.services->return_buffers.states.put(wrapper_fn)});
+	sbox.service->enqueue(msg::in::device_save{dev.id.value, sbox.service->return_buffers.states.put(wrapper_fn)});
 	if (!bso.wait_for(ready)) {
 		throw std::runtime_error("Timed out waiting for device save.");
 	}
@@ -1291,7 +1291,7 @@ auto create_sandbox(ez::nort_t, id::group group_id, std::string_view sbox_exe_pa
 		sandbox sbox;
 		sbox.id = sbox_id;
 		const auto& group        = m.groups.at({group_id});
-		const auto group_shmid   = group.services->shm.seg.id;
+		const auto group_shmid   = group.service->shm.seg.id;
 		const auto sandbox_shmid = shm::make_sandbox_id(DATA_->instance_id, sbox.id);
 		const auto exe_args      = make_sbox_exe_args(std::to_string(os::get_process_id()), group_shmid, sandbox_shmid, reinterpret_cast<uint64_t>(group.parent_window_handle));
 		auto proc                = bp::child{std::string{sbox_exe_path}, exe_args};
@@ -1300,7 +1300,7 @@ auto create_sandbox(ez::nort_t, id::group group_id, std::string_view sbox_exe_pa
 		}
 		sbox.flags.value        |= sandbox_flags::launched;
 		sbox.group               = {group_id};
-		sbox.services            = std::make_shared<sandbox_services>(std::move(proc), sandbox_shmid);
+		sbox.service            = std::make_shared<sandbox_service>(std::move(proc), sandbox_shmid);
 		m.sandboxes              = m.sandboxes.insert(sbox);
 		m = add_sandbox_to_group(m, {group_id}, sbox.id);
 		m.sandboxes = m.sandboxes.insert(sbox);
@@ -1402,15 +1402,15 @@ auto get_working_plugins(ez::nort_t) -> std::vector<id::plugin> {
 }
 
 auto ref(ez::nort_t, id::device id) -> void {
-	DATA_->model.read(ez::nort).devices.at(id).services->ref_count++;
+	DATA_->model.read(ez::nort).devices.at(id).service->ref_count++;
 }
 
 auto ref(ez::nort_t, id::group id) -> void {
-	DATA_->model.read(ez::nort).groups.at(id).services->ref_count++;
+	DATA_->model.read(ez::nort).groups.at(id).service->ref_count++;
 }
 
 auto ref(ez::nort_t, id::sandbox id) -> void {
-	DATA_->model.read(ez::nort).sandboxes.at(id).services->ref_count++;
+	DATA_->model.read(ez::nort).sandboxes.at(id).service->ref_count++;
 }
 
 auto managed(ez::nort_t, id::device id) -> managed_device {
@@ -1430,21 +1430,21 @@ auto managed(ez::nort_t, id::sandbox id) -> managed_sandbox {
 
 auto unref(ez::nort_t, id::device id) -> void {
 	if (!DATA_) { return; }
-	if (--DATA_->model.read(ez::nort).devices.at(id).services->ref_count <= 0) {
+	if (--DATA_->model.read(ez::nort).devices.at(id).service->ref_count <= 0) {
 		erase(ez::nort, id);
 	}
 }
 
 auto unref(ez::nort_t, id::group id) -> void {
 	if (!DATA_) { return; }
-	if (--DATA_->model.read(ez::nort).groups.at(id).services->ref_count <= 0) {
+	if (--DATA_->model.read(ez::nort).groups.at(id).service->ref_count <= 0) {
 		erase(ez::nort, id);
 	}
 }
 
 auto unref(ez::nort_t, id::sandbox id) -> void {
 	if (!DATA_) { return; }
-	if (--DATA_->model.read(ez::nort).sandboxes.at(id).services->ref_count <= 0) {
+	if (--DATA_->model.read(ez::nort).sandboxes.at(id).service->ref_count <= 0) {
 		erase(ez::nort, id);
 	}
 }
@@ -1453,9 +1453,21 @@ auto make_shm_emulation_process_folder() -> void {
 	fs::create_directories(shm::get_shm_emulation_process_dir(sago::getDataHome(), std::to_string(os::get_process_id())));
 }
 
-//auto remove_shm_emulation_process_folder() -> void {
-//	fs::remove_all(shm::get_shm_emulation_process_dir(sago::getDataHome(), std::to_string(os::get_process_id())));
-//}
+auto cleanup_shm_emulation_folders() -> void {
+	try {
+		const auto root_dir = shm::get_shm_emulation_root_dir(sago::getDataHome());
+		const auto proc_dir = shm::get_shm_emulation_process_dir(sago::getDataHome(), std::to_string(os::get_process_id()));
+		for (const auto& entry : fs::directory_iterator(root_dir)) {
+			if (entry.is_directory() && entry.path() != proc_dir) {
+				const auto pid_str = entry.path().filename().string();
+				if (!os::process_is_running(std::stoi(pid_str))) {
+					fs::remove_all(entry.path());
+				}
+			}
+		}
+	}
+	catch (...) {}
+}
 
 auto init() -> void {
 	// TOODOO: figure out if we need to handle cleanup of old shm emulation files
@@ -1466,6 +1478,7 @@ auto init() -> void {
 		scuff::DATA_->poll_thread  = std::jthread{impl::poll_thread};
 		scuff::DATA_->ui_thread_id = std::this_thread::get_id();
 		make_shm_emulation_process_folder();
+		cleanup_shm_emulation_folders();
 		scuff::initialized_        = true;
 	} catch (const std::exception& err) {
 		scuff::DATA_.reset();
@@ -1487,7 +1500,6 @@ auto shutdown() -> void {
 		scuff::DATA_->scan_thread.join();
 	}
 	scuff::DATA_.reset();
-	//remove_shm_emulation_process_folder();
 	scuff::initialized_ = false;
 }
 

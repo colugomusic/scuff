@@ -34,12 +34,12 @@ struct return_buffers {
 	return_string_fns               strings;
 };
 
-struct sandbox_services {
+struct sandbox_service {
 	bp::child proc;
 	scuff::return_buffers return_buffers;
 	std::atomic_int ref_count = 0;
 	shm::sandbox shm;
-	sandbox_services(bp::child&& proc, std::string_view shmid)
+	sandbox_service(bp::child&& proc, std::string_view shmid)
 		: proc{std::move(proc)}
 		, shm{shm::create_sandbox(shmid, true)}
 	{}
@@ -76,7 +76,7 @@ struct group_flags {
 	int value = 0;
 };
 
-struct group_services {
+struct group_service {
 	ui::msg::group_q ui;
 	shm::group shm;
 	signaling::group_local_data signaling;
@@ -94,7 +94,7 @@ struct client_device_flags {
 	int value = 0;
 };
 
-struct device_services {
+struct device_service {
 	// Increment this any time a parameter change output
 	// event is received, to signal that the last saved
 	// state is now dirty.
@@ -117,7 +117,7 @@ struct device {
 	immer::box<scuff::bytes> last_saved_state;
 	immer::vector<client_param_info> param_info;
 	device_port_info port_info;
-	std::shared_ptr<device_services> services;
+	std::shared_ptr<device_service> service;
 };
 
 struct sandbox_flags {
@@ -134,7 +134,7 @@ struct sandbox {
 	id::group group;
 	sandbox_flags flags;
 	immer::set<id::device> devices;
-	std::shared_ptr<sandbox_services> services;
+	std::shared_ptr<sandbox_service> service;
 };
 
 struct cross_sbox_connection {
@@ -153,7 +153,7 @@ struct group {
 	scuff::render_mode render_mode = scuff::render_mode::realtime;
 	immer::set<id::sandbox> sandboxes;
 	immer::set<cross_sbox_connection> cross_sbox_conns;
-	std::shared_ptr<group_services> services;
+	std::shared_ptr<group_service> service;
 };
 
 struct plugin {
