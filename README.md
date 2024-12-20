@@ -36,9 +36,9 @@ Not started at all because I don't need it for my own project yet but everything
 
 Great question. It is entirely encapsulated in this file: https://github.com/colugomusic/scuff/blob/main/common/include/common-ipc-event.hpp
 
-On Windows, we use Win32 event objects.
-On Linux, we use futexes.
-on macOS, we use POSIX named semaphores.
+- On Windows, we use Win32 event objects.
+- On Linux, we use futexes.
+- On macOS, we use POSIX named semaphores.
 
 ### Is that realtime-safe?
 
