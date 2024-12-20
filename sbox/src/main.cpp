@@ -5,6 +5,7 @@
 #include "doctest.h"
 #include "loguru.hpp"
 #include "msg-proc.hpp"
+#include <chrono>
 #include <cmrc/cmrc.hpp>
 #include <filesystem>
 #include <iostream>
@@ -146,6 +147,17 @@ auto run_tests(sbox::app* app, int pid) -> int {
 }
 
 static
+auto file_time_to_system_time(const fs::file_time_type& file_time) -> std::chrono::system_clock::time_point {
+#if __APPLE__
+    auto duration_since_epoch = file_time.time_since_epoch();
+    auto system_time_duration = std::chrono::duration_cast<std::chrono::system_clock::duration>(duration_since_epoch);
+    return std::chrono::system_clock::time_point{system_time_duration};
+#else
+    return std::chrono::clock_cast<std::chrono::system_clock>(file_time);
+#endif
+}
+
+static
 auto cleanup_old_log_files(const fs::path& dir) -> void {
 	const auto now = std::chrono::system_clock::now();
 	if (!fs::exists(dir)) {
@@ -154,7 +166,7 @@ auto cleanup_old_log_files(const fs::path& dir) -> void {
 	for (const auto& entry : fs::directory_iterator(dir)) {
 		if (fs::is_regular_file(entry)) {
 			const auto last_write_time = fs::last_write_time(entry);
-			const auto last_write_time_system = std::chrono::clock_cast<std::chrono::system_clock>(last_write_time);
+            const auto last_write_time_system = file_time_to_system_time(last_write_time);
 			const auto age = now - last_write_time_system;
 			if (age > std::chrono::hours{48}) {
 				fs::remove(entry);
