@@ -11,23 +11,23 @@ Here is the interface of the client library in its current state: [client/includ
 
 ## Current status
 
-### The scanner
+### The scanner ✔️
 Finished for CLAP plugins.
 
-### The sandboxing backend and framework
+### The sandboxing backend and framework ✔️
 It's done. By this I'm talking about all the sandbox process management, shared memory management, interprocess communication, and the client API. Everything appears to work well on Windows and macOS. I have not yet done enough testing on Linux.
 
 On macOS, the plugin editor windows are a little awkward for the end-user as I'm not sure at all how to associate them with the "main" application, and so because they belong to a different process, they will show up in the dock under the name "scuff-sbox". I'm sure there is some solution to this but I am really not a macOS developer and it's completely beyond my current knowledge. macOS development also makes me quite miserable so if some macOS person wants to take a look then please let me know and I will try to help you out as much as possible.
 
 Likewise on Linux, I'm not sure if there is a way to set a "parent" for the editor windows, or if there is any such concept as a parent window, so there is similar awkwardness in the behavior.
 
-### CLAP-based audio effects
+### CLAP-based audio effects ✔️
 Done. I worked towards this goal first because this is what I need for my own project. Many CLAP extensions are still unsupported but I have implemented the main ones.
 
-### CLAP-based instruments or other kinds of devices
+### CLAP-based instruments or other kinds of devices ❌
 Not done but the framework is all there. I just don't need this for my own project yet so I'm not working on it right now.
 
-### VST3 support
+### VST3 support ❌
 Not started at all because I don't need it for my own project yet but everything is sort of written with this in mind.
 
 ## Some technical/philosophical answers
