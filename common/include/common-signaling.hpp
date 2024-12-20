@@ -83,16 +83,16 @@ static
 // The client calls this to unblock itself in cases where it is waiting for a signal from
 // the sandbox processes but wants to abort the operation (e.g. if one of the sandboxes
 // crashed, in which case the signal would never come.)
-auto unblock_self(signaling::clientside_group group) -> bool {
-	return group.local->all_sandboxes_done.set();
+auto unblock_self(signaling::clientside_group group) -> void {
+	group.local->all_sandboxes_done.set();
 }
 
 static
 // The sandbox process calls this to unblock itself in cases where it is waiting for a
 // signal from the client but wants to abort the operation (e.g. if the sandbox process
 // is shutting down.)
-auto unblock_self(signaling::sandboxside_sandbox sandbox) -> bool {
-	return sandbox.local->work_begin.set();
+auto unblock_self(signaling::sandboxside_sandbox sandbox) -> void {
+	sandbox.local->work_begin.set();
 }
 
 [[nodiscard]] static
@@ -108,9 +108,7 @@ auto sandboxes_work_begin(signaling::clientside_group group, int sandbox_count, 
 [[nodiscard]] static
 // Wait for all sandboxes in the group to finish processing.
 auto wait_for_all_sandboxes_done(signaling::clientside_group group) -> client_wait_result {
-	if (!group.local->all_sandboxes_done.wait()) {
-		throw std::runtime_error{"all_sandboxes_done.wait failed"};
-	}
+	group.local->all_sandboxes_done.wait();
 	if (group.shm->sandboxes_processing.load(std::memory_order_acquire) > 0) {
 		return client_wait_result::not_responding;
 	}
@@ -120,25 +118,22 @@ auto wait_for_all_sandboxes_done(signaling::clientside_group group) -> client_wa
 [[nodiscard]] static
 // The sandbox process calls this to wait for a signal from the client that it should begin its processing.
 auto wait_for_work_begin(signaling::sandboxside_sandbox sandbox, std::stop_token stop_token) -> sandbox_wait_result {
-	if (!sandbox.local->work_begin.wait()) {
-		throw std::runtime_error{"work_begin.wait failed"};
-	}
+	sandbox.local->work_begin.wait();
 	if (stop_token.stop_requested()) {
 		return sandbox_wait_result::stop_requested;
 	}
 	return sandbox_wait_result::signaled;
 }
 
-[[nodiscard]] static
+static
 // The sandbox process calls this to notify that it has finished processing.
 // If it is the last sandbox to finish processing, the client is notified.
-auto notify_sandbox_done(signaling::sandboxside_group group) -> bool {
+auto notify_sandbox_done(signaling::sandboxside_group group) -> void {
 	const auto prev_value = group.shm->sandboxes_processing.fetch_sub(1, std::memory_order_release);
 	if (prev_value == 1) {
 		// Notify the client that all sandboxes have finished their work.
-		return group.local->all_sandboxes_done.set();
+		group.local->all_sandboxes_done.set();
 	}
-	return true;
 }
 
 } // scuff::signaling

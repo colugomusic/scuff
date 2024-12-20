@@ -126,20 +126,24 @@ struct local_event_impl {
 	win32_local_event event;
 };
 
-[[nodiscard]] static
-auto set(const local_event_impl* impl) -> bool {
-	return SetEvent(impl->event.h);
+static
+auto set(const local_event_impl* impl) -> void {
+	if (!SetEvent(impl->event.h)) {
+		auto msg = std::format("SetEvent failed: '{}'", win32_error_message(GetLastError()));
+		throw std::runtime_error{msg};
+	}
 } 
 
-[[nodiscard]] static
-auto wait(const local_event_impl* impl) -> bool        {
+static
+auto wait(const local_event_impl* impl) -> void {
 	if (WaitForSingleObject(impl->event.h, INFINITE) != WAIT_OBJECT_0) {
-		return false;
+		auto msg = std::format("WaitForSingleObject failed");
+		throw std::runtime_error{msg};
 	}
 	if (!ResetEvent(impl->event.h)) {
-		return false;
+		auto msg = std::format("ResetEvent failed: '{}'", win32_error_message(GetLastError()));
+		throw std::runtime_error{msg};
 	}
-	return true;
 } 
 
 static auto init(local_event_impl* impl, local_event_create create) -> void { impl->event = win32_local_event{create}; } 
@@ -178,18 +182,16 @@ auto futex_wake_all(std::atomic<uint32_t>* word) -> void {
 	syscall(SYS_futex, word, FUTEX_WAKE, INT_MAX, nullptr, nullptr, 0);
 }
 
-[[nodiscard]] static
-auto set(const local_event_impl* impl) -> bool {
+static
+auto set(const local_event_impl* impl) -> void {
 	impl->shared->word.store(1, std::memory_order_release);
 	futex_wake_all(&impl->shared->word);
-	return true;
 } 
 
-[[nodiscard]] static
-auto wait(const local_event_impl* impl) -> bool {
+static
+auto wait(const local_event_impl* impl) -> void {
 	futex_wait(&impl->shared->word, 0);
 	impl->shared->word.store(0, std::memory_order_release);
-	return true;
 } 
 
 static auto init(local_event_impl* impl, local_event_create create) -> void { impl->shared = create.shared; } 
@@ -199,6 +201,9 @@ static auto init(local_event_impl* impl, local_event_open open) -> void     { im
 
 #elif defined(__APPLE__) ///////////////////////////////////////////////////////////////
 
+#include <cerrno>
+#include <cstring>
+#include <format>
 #include <semaphore.h>
 
 namespace scuff::ipc {
@@ -222,11 +227,17 @@ struct posix_local_event {
 	posix_local_event(local_event_create c)
 		: sem{sem_open(c.shared->name, O_CREAT, S_IRUSR | S_IWUSR, 0)}
 	{
+		if (sem == SEM_FAILED) {
+			throw std::runtime_error{std::format("sem_open failed: '{}'", std::strerror(errno))};
+		}
 		sem_unlink(c.shared->name);
 	}
 	posix_local_event(local_event_open o)
 		: sem{sem_open(o.shared->name, 0)}
 	{
+		if (sem == SEM_FAILED) {
+			throw std::runtime_error{std::format("sem_open failed: '{}'", std::strerror(errno))};
+		}
 	}
 	posix_local_event(posix_local_event&& other) noexcept
 		: sem{other.sem}
@@ -249,14 +260,20 @@ struct local_event_impl {
 	posix_local_event event;
 };
 
-[[nodiscard]] static
-auto set(const local_event_impl* impl) -> bool {
-	return sem_post(impl->event.sem) == 0;
+static
+auto set(const local_event_impl* impl) -> void {
+	if (sem_post(impl->event.sem) != 0) {
+		auto msg = std::format("sem_post failed: '{}'", std::strerror(errno));
+		throw std::runtime_error{msg};
+	}
 } 
 
-[[nodiscard]] static
-auto wait(const local_event_impl* impl) -> bool {
-	return sem_wait(impl->event.sem) == 0;
+static
+auto wait(const local_event_impl* impl) -> void {
+	if (sem_wait(impl->event.sem) != 0) {
+		auto msg = std::format("sem_wait failed: '{}'", std::strerror(errno));
+		throw std::runtime_error{msg};
+	}
 } 
 
 static auto init(local_event_impl* impl, local_event_create create) -> void { impl->event = posix_local_event{create}; } 
@@ -272,8 +289,8 @@ struct local_event {
 	local_event() = default;
 	local_event(local_event_create create)  { ipc::detail::init(&impl, create); }
 	local_event(local_event_open open)      { ipc::detail::init(&impl, open); }
-	auto set() const -> bool                { return ipc::detail::set(&impl); }
-	[[nodiscard]] auto wait() const -> bool { return ipc::detail::wait(&impl); }
+	auto set() const -> void                { ipc::detail::set(&impl); }
+	auto wait() const -> void { ipc::detail::wait(&impl); }
 private:
 	detail::local_event_impl impl;
 };

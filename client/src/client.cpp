@@ -385,7 +385,7 @@ auto process_sandbox_messages(poll_t, const sandbox& sbox) -> void {
 		});
 		const auto m = DATA_->model.read(poll);
 		if (const auto group = m.groups.find(sbox.group)) {
-			auto _ = signaling::unblock_self(group->service->signaler);
+			signaling::unblock_self(group->service->signaler);
 		}
 		ui::send(sbox, ui::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
 		return;

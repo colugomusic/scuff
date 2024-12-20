@@ -56,9 +56,7 @@ auto do_processing(ez::audio_t, sbox::app* app) -> void {
 		const auto dev = app->audio_model->devices.at(dev_id);
 		do_processing(ez::audio, *app, dev);
 	}
-	if (!signaling::notify_sandbox_done(app->group_signaler)) {
-		throw std::runtime_error("Failed to signal sandbox processing complete!");
-	}
+	signaling::notify_sandbox_done(app->group_signaler);
 	app->audio_model = {};
 }
 
