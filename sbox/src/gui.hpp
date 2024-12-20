@@ -32,6 +32,7 @@ auto hide(ez::main_t, sbox::app* app, sbox::device dev) -> void {
 	switch (dev.type) {
 		case plugin_type::clap: { clap::shutdown_editor_window(ez::main, app, dev); break; }
 		case plugin_type::vst3: { /* Not implemented yet. */ break; }
+		default: break;
 	}
 	edwin::set(dev.ui.window, edwin::hide);
 	app->msgs_out.lock()->push_back(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(edwin::get_native_handle(*dev.ui.window).value)});
