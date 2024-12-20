@@ -15,16 +15,38 @@ Here is the interface of the client library in its current state: [client/includ
 Finished for CLAP plugins.
 
 ### The sandboxing backend and framework
-Pretty much done. By this I'm talking about all the sandbox process management, shared memory management, interprocess communication, and the client API. Everything appears to work well on Windows. Have not yet done enough testing on macOS and Linux.
+It's done. By this I'm talking about all the sandbox process management, shared memory management, interprocess communication, and the client API. Everything appears to work well on Windows and macOS. I have not yet done enough testing on Linux.
+
+On macOS, the plugin editor windows are a little awkward for the end-user as I'm not sure at all how to associate them with the "main" application, and so because they belong to a different process, they will show up in the dock under the name "scuff-sbox". I'm sure there is some solution to this but I am really not a macOS developer and it's completely beyond my current knowledge. macOS development also makes me quite miserable so if some macOS person wants to take a look then please let me know and I will try to help you out as much as possible.
+
+Likewise on Linux, I'm not sure if there is a way to set a "parent" for the editor windows, or if there is any such concept as a parent window, so there is similar awkwardness in the behavior.
 
 ### CLAP-based audio effects
-About 99% done. I worked towards this goal first because this is what I need for my own project. More tests need to be written.
+Done. I worked towards this goal first because this is what I need for my own project. Many CLAP extensions are still unsupported but I have implemented the main ones.
 
 ### CLAP-based instruments or other kinds of devices
-Not done but the framework is all there. I just don't need this for my own project yet so I'm not working on it.
+Not done but the framework is all there. I just don't need this for my own project yet so I'm not working on it right now.
 
 ### VST3 support
-Not started at all because I don't need it for my own project but everything is sort of written with this in mind.
+Not started at all because I don't need it for my own project yet but everything is sort of written with this in mind.
+
+## Some technical/philosophical answers
+
+### How does the IPC work?
+
+Great question. It is entirely encapsulated in this file: https://github.com/colugomusic/scuff/blob/main/common/include/common-ipc-event.hpp
+
+On Windows, we use Win32 event objects.
+On Linux, we use futexes.
+on macOS, we use POSIX named semaphores.
+
+### Is that realtime-safe?
+
+Very interesting question. My low-level answer would be: on Linux, I believe so. On Windows and macOS, I don't know, but I assume not. We are doing syscalls and these APIs are not documented with realtime systems in mind.
+
+My higher-level answer is: Sending audio data from one process to another and then back again is fundamentally not a realtime-safe operation, no matter what you do. So we should worry less about what is "realtime-safe" and more about "what is the best we can possibly do?" On Windows I think the answer to that is "event objects" and on macOS, "POSIX named semaphores".
+
+To make a more philosophical point, as audio programmers we are taught from birth to adhere dogmatically to a certain set of rules and principles within the audio thread. Things like "never lock a mutex", "never allocate memory", etc. The relevant rule here is "don't make any syscalls, because syscalls are not realtime-safe." It is good that we all religiously follow this set of commandments because ultimately the end-user is going to end up chaining together a bunch of different audio code that came from different software developers and the more of us that are doing things correctly the better. However it's worth noting that we are in a pretty unique and privileged position within the signal chain here. Probably nobody else is going to be doing anything as fucked up as ping-ponging audio data back and forth between two separate processes. And as far as I know we have no choice but to bend the rules anyway.
 
 ## Glossary
 
