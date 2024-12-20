@@ -214,7 +214,7 @@ struct shared_event {
 
 static
 auto init(shared_event_create create) -> void {
-	const auto name = std::format("/{}", create.shared->name);
+	const auto name = std::format("/{}", create.name);
 	std::strncpy(create.shared->name, name.c_str(), sizeof(create.shared->name));
 }
 
@@ -228,16 +228,16 @@ struct posix_local_event {
 		: sem{sem_open(c.shared->name, O_CREAT, S_IRUSR | S_IWUSR, 0)}
 	{
 		if (sem == SEM_FAILED) {
-			throw std::runtime_error{std::format("sem_open failed: '{}'", std::strerror(errno))};
+            throw std::runtime_error{std::format("sem_open('{}', O_CREAT) failed: '{}'", std::string_view{c.shared->name}, std::strerror(errno))};
 		}
-		sem_unlink(c.shared->name);
 	}
 	posix_local_event(local_event_open o)
 		: sem{sem_open(o.shared->name, 0)}
 	{
 		if (sem == SEM_FAILED) {
-			throw std::runtime_error{std::format("sem_open failed: '{}'", std::strerror(errno))};
+            throw std::runtime_error{std::format("sem_open('{}') failed: '{}'", std::string_view{o.shared->name}, std::strerror(errno))};
 		}
+        sem_unlink(o.shared->name);
 	}
 	posix_local_event(posix_local_event&& other) noexcept
 		: sem{other.sem}

@@ -54,16 +54,14 @@ struct sandbox_shm_data {
 static
 // Initialize client-side group signalling
 auto init(signaling::clientside_group_init init) -> void {
-	const auto name = std::format("scuff-signal-group-{}", init.group_shmid);
-	ipc::init(ipc::shared_event_create{&init.group.shm->all_sandboxes_done, name});
+	ipc::init(ipc::shared_event_create{&init.group.shm->all_sandboxes_done, init.group_shmid});
 	init.group.local->all_sandboxes_done = ipc::local_event{ipc::local_event_create{&init.group.shm->all_sandboxes_done}};
 }
 
 static
 // Initialize client-side sandbox signalling
 auto init(signaling::clientside_sandbox_init init) -> void {
-	const auto name = std::format("scuff-signal-sandbox-{}", init.sbox_shmid);
-	ipc::init(ipc::shared_event_create{&init.sandbox.shm->work_begin, name});
+	ipc::init(ipc::shared_event_create{&init.sandbox.shm->work_begin, init.sbox_shmid});
 	init.sandbox.local->work_begin = ipc::local_event{ipc::local_event_create{&init.sandbox.shm->work_begin}};
 }
 
