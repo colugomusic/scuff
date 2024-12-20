@@ -1,6 +1,7 @@
 #pragma once
 
 #include "clap-data.hpp"
+#include "common-message-send-rcv.hpp"
 #include "common-param-info.hpp"
 #include "common-plugin-type.hpp"
 #include "common-events.hpp"

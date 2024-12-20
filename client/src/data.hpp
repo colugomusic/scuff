@@ -1,6 +1,7 @@
 #pragma once
 
 #include "client.hpp"
+#include "common-message-send-rcv.hpp"
 #include "common-shm.hpp"
 #include "common-slot-buffer.hpp"
 #include "jthread.hpp"

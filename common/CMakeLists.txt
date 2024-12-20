@@ -16,6 +16,7 @@ list (APPEND scuff-common-hdr
 	${CMAKE_CURRENT_LIST_DIR}/include/common-events-clap.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-ipc-event.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-messages.hpp
+	${CMAKE_CURRENT_LIST_DIR}/include/common-message-send-rcv.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-os.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-os-child-proc.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-os-dso.hpp
@@ -24,6 +25,7 @@ list (APPEND scuff-common-hdr
 	${CMAKE_CURRENT_LIST_DIR}/include/common-render-mode.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-serialize.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-serialize-events.hpp
+	${CMAKE_CURRENT_LIST_DIR}/include/common-serialize-messages.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-serialize-param-info.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-shm.hpp
 	${CMAKE_CURRENT_LIST_DIR}/include/common-signaling.hpp
