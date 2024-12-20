@@ -5,8 +5,6 @@ I am working on a cross-platform CLAP/VST3 audio plugin sandboxing system for Wi
 - [A scanner executable](scan) which can scan the system for installed plugins.
 - [A static library](client) which encapsulates the sandboxing system and allows us to use it within our audio applications.
 
-Here is a blog post about this project: https://www.patreon.com/posts/plugin-110821252
-
 Here is the interface of the client library in its current state: [client/include/scuff/client.hpp](client/include/scuff/client.hpp)
 
 ## Current status
