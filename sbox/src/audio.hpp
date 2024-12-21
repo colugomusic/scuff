@@ -3,6 +3,7 @@
 #include "clap.hpp"
 #include "common-shm.hpp"
 #include "data.hpp"
+#include <fulog.hpp>
 
 namespace scuff::sbox {
 
@@ -26,7 +27,7 @@ auto transfer_input_events_from_main(ez::audio_t, const sbox::app& app, const sb
 	auto& events_in = dev.service->shm.data->events_in;
 	while (dev.service->input_events_from_main.try_dequeue(event)) {
 		if (events_in.size() == events_in.max_size()) {
-			DLOG_S(INFO) << "Dropping input events because the input event queue is full. This is a bug!";
+			fu::debug_log("ERROR: Dropping input events because the input event queue is full. This is a bug!");
 			break;
 		}
 		dev.service->shm.data->events_in.push_back(event);
@@ -63,10 +64,10 @@ auto do_processing(ez::audio_t, sbox::app* app) -> void {
 static
 auto thread_proc(std::stop_token stop_token, ez::audio_t, sbox::app* app) -> void {
 	try {
-		DLOG_S(INFO) << "Audio thread has started.";
+		fu::debug_log("INFO: Audio thread has started.");
 		for (;;) {
 			if (stop_token.stop_requested()) {
-				DLOG_S(INFO) << "Audio thread is stopping because it was requested to.";
+				fu::debug_log("INFO: Audio thread is stopping because it was requested to.");
 				return;
 			}
 			auto result = signaling::wait_for_work_begin(app->sandbox_signaler, stop_token);
@@ -75,14 +76,14 @@ auto thread_proc(std::stop_token stop_token, ez::audio_t, sbox::app* app) -> voi
 				continue;
 			}
 			if (result == signaling::sandbox_wait_result::stop_requested) {
-				DLOG_S(INFO) << "Audio thread is stopping because it was requested to.";
+				fu::debug_log("INFO: Audio thread is stopping because it was requested to.");
 				return;
 			}
 			throw std::runtime_error("Unexpected sandbox_wait_result");
 		}
 	}
 	catch (const std::exception& err) {
-		DLOG_S(INFO) << "Audio thread is stopping because there was a fatal error: " << err.what();
+		fu::log(std::format("ERROR: Audio thread is stopping because there was a fatal error: {}", err.what()));
 		app->msgs_out.lock()->push_back(msg::out::report_error{err.what()});
 		app->schedule_terminate = true;
 	}
@@ -90,7 +91,7 @@ auto thread_proc(std::stop_token stop_token, ez::audio_t, sbox::app* app) -> voi
 
 static
 auto start_audio(ez::main_t, sbox::app* app) -> void {
-	DLOG_S(INFO) << "start_audio()";
+	fu::debug_log("INFO: start_audio()");
 	if (app->audio_thread.joinable()) {
 		return;
 	}
@@ -100,7 +101,7 @@ auto start_audio(ez::main_t, sbox::app* app) -> void {
 
 static
 auto stop_audio(ez::main_t, sbox::app* app) -> void {
-	DLOG_S(INFO) << "stop_audio()";
+	fu::debug_log("INFO: stop_audio()");
 	if (app->audio_thread.joinable()) {
 		app->audio_thread.request_stop();
 		app->audio_thread.join();

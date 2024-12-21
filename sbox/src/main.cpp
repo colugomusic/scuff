@@ -3,11 +3,11 @@
 #include "common-visit.hpp"
 #include "cmdline.hpp"
 #include "doctest.h"
-#include "loguru.hpp"
 #include "msg-proc.hpp"
 #include <chrono>
 #include <cmrc/cmrc.hpp>
 #include <filesystem>
+#include <fulog.hpp>
 #include <iostream>
 #include <optional>
 #include <platform_folders.h>
@@ -37,7 +37,7 @@ auto check_heartbeat(sbox::app* app) -> void {
 	const auto now  = std::chrono::steady_clock::now();
 	const auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - app->last_heartbeat).count();
 	if (diff > HEARTBEAT_TIMEOUT_MS) {
-		LOG_S(ERROR) << "Heartbeat timeout";
+		fu::log("ERROR: Heartbeat timeout");
 		app->msgs_out.lock()->push_back(scuff::msg::out::report_error{"Heartbeat timeout"});
 		app->schedule_terminate = true;
 	}
@@ -80,9 +80,9 @@ auto send_msgs_out(sbox::app* app) -> void {
 }
 
 auto sandbox(sbox::app* app) -> int {
-	LOG_S(INFO) << "client PID: " << app->options.client_pid;
-	LOG_S(INFO) << "group: " << app->options.group_shmid;
-	LOG_S(INFO) << "sandbox: " << app->options.sbox_shmid;
+	fu::log(std::format("INFO: client PID: {}", app->options.client_pid));
+	fu::log(std::format("INFO: group: {}", app->options.group_shmid));
+	fu::log(std::format("INFO: sandbox: {}", app->options.sbox_shmid));
 	app->shm_group              = shm::open_group(app->options.group_shmid);
 	app->shm_sbox               = shm::open_sandbox(app->options.sbox_shmid);
 	app->group_signaler.local   = &app->shm_group.signaling;
@@ -102,9 +102,9 @@ auto sandbox(sbox::app* app) -> int {
 			edwin::app_end();
 		}
 	};
-	DLOG_S(INFO) << "Entering message loop...";
+	fu::debug_log("INFO: Entering message loop...");
 	edwin::app_beg({frame}, {std::chrono::milliseconds{50}});
-	DLOG_S(INFO) << "Cleanly exiting...";
+	fu::debug_log("INFO: Cleanly exiting...");
 	if (app->audio_thread.joinable()) {
 		app->audio_thread.request_stop();
 		signaling::unblock_self(app->sandbox_signaler);
@@ -117,7 +117,7 @@ auto sandbox(sbox::app* app) -> int {
 
 static
 auto gui_test(sbox::app* app) -> int {
-	LOG_S(INFO) << "gui_file: " << app->options.gui_file;
+	fu::log(std::format("INFO: gui_file: {}", app->options.gui_file));
 	app->main_thread_id = std::this_thread::get_id();
 	auto on_window_closed = [app]{
 		app->schedule_terminate = true;
@@ -144,46 +144,6 @@ auto run_tests(sbox::app* app, int pid) -> int {
 	app->options.sbox_shmid = "scuff-sbox-test+" + std::to_string(pid);
 	doctest::Context ctx;
 	return ctx.run();
-}
-
-static
-auto file_time_to_system_time(const fs::file_time_type& file_time) -> std::chrono::system_clock::time_point {
-#if __APPLE__
-    auto duration_since_epoch = file_time.time_since_epoch();
-    auto system_time_duration = std::chrono::duration_cast<std::chrono::system_clock::duration>(duration_since_epoch);
-    return std::chrono::system_clock::time_point{system_time_duration};
-#else
-    return std::chrono::clock_cast<std::chrono::system_clock>(file_time);
-#endif
-}
-
-static
-auto cleanup_old_log_files(const fs::path& dir) -> void {
-	const auto now = std::chrono::system_clock::now();
-	if (!fs::exists(dir)) {
-		return;
-	}
-	for (const auto& entry : fs::directory_iterator(dir)) {
-		if (fs::is_regular_file(entry)) {
-			const auto last_write_time = fs::last_write_time(entry);
-            const auto last_write_time_system = file_time_to_system_time(last_write_time);
-			const auto age = now - last_write_time_system;
-			if (age > std::chrono::hours{48}) {
-				fs::remove(entry);
-			}
-		}
-	}
-}
-
-static
-auto get_log_dir() -> fs::path {
-	return fs::path(sago::getDataHome()) / "scuff-sbox";
-}
-
-static
-auto get_log_file_path(const fs::path& dir, int pid) -> fs::path {
-	auto filename = std::format("{}.txt", pid);
-	return dir / filename;
 }
 
 auto make_window_icon() -> sbox::icon {
@@ -222,15 +182,12 @@ auto make_window_icon() -> sbox::icon {
 
 auto go(int argc, const char* argv[]) -> int {
 	const auto pid = scuff::os::get_process_id();
-	const auto log_dir = get_log_dir();
-	cleanup_old_log_files(log_dir);
 	sbox::app app;
 	app_ = &app;
-	loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
-	loguru::init(argc, const_cast<char**>(argv));
-	loguru::add_file(get_log_file_path(log_dir, pid).string().c_str(), loguru::Truncate, loguru::Verbosity_MAX);
+	fu::delete_old_files(std::chrono::hours{48});
+	fu::set_application_name("scuff-sbox");
 	try {
-		LOG_S(INFO) << "scuff-sbox started";
+		fu::log("INFO: scuff-sbox started");
 		app.options     = cmdline::get_options(app, argc, argv);
 		app.mode        = get_mode(app);
 		app.window_icon = make_window_icon();
@@ -239,10 +196,10 @@ auto go(int argc, const char* argv[]) -> int {
 		if (app.mode == sbox::mode::test)     { return run_tests(&app, pid); }
 	}
 	catch (const std::exception& err) {
-		LOG_S(ERROR) << err.what();
+		fu::log(std::format("ERROR: {}", err.what()));
 	}
 	catch (...) {
-		LOG_S(ERROR) << "Unknown error";
+		fu::log("ERROR: Unknown error");
 	}
 	return EXIT_FAILURE;
 }

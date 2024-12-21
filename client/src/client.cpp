@@ -618,7 +618,7 @@ auto create_plugin_device_async(model&& m, id::device dev_id, const sandbox& sbo
 	dev.plugin_ext_id = plugin.ext_id;
 	dev.plugin        = plugin.id;
 	dev.type          = plugin.type;
-	dev.service      = std::make_shared<device_service>();
+	dev.service       = std::make_shared<device_service>();
 	m = scuff::add_device_to_sandbox(std::move(m), {sbox.id}, dev.id);
 	m.devices = m.devices.insert(dev);
 	// Plugin is available so we need to send a message to the sandbox to create the remote device.
@@ -635,7 +635,7 @@ auto create_unknown_plugin_device(model&& m, id::device dev_id, const sandbox& s
 	dev.sbox              = {sbox.id};
 	dev.plugin_ext_id     = plugin_ext_id;
 	dev.type              = type;
-	dev.service          = std::make_shared<device_service>();
+	dev.service           = std::make_shared<device_service>();
 	dev.error             = "Plugin not found.";
 	dev.creation_callback = return_fn;
 	m = scuff::add_device_to_sandbox(std::move(m), {sbox.id}, dev.id);

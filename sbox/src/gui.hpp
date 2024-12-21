@@ -57,7 +57,7 @@ auto show(ez::main_t, sbox::app* app, scuff::id::device dev_id, edwin::fn::on_wi
 	auto device          = devices.at({dev_id});
 	const auto has_gui   = device.flags.value & device_flags::has_gui;
 	if (!has_gui) {
-		LOG_S(WARNING) << "Device " << dev_id.value << " does not have a GUI";
+		fu::log(std::format("WARNING: Device '{}' does not have a GUI", dev_id.value));
 		return;
 	}
 	if (device.ui.window) {
@@ -65,7 +65,7 @@ auto show(ez::main_t, sbox::app* app, scuff::id::device dev_id, edwin::fn::on_wi
 	}
 	const auto result = create_gui(ez::main, app, device);
 	if (!result.success) {
-		LOG_S(ERROR) << "Failed to create GUI for device " << dev_id.value;
+		fu::log(std::format("ERROR: Failed to create GUI for device '{}'", dev_id.value));
 		return;
 	}
 	edwin::window_config cfg;
@@ -92,13 +92,13 @@ auto show(ez::main_t, sbox::app* app, scuff::id::device dev_id, edwin::fn::on_wi
 	cfg.visible     = {true};
 	const auto wnd = edwin::create(cfg);
 	if (!wnd) {
-		LOG_S(ERROR) << "Failed to create window for device " << dev_id.value;
+		fu::log(std::format("ERROR: Failed to create window for device '{}'", dev_id.value));
 		return;
 	}
 	device.ui.window = wnd;
 	app->msgs_out.lock()->push_back(scuff::msg::out::device_editor_visible_changed{device.id.value, false, (int64_t)(edwin::get_native_handle(*wnd).value)});
 	if (!setup_editor_window(ez::main, app, device)) {
-		LOG_S(ERROR) << "Failed to setup clap editor window";
+		fu::log(std::format("ERROR: Failed to setup clap editor window for device '{}'", dev_id.value));
 	}
 	app->model.update(ez::main, [device](model&& m){
 		m.devices = m.devices.insert(device);

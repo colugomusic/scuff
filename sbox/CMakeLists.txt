@@ -11,8 +11,6 @@ list (APPEND scuff-sbox-src
 	src/cmdline.hpp
 	src/data.hpp
 	src/gui.hpp
-	src/loguru.cpp
-	src/loguru.hpp
 	src/main.cpp
 	src/msg-proc.hpp
 	src/op.hpp
@@ -28,6 +26,7 @@ list (APPEND scuff-sbox-res
 set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)
 find_package(Boost COMPONENTS headers program_options REQUIRED)
 CPMAddPackage(NAME cmrc            GITHUB_REPOSITORY vector-of-bool/cmrc          GIT_TAG 2.0.1                     )
+CPMAddPackage(NAME fulog           GITHUB_REPOSITORY colugomusic/fulog            GIT_TAG master                    )
 CPMAddPackage(NAME tga             GITHUB_REPOSITORY colugomusic/tga              GIT_TAG main                      )
 CPMAddPackage(NAME clap            GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea  DOWNLOAD_ONLY YES)
 CPMAddPackage(NAME edwin           GITHUB_REPOSITORY colugomusic/edwin            GIT_TAG master                    )
@@ -47,6 +46,7 @@ target_link_libraries(scuff-sbox PRIVATE
 	Boost::program_options
 	edwin::edwin
 	ez::ez
+	fulog::fulog
 	immer
 	readerwriterqueue
 	sago::platform_folders
