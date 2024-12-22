@@ -83,6 +83,9 @@ target_link_libraries(scuff-client-test
 	Boost::program_options
 	scuff::client
 )
+if (APPLE)
+target_link_libraries(scuff-client-test "-framework Foundation" "-framework CoreData")
+endif()
 target_compile_options(scuff-client-test PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
