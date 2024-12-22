@@ -6,6 +6,7 @@
 #include "ui.hpp"
 #include <boost/process.hpp>
 #include <deque>
+#include <format>
 #include <nlohmann/json.hpp>
 #pragma warning(push, 0)
 #include <immer/vector_transient.hpp>
@@ -38,8 +39,8 @@ struct scanner_process {
 
 using respond_fn = auto(*)(scan_::scanner* scanner, const nlohmann::json& j) -> void;
 
-static auto read_stderr_lines(scan_::scanner* scanner, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void;
-static auto read_stdout_lines(scan_::scanner* scanner, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void;
+static auto read_stderr_lines(scan_::scanner* scanner, const std::vector<std::string>& args, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void;
+static auto read_stdout_lines(scan_::scanner* scanner, const std::vector<std::string>& args, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void;
 
 [[nodiscard]] static
 auto add_buffer(scan_::scanner* scanner) -> basio::streambuf* {
@@ -83,9 +84,9 @@ auto make_exe_args_for_scanning_plugin(const std::string& path) -> std::vector<s
 }
 
 template <typename ReadFn> static
-auto async_read_lines(scan_::scanner* scanner, scan_::reader reader, ReadFn&& read_fn) -> void {
-	auto wrapper_fn = [scanner, reader, read_fn = std::forward<ReadFn>(read_fn)](const bsys::error_code& ec, size_t bytes_transferred) {
-		read_fn(scanner, reader, ec, bytes_transferred);
+auto async_read_lines(scan_::scanner* scanner, const std::vector<std::string>& args, scan_::reader reader, ReadFn&& read_fn) -> void {
+	auto wrapper_fn = [scanner, args, reader, read_fn = std::forward<ReadFn>(read_fn)](const bsys::error_code& ec, size_t bytes_transferred) {
+		read_fn(scanner, args, reader, ec, bytes_transferred);
 	};
 	basio::async_read_until(*reader.pipe, *reader.buffer, '\n', wrapper_fn);
 }
@@ -151,8 +152,8 @@ static
 auto async_scan_clap_file(scan_::scanner* scanner, const std::string& path) -> void {
 	const auto exe_args = make_exe_args_for_scanning_plugin(path);
 	const auto proc     = start_scanner_process(scanner, exe_args);
-	async_read_lines(scanner, proc.stderr_reader, read_stderr_lines);
-	async_read_lines(scanner, proc.stdout_reader, read_stdout_lines);
+	async_read_lines(scanner, exe_args, proc.stderr_reader, read_stderr_lines);
+	async_read_lines(scanner, exe_args, proc.stdout_reader, read_stdout_lines);
 }
 
 static
@@ -281,11 +282,24 @@ auto stdout_respond(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 }
 
 static
-auto report_exception(const std::exception& err) -> void {
-	ui::send(ui::msg::scan_error{err.what()});
+auto join(const std::vector<std::string>& strings) -> std::string {
+	if (strings.empty()) {
+		return {};
+	}
+	return std::accumulate(
+		std::next(strings.begin()),
+		strings.end(),
+		strings[0],
+		[](const std::string& a, const std::string& b) { return a + " " + b; });
 }
 
-auto read_lines(scan_::scanner* scanner, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred, respond_fn respond) -> void {
+static
+auto report_exception(const std::vector<std::string>& args, const std::exception& err) -> void {
+	const auto msg = std::format("{} (args: {})", err.what(), join(args));
+	ui::send(ui::msg::scan_error{msg});
+}
+
+auto read_lines(scan_::scanner* scanner, const std::vector<std::string>& args, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred, respond_fn respond) -> void {
 	if (ec) {
 		return;
 	}
@@ -294,22 +308,22 @@ auto read_lines(scan_::scanner* scanner, scan_::reader reader, const bsys::error
 	std::getline(is, line);
 	if (!line.empty()) {
 		try                               { respond(scanner, nlohmann::json::parse(line)); }
-		catch (const std::exception& err) { report_exception(err); }
+		catch (const std::exception& err) { report_exception(args, err); }
 	}
 	// continue reading
-	basio::async_read_until(*reader.pipe, *reader.buffer, '\n', [scanner, reader, respond](const bsys::error_code& ec, size_t bytes_transferred) {
-		read_lines(scanner, reader, ec, bytes_transferred, respond);
+	basio::async_read_until(*reader.pipe, *reader.buffer, '\n', [scanner, args, reader, respond](const bsys::error_code& ec, size_t bytes_transferred) {
+		read_lines(scanner, args, reader, ec, bytes_transferred, respond);
 	});
 }
 
 static
-auto read_stderr_lines(scan_::scanner* scanner, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void {
-	read_lines(scanner, reader, ec, bytes_transferred, stderr_respond);
+auto read_stderr_lines(scan_::scanner* scanner, const std::vector<std::string>& args, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void {
+	read_lines(scanner, args, reader, ec, bytes_transferred, stderr_respond);
 }
 
 static
-auto read_stdout_lines(scan_::scanner* scanner, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void {
-	read_lines(scanner, reader, ec, bytes_transferred, stdout_respond);
+auto read_stdout_lines(scan_::scanner* scanner, const std::vector<std::string>& args, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred) -> void {
+	read_lines(scanner, args, reader, ec, bytes_transferred, stdout_respond);
 }
 
 static
@@ -321,8 +335,8 @@ auto scan_system_for_installed_plugins(scan_::scanner* scanner) -> void {
 	}
 	const auto exe_args = make_exe_args_for_plugin_listing();
 	const auto proc     = start_scanner_process(scanner, exe_args);
-	async_read_lines(scanner, proc.stderr_reader, read_stderr_lines);
-	async_read_lines(scanner, proc.stdout_reader, read_stdout_lines);
+	async_read_lines(scanner, exe_args, proc.stderr_reader, read_stderr_lines);
+	async_read_lines(scanner, exe_args, proc.stdout_reader, read_stdout_lines);
 }
 
 static

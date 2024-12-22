@@ -9,7 +9,7 @@ list (APPEND src
 )
 find_package(Boost COMPONENTS headers program_options REQUIRED)
 CPMAddPackage(NAME json GITHUB_REPOSITORY nlohmann/json GIT_TAG v3.11.3)
-add_executable(scuff-scan ${src})
+add_executable(scuff-scan WIN32 ${src})
 add_executable(scuff::scan ALIAS scuff-scan)
 set_target_properties(scuff-scan PROPERTIES CXX_STANDARD 20)
 target_link_libraries(scuff-scan
