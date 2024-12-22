@@ -23,7 +23,7 @@ Likewise on Linux, I'm not sure if there is a way to set a "parent" for the edit
 Done. I worked towards this goal first because this is what I need for my own project. Many CLAP extensions are still unsupported but I have implemented the main ones.
 
 ### CLAP-based instruments or other kinds of devices ❌
-Not done but the framework is all there. I just don't need this for my own project yet so I'm not working on it right now.
+Not done but the framework is all there. I just don't need this for my own project yet so I haven't added it yet.
 
 ### VST3 support ❌
 Not started at all because I don't need it for my own project yet but everything is sort of written with this in mind.
