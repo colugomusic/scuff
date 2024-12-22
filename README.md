@@ -13,7 +13,7 @@ Here is the interface of the client library in its current state: [client/includ
 Finished for CLAP plugins.
 
 ### The sandboxing backend and framework ✔️
-It's done. By this I'm talking about all the sandbox process management, shared memory management, interprocess communication, and the client API. Everything appears to work well on Windows and macOS. On Linux the editor windows are still a bit iffy on my machine.
+It's done. By this I'm talking about all the sandbox process management, shared memory management, interprocess communication, and the client API. Everything appears to work well on Windows. On macOS and Linux the editor windows are a bit iffy.
 
 On macOS, the plugin editor windows are a little awkward for the end-user as I'm not sure at all how to associate them with the "main" application, and so because they belong to a different process, they will show up in the dock under the name "scuff-sbox". I'm sure there is some solution to this but I am really not a macOS developer and it's completely beyond my current knowledge. macOS development also makes me quite miserable so if some macOS person wants to take a look then please let me know and I will try to help you out as much as possible.
 
