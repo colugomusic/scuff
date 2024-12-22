@@ -7,7 +7,7 @@ namespace po = boost::program_options;
 
 namespace scuff::sbox::cmdline {
 
-auto get_options(const sbox::app& app, int argc, const char* argv[]) -> sbox::options {
+auto get_options(const sbox::app& app, int argc, char** argv) -> sbox::options {
 	sbox::options options;
 	po::options_description desc("Allowed options");
 	uint64_t parent_window = 0;

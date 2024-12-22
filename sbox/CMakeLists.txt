@@ -34,7 +34,7 @@ CPMAddPackage(NAME ez              GITHUB_REPOSITORY colugomusic/ez             
 CPMAddPackage(NAME immer           GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                    )
 CPMAddPackage(NAME PlatformFolders GITHUB_REPOSITORY sago007/PlatformFolders      GIT_TAG 4.2.0                     )
 CPMAddPackage(Name rwq             GITHUB_REPOSITORY cameron314/readerwriterqueue GIT_TAG v1.0.6                    )
-add_executable(scuff-sbox ${scuff-sbox-src})
+add_executable(scuff-sbox WIN32 ${scuff-sbox-src})
 add_executable(scuff::sbox ALIAS scuff-sbox)
 cmrc_add_resource_library(scuff-sbox-resources ALIAS scuff::sbox::rc NAMESPACE scuff::sbox ${scuff-sbox-res})
 target_include_directories(scuff-sbox PRIVATE

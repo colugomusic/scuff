@@ -180,7 +180,7 @@ auto make_window_icon() -> sbox::icon {
 	return icon;
 }
 
-auto go(int argc, const char* argv[]) -> int {
+auto go(int argc, char** argv) -> int {
 	const auto pid = scuff::os::get_process_id();
 	sbox::app app;
 	app_ = &app;
@@ -225,6 +225,14 @@ auto get_shared_dir(std::wstring& shared_dir) -> void {
 
 } // namespace boost::interprocess::ipcdetail
 
-auto main(int argc, const char* argv[]) -> int {
+#if defined(_WIN32)
+int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+	int argc = __argc;
+	char** argv = __argv;
 	return scuff::sbox::main::go(argc, argv);
 }
+#else
+auto main(int argc, char* argv[]) -> int {
+	return scuff::sbox::main::go(argc, argv);
+}
+#endif

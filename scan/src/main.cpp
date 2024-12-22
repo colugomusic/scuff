@@ -275,16 +275,21 @@ auto scan_vst3_plugfile_full(const plugfile& pf) -> void {
 }
 
 static
-auto scan_plugfile_full(const options& opts) -> void {
+auto scan_plugfile_full(const options& opts) -> int {
 	if (const auto pf = to_plugfile(opts.file_to_scan)) {
-		switch (pf->type) {
-			case scuff::plugin_type::clap: { scan_clap_plugfile_full(*pf); break; }
-			case scuff::plugin_type::vst3: { scan_vst3_plugfile_full(*pf); break; }
-			default:                       { break; }
+		try {
+			switch (pf->type) {
+				case scuff::plugin_type::clap: { scan_clap_plugfile_full(*pf); break; }
+				case scuff::plugin_type::vst3: { scan_vst3_plugfile_full(*pf); break; }
+				default:                       { break; }
+			}
+			return 0;
 		}
-		return;
+		catch (const std::exception& err) { report_broken_plugfile(*pf, err.what()); return 1; }
+		catch (...)                       { report_broken_plugfile(*pf, "Unknown error"); return 1; }
 	}
 	report_broken_plugfile({scuff::plugin_type::unknown, opts.file_to_scan}, "This doesn't look like a real plugin file.");
+	return 1;
 }
 
 static
@@ -297,27 +302,41 @@ auto scan_plugfile_safe(const plugfile& pf) -> void {
 }
 
 static
-auto scan_system_for_plugfiles(const options& opts) -> void {
-	flux::from(get_plugfile_search_paths(opts))
-		.map(find_plugfiles)
-		.flatten()
-		.for_each(scan_plugfile_safe);
+auto scan_system_for_plugfiles(const options& opts) -> int {
+	try {
+		flux::from(get_plugfile_search_paths(opts))
+			.map(find_plugfiles)
+			.flatten()
+			.for_each(scan_plugfile_safe);
+		return 0;
+	}
+	catch (const std::exception& e) {
+		std::fprintf(stderr, "Error: %s\n", e.what());
+		return 1;
+	}
+}
+
+auto main(int argc, const char* argv[]) -> int {
+	auto options = scanner::parse_options(argc, argv);
+	if (!options.file_to_scan.empty()) {
+		return scanner::scan_plugfile_full(options);
+	}
+	else {
+		return scanner::scan_system_for_plugfiles(options);
+	}
 }
 
 } // scanner
 
-auto main(int argc, const char* argv[]) -> int {
-	try {
-		auto options = scanner::parse_options(argc, argv);
-		if (!options.file_to_scan.empty()) {
-			scanner::scan_plugfile_full(options);
-		}
-		else {
-			scanner::scan_system_for_plugfiles(options);
-		}
-	} catch (const std::exception& e) {
-		std::fprintf(stderr, "Error: %s\n", e.what());
-		return 1;
-	}
-	return 0;
+#if defined(_WIN32)
+#include <Windows.h>
+int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+	int argc = __argc;
+	const char** argv = const_cast<const char**>(__argv);
+	return scanner::main(argc, argv);
 }
+#else
+auto main(int argc, const char* argv[]) -> int {
+	return scanner::main(argc, argv);
+}
+#endif
