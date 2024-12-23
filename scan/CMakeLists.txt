@@ -8,6 +8,7 @@ list (APPEND src
 	src/main.cpp
 )
 set(Boost_USE_STATIC_LIBS ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 find_package(Boost COMPONENTS headers program_options REQUIRED)
 CPMAddPackage(NAME json GITHUB_REPOSITORY nlohmann/json GIT_TAG v3.11.3)
 add_executable(scuff-scan WIN32 ${src})

@@ -25,6 +25,7 @@ list (APPEND scuff-sbox-res
 )
 set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)
 set(Boost_USE_STATIC_LIBS ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 find_package(Boost COMPONENTS headers program_options REQUIRED)
 CPMAddPackage(NAME cmrc            GITHUB_REPOSITORY vector-of-bool/cmrc          GIT_TAG 2.0.1                     )
 CPMAddPackage(NAME fulog           GITHUB_REPOSITORY colugomusic/fulog            GIT_TAG master                    )
