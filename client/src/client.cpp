@@ -1482,7 +1482,6 @@ auto cleanup_shm_emulation_folders() -> void {
 }
 
 auto init() -> void {
-	// TOODOO: figure out if we need to handle cleanup of old shm emulation files
 	if (scuff::initialized_) { return; }
 	try {
 		scuff::DATA_               = std::make_unique<scuff::data>();
