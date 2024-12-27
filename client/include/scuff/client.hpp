@@ -410,6 +410,12 @@ auto gui_show(id::device dev) -> void;
 [[nodiscard]]
 auto has_gui(id::device dev) -> bool;
 
+// Return true if this plugin is suitable for use as an "instrument". Generally speaking
+// this means it produces sounds without any input audio.
+// For CLAP this is going to check the plugin features for "instrument".
+[[nodiscard]]
+auto has_instrument_features(id::plugin plugin) -> bool;
+
 // Return true if the device has parameters.
 [[nodiscard]]
 auto has_params(id::device dev) -> bool;
@@ -417,9 +423,6 @@ auto has_params(id::device dev) -> bool;
 // Return true if this plugin is suitable for use in a "rack", for example it is an audio
 // effect or analyzer of some kind.
 // For CLAP this is going to check the plugin features for "audio-effect" or "analyzer".
-// I don't know what we will do for VSTs yet.
-// I'm not sure I like this function so I might replace it with something else. Let me know
-// what you think.
 [[nodiscard]]
 auto has_rack_features(id::plugin plugin) -> bool;
 

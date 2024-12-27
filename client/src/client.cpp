@@ -884,6 +884,14 @@ auto has_params(ez::nort_t, id::device dev) -> bool {
 }
 
 [[nodiscard]] static
+auto has_instrument_features(const immer::vector<std::string>& features) -> bool {
+	for (const auto& feature : features) {
+		if (feature == CLAP_PLUGIN_FEATURE_INSTRUMENT) { return true; }
+	}
+	return false;
+}
+
+[[nodiscard]] static
 auto has_rack_features(const immer::vector<std::string>& features) -> bool {
 	for (const auto& feature : features) {
 		if (feature == CLAP_PLUGIN_FEATURE_ANALYZER)     { return true; }
@@ -893,20 +901,24 @@ auto has_rack_features(const immer::vector<std::string>& features) -> bool {
 }
 
 [[nodiscard]] static
+auto has_instrument_features(ez::nort_t, id::plugin id) -> bool {
+	const auto m = DATA_->model.read(ez::nort);
+	const auto& plugin = m.plugins.at(id);
+	switch (plugin.type) {
+		case plugin_type::clap: { return has_instrument_features(plugin.clap_features); }
+		case plugin_type::vst3: { /* Not implemented yet */ return false; }
+		default:                { return false; }
+	}
+}
+
+[[nodiscard]] static
 auto has_rack_features(ez::nort_t, id::plugin id) -> bool {
 	const auto m       = DATA_->model.read(ez::nort);
 	const auto& plugin = m.plugins.at(id);
 	switch (plugin.type) {
-		case plugin_type::clap: {
-			return has_rack_features(plugin.clap_features);
-		}
-		case plugin_type::vst3: {
-			// Not implemented yet
-			return false;
-		}
-		default: {
-			return false;
-		}
+		case plugin_type::clap: { return has_rack_features(plugin.clap_features); }
+		case plugin_type::vst3: { /* Not implemented yet */ return false; }
+		default:                { return false; }
 	}
 }
 
@@ -1703,6 +1715,10 @@ auto get_working_plugins() -> std::vector<id::plugin> {
 
 auto has_gui(id::device dev) -> bool {
 	try { return impl::has_gui(ez::nort, dev); } SCUFF_EXCEPTION_WRAPPER;
+}
+
+auto has_instrument_features(id::plugin plugin) -> bool {
+	try { return impl::has_instrument_features(ez::nort, plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto has_params(id::device dev) -> bool {
