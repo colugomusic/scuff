@@ -184,8 +184,8 @@ auto go(int argc, char** argv) -> int {
 	const auto pid = scuff::os::get_process_id();
 	sbox::app app;
 	app_ = &app;
-	fu::delete_old_files(std::chrono::hours{48});
 	fu::set_application_name("scuff-sbox");
+	fu::delete_old_files(std::chrono::hours{48});
 	try {
 		fu::log("INFO: scuff-sbox started");
 		app.options     = cmdline::get_options(app, argc, argv);
