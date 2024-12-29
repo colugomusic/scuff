@@ -31,6 +31,7 @@ struct event                  { id::device::type dev_id; scuff::event event; };
 struct get_param_value        { id::device::type dev_id; size_t param_idx; size_t callback; };
 struct get_param_value_text   { id::device::type dev_id; size_t param_idx; double value; size_t callback; };
 struct heartbeat              {}; // Sandbox shuts itself down if this isn't received within a certain time.
+struct panic				  {}; // "Panic" all devices.
 struct set_render_mode        { render_mode mode; };
 struct set_track_color        { id::device::type dev_id; std::optional<rgba32> color; };
 struct set_track_name         { id::device::type dev_id; std::string name; };
@@ -52,6 +53,7 @@ using msg = std::variant<
 	get_param_value,
 	get_param_value_text,
 	heartbeat,
+	panic,
 	set_render_mode,
 	set_track_color,
 	set_track_name

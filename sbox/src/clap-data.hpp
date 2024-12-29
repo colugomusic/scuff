@@ -86,6 +86,7 @@ struct device_atomic_flags {
 		schedule_restart     = 1 << 4,
 		schedule_param_flush = 1 << 5,
 		schedule_process     = 1 << 6,
+		schedule_panic       = 1 << 7,
 	};
 	std::atomic<int> value = 0;
 };

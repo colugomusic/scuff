@@ -443,6 +443,9 @@ auto load(id::device dev, const scuff::bytes& bytes) -> bool;
 //    on the next call to ui_update(group).
 auto load_async(id::device dev, const scuff::bytes& bytes, return_load_device_result fn) -> void;
 
+// "Reset" all devices (kill reverb tails, etc.)
+auto panic() -> void;
+
 // Push a device event
 auto push_event(id::device dev, const scuff::event& event) -> void;
 

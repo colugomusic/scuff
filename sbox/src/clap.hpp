@@ -367,11 +367,23 @@ auto process_event_device(ez::audio_t, const sbox::device& dev, const clap::devi
 	convert_output_events(ez::audio, dev, clap_dev);
 }
 
+auto is_scheduled_to_panic(ez::safe_t, const clap::device& device) -> bool {
+	return is_flag_set(device.service.data->atomic_flags, device_atomic_flags::schedule_panic);
+}
+
+auto panic(ez::audio_t, const clap::device& device) -> void {
+	device.iface->plugin.plugin->reset(device.iface->plugin.plugin);
+	unset_flags(&device.service.data->atomic_flags, device_atomic_flags::schedule_panic);
+}
+
 auto process(ez::audio_t, const sbox::app& app, const sbox::device& dev) -> void {
 	const auto& clap_dev = app.audio_model->clap_devices.at(dev.id);
 	const auto& iface    = clap_dev.iface->plugin;
 	if (!is_active(ez::audio, clap_dev)) {
 		return;
+	}
+	if (is_scheduled_to_panic(ez::audio, clap_dev)) {
+		panic(ez::audio, clap_dev);
 	}
 	if (!is_processing(ez::audio, clap_dev)) {
 		flush_device_events(ez::audio, dev, clap_dev);
@@ -646,8 +658,9 @@ auto init_local_params(ez::main_t, sbox::device&& dev, const clap::device& clap_
 
 static
 auto process_msg_(ez::main_t, sbox::app* app, const device& clap_dev, const clap::device_msg::gui_closed& msg) -> void {
+	fu::debug_log("clap::device_msg::gui_closed");
 	if (msg.destroyed) {
-		clap_dev.iface->plugin.gui->destroy(clap_dev.iface->plugin.plugin);
+		gui::hide(ez::main, app, app->model.read(ez::main).devices.at(clap_dev.id));
 	}
 }
 
@@ -1131,6 +1144,14 @@ auto setup_editor_window(ez::main_t, sbox::app* app, const sbox::device& dev) ->
 }
 
 static
+auto destroy(ez::main_t, const sbox::model& m, const sbox::device& dev) -> void {
+	const auto clap_dev = m.clap_devices.at(dev.id);
+	const auto iface     = clap_dev.iface->plugin;
+	iface.plugin->deactivate(iface.plugin);
+	iface.plugin->destroy(iface.plugin);
+}
+
+static
 auto shutdown_editor_window(ez::main_t, sbox::app* app, const sbox::device& dev) -> void {
 	const auto m        = app->model.read(ez::main);
 	const auto clap_dev = m.clap_devices.at(dev.id);
@@ -1171,6 +1192,11 @@ auto on_native_window_resize(ez::main_t, const sbox::app* app, const sbox::devic
 	}
 	dev.service->scheduled_window_resize = adjusted_size;
 	iface.gui->set_size(iface.plugin, adjusted_size.width, adjusted_size.height);
+}
+
+auto panic(ez::main_t, sbox::app* app, id::device dev_id, double sr) -> void {
+	const auto& device = app->model.read(ez::main).clap_devices.at(dev_id);
+	set_flags(&device.service.data->atomic_flags, device_atomic_flags::schedule_panic);
 }
 
 auto set_render_mode(ez::main_t, sbox::app* app, id::device dev_id, scuff::render_mode mode) -> void {

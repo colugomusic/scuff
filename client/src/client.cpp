@@ -1188,6 +1188,19 @@ auto load_async(ez::nort_t, id::device dev_id, const scuff::bytes& state, return
 }
 
 static
+auto panic(ez::nort_t) -> void {
+	const auto m = DATA_->model.read(ez::nort);
+	for(const auto& group : m.groups) {
+		for(const auto& sbox_id : group.sandboxes) {
+			const auto& sbox = m.sandboxes.at(sbox_id);
+			if(is_running(sbox)) {
+				sbox.service->enqueue(scuff::msg::in::panic{});
+			}
+		}
+	}
+}
+
+static
 auto restart(ez::nort_t, id::sandbox sbox, std::string_view sbox_exe_path) -> void {
 	const auto m      = DATA_->model.read(ez::nort);
 	auto sandbox      = m.sandboxes.at({sbox});
@@ -1754,6 +1767,10 @@ auto ui_update(const general_ui& ui) -> void {
 
 auto ui_update(id::group group_id, const group_ui& ui) -> void {
 	try { ui::call_callbacks(group_id, ui); } SCUFF_EXCEPTION_WRAPPER;
+}
+
+auto panic() -> void {
+	try { impl::panic(ez::nort); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool {

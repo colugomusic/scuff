@@ -144,8 +144,13 @@ auto device_create(sbox::app* app, plugin_type type, id::device dev_id, std::str
 
 static
 auto device_erase(sbox::app* app, id::device dev_id) -> void {
-	app->model.update_publish(ez::main, [dev_id](model&& m){
+	app->model.update_publish(ez::main, [app, dev_id](model&& m){
 		const auto devices = m.devices;
+		const auto dev = devices.at(dev_id);
+		switch (dev.type) {
+			case plugin_type::clap: { clap::destroy(ez::main, m, dev); break; }
+			default:                { throw std::runtime_error("Unsupported device type"); }
+		}
 		// Remove any internal connections to this device
 		for (auto dev : devices) {
 			for (auto pos = dev.output_conns.begin(); pos != dev.output_conns.end(); ++pos) {
@@ -160,6 +165,15 @@ auto device_erase(sbox::app* app, id::device dev_id) -> void {
 		m.device_processing_order = make_device_processing_order(m.devices);
 		return m;
 	});
+}
+
+auto panic(sbox::app* app, id::device dev_id, double sr) -> void {
+	const auto m = app->model.read(ez::main);
+	const auto dev = m.devices.at(dev_id);
+	switch (dev.type) {
+		case plugin_type::clap: { clap::panic(ez::main, app, dev_id, sr); break; }
+		default:                { throw std::runtime_error("Unsupported device type"); }
+	}
 }
 
 auto set_render_mode(sbox::app* app, id::device dev_id, scuff::render_mode mode) -> void {

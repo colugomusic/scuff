@@ -114,6 +114,15 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_sa
 }
 
 static
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::panic& msg) -> void {
+	fu::debug_log("INFO: msg::in::panic");
+	const auto& devices = app->model.read(ez::main).devices;
+	for (const auto& dev : devices) {
+		op::panic(app, dev.id, app->sample_rate);
+	}
+}
+
+static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::set_render_mode& msg) -> void {
 	fu::debug_log("INFO: msg::in::set_render_mode");
 	app->render_mode = msg.mode;
