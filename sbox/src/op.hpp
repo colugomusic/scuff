@@ -170,6 +170,15 @@ auto device_erase(sbox::app* app, id::device dev_id) -> void {
 auto panic(sbox::app* app, id::device dev_id, double sr) -> void {
 	const auto m = app->model.read(ez::main);
 	const auto dev = m.devices.at(dev_id);
+	const auto& service = dev.service;
+	// Send "all sounds off" midi message
+	scuff::events::midi event;
+	event.header.time = 0;
+	event.header.event_type = scuff::events::type::midi;
+	event.data[0] = 0xB1;
+	event.data[1] = 0x78;
+	event.data[2] = 0;
+	service->input_events_from_main.enqueue(event);
 	switch (dev.type) {
 		case plugin_type::clap: { clap::panic(ez::main, app, dev_id, sr); break; }
 		default:                { throw std::runtime_error("Unsupported device type"); }
