@@ -980,6 +980,65 @@ auto get_broken_plugins(ez::nort_t) -> std::vector<id::plugin> {
 }
 
 [[nodiscard]] static
+auto is_clap_category(std::string_view str) -> bool {
+	if (str == CLAP_PLUGIN_FEATURE_INSTRUMENT) { return true; }
+	if (str == CLAP_PLUGIN_FEATURE_AUDIO_EFFECT) { return true; }
+	if (str == CLAP_PLUGIN_FEATURE_NOTE_EFFECT) { return true; }
+	if (str == CLAP_PLUGIN_FEATURE_NOTE_DETECTOR) { return true; }
+	if (str == CLAP_PLUGIN_FEATURE_ANALYZER) { return true; }
+	return false;
+}
+
+[[nodiscard]] static
+auto is_clap_audio_cap(std::string_view str) -> bool {
+	if (str == CLAP_PLUGIN_FEATURE_MONO) { return true; }
+	if (str == CLAP_PLUGIN_FEATURE_STEREO) { return true; }
+	if (str == CLAP_PLUGIN_FEATURE_SURROUND) { return true; }
+	if (str == CLAP_PLUGIN_FEATURE_AMBISONIC) { return true; }
+	return false;
+}
+
+[[nodiscard]] static
+auto get_category(const immer::vector<std::string>& features) -> std::string_view {
+	for (const auto& feature : features) {
+		if (is_clap_category(feature)) return feature;
+	}
+	return "";
+}
+
+[[nodiscard]] static
+auto get_subcategory(const immer::vector<std::string>& features) -> std::string_view {
+	for (const auto& feature : features) {
+		if (is_clap_audio_cap(feature)) continue;
+		if (is_clap_category(feature)) continue;
+		return feature;
+	}
+	return "";
+}
+
+[[nodiscard]] static
+auto get_category(ez::nort_t, id::plugin id) -> std::string_view {
+	const auto m = DATA_->model.read(ez::nort);
+	const auto& plugin = m.plugins.at(id);
+	switch (plugin.type) {
+		case plugin_type::clap: { return get_category(plugin.clap_features); }
+		case plugin_type::vst3: { throw std::runtime_error("VST3 plugins not implemented yet."); }
+		default:                { throw std::runtime_error("Unknown plugin type."); }
+	}
+}
+
+[[nodiscard]] static
+auto get_subcategory(ez::nort_t, id::plugin id) -> std::string_view {
+	const auto m = DATA_->model.read(ez::nort);
+	const auto& plugin = m.plugins.at(id);
+	switch (plugin.type) {
+		case plugin_type::clap: { return get_subcategory(plugin.clap_features); }
+		case plugin_type::vst3: { throw std::runtime_error("VST3 plugins not implemented yet."); }
+		default:                { throw std::runtime_error("Unknown plugin type."); }
+	}
+}
+
+[[nodiscard]] static
 auto get_devices(ez::nort_t, id::sandbox sbox_id) -> std::vector<id::device> {
 	const auto m     = DATA_->model.read(ez::nort);
 	const auto& sbox = m.sandboxes.at(sbox_id);
@@ -1643,6 +1702,14 @@ auto get_broken_plugfiles() -> std::vector<id::plugfile> {
 
 auto get_broken_plugins() -> std::vector<id::plugin> {
 	try { return impl::get_broken_plugins(ez::nort); } SCUFF_EXCEPTION_WRAPPER;
+}
+
+auto get_category(id::plugin plugin) -> std::string_view {
+	try { return impl::get_category(ez::nort, plugin); } SCUFF_EXCEPTION_WRAPPER;
+}
+
+auto get_subcategory(id::plugin plugin) -> std::string_view {
+	try { return impl::get_subcategory(ez::nort, plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_devices(id::sandbox sbox) -> std::vector<id::device> {

@@ -307,6 +307,20 @@ auto get_broken_plugfiles() -> std::vector<id::plugfile>;
 [[nodiscard]]
 auto get_broken_plugins() -> std::vector<id::plugin>;
 
+// Return the category of the plugin.
+// For CLAP plugins this is one of the CLAP_PLUGIN_FEATURE_* strings.
+// If the plugin has multiple category strings then the first one is used.
+// For VST3 I have no idea yet.
+[[nodiscard]]
+auto get_category(id::plugin plugin) -> std::string_view;
+
+// Return the subcategory of the plugin.
+// For CLAP plugins this is one of the CLAP_PLUGIN_FEATURE_* strings.
+// If the plugin has multiple subcategory strings then the first one is used.
+// For VST3 I have no idea yet.
+[[nodiscard]]
+auto get_subcategory(id::plugin plugin) -> std::string_view;
+
 [[nodiscard]]
 auto get_devices(id::sandbox sbox) -> std::vector<id::device>;
 
