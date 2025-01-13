@@ -644,11 +644,27 @@ auto create_unknown_plugin_device(model&& m, id::device dev_id, const sandbox& s
 }
 
 [[nodiscard]] static
+auto create_device_async(ez::nort_t, id::sandbox sbox_id, id::plugin plugin_id, return_create_device_result return_fn) -> id::device {
+	assert (plugin_id);
+	const auto dev_id = id::device{scuff::id_gen_++};
+	DATA_->model.update(ez::nort, [dev_id, sbox_id, plugin_id, return_fn](model&& m){
+		const auto sbox = m.sandboxes.at(sbox_id);
+		// The return callback will be called in the poll thread so this wrapper
+		// is to pass it back to the main thread to be called there instead.
+		const auto wrapper = [sbox, return_fn](create_device_result result) {
+			ui::send(sbox, ui::msg::device_create{result, return_fn});
+		};
+		return create_plugin_device_async(std::move(m), dev_id, sbox, m.plugins.at(plugin_id), wrapper);
+	});
+	return dev_id;
+}
+
+[[nodiscard]] static
 auto create_device_async(ez::nort_t, id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id, return_create_device_result return_fn) -> id::device {
 	const auto dev_id = id::device{scuff::id_gen_++};
 	DATA_->model.update(ez::nort, [dev_id, sbox_id, type, plugin_ext_id, return_fn](model&& m){
 		const auto sbox      = m.sandboxes.at(sbox_id);
-		const auto plugin_id = id::plugin{find(m, plugin_ext_id)};
+		const auto plugin_id = find(m, plugin_ext_id);
 		// The return callback will be called in the poll thread so this wrapper
 		// is to pass it back to the main thread to be called there instead.
 		const auto wrapper = [sbox, return_fn](create_device_result result) {
@@ -685,17 +701,11 @@ private:
 };
 
 [[nodiscard]] static
-auto create_device(ez::nort_t, id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id) -> create_device_result {
+auto create_device(ez::nort_t, id::sandbox sbox_id, id::plugin plugin_id) -> create_device_result {
+	assert (plugin_id);
 	auto m = DATA_->model.read(ez::nort);
-	const auto dev_id    = id::device{scuff::id_gen_++};
-	const auto plugin_id = id::plugin{find(m, plugin_ext_id)};
-	const auto sbox      = m.sandboxes.at(sbox_id);
-	if (!plugin_id) {
-		DATA_->model.update(ez::nort, [dev_id, sbox, type, plugin_ext_id](model&& m) {
-			return create_unknown_plugin_device(std::move(m), dev_id, sbox, type, plugin_ext_id, nullptr);
-		});
-		return create_device_result{dev_id, false};
-	}
+	const auto dev_id = id::device{scuff::id_gen_++};
+	const auto sbox   = m.sandboxes.at(sbox_id);
 	std::optional<create_device_result> result;
 	blocking_sandbox_operation bso;
 	auto fn = bso.make_fn([&result](create_device_result remote_result) -> void {
@@ -714,6 +724,27 @@ auto create_device(ez::nort_t, id::sandbox sbox_id, plugin_type type, ext::id::p
 		return create_device_result{dev_id, false};
 	}
 	return *result;
+}
+
+[[nodiscard]] static
+auto get_type(ez::nort_t, id::plugin id) -> plugin_type {
+	return DATA_->model.read(ez::nort).plugins.at(id).type;
+}
+
+[[nodiscard]] static
+auto create_device(ez::nort_t, id::sandbox sbox_id, plugin_type type, ext::id::plugin plugin_ext_id) -> create_device_result {
+	auto m = DATA_->model.read(ez::nort);
+	const auto plugin_id = find(m, plugin_ext_id);
+	if (!plugin_id) {
+		const auto dev_id = id::device{scuff::id_gen_++};
+		const auto sbox   = m.sandboxes.at(sbox_id);
+		DATA_->model.update(ez::nort, [dev_id, sbox, type, plugin_ext_id](model&& m) {
+			return create_unknown_plugin_device(std::move(m), dev_id, sbox, type, plugin_ext_id, nullptr);
+		});
+		return create_device_result{dev_id, false};
+	}
+	assert (get_type(ez::nort, plugin_id) == type);
+	return create_device(ez::nort, sbox_id, plugin_id);
 }
 
 static
@@ -862,11 +893,6 @@ auto get_param_value_text(ez::nort_t, id::device dev, idx::param param, double v
 [[nodiscard]] static
 auto get_plugin(ez::nort_t, id::device dev) -> id::plugin {
 	return DATA_->model.read(ez::nort).devices.at(dev).plugin;
-}
-
-[[nodiscard]] static
-auto get_type(ez::nort_t, id::plugin id) -> plugin_type {
-	return DATA_->model.read(ez::nort).plugins.at(id).type;
 }
 
 [[nodiscard]] static
@@ -1628,8 +1654,16 @@ auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port
 	try { impl::connect(ez::nort, dev_out, port_out, dev_in, port_in); } SCUFF_EXCEPTION_WRAPPER;
 }
 
+auto create_device(id::sandbox sbox, id::plugin plugin_id) -> create_device_result {
+	try { return impl::create_device(ez::nort, sbox, plugin_id); } SCUFF_EXCEPTION_WRAPPER;
+}
+
 auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id) -> create_device_result {
 	try { return impl::create_device(ez::nort, sbox, type, plugin_id); } SCUFF_EXCEPTION_WRAPPER;
+}
+
+auto create_device_async(id::sandbox sbox, id::plugin plugin_id, return_create_device_result fn) -> id::device {
+	try { return impl::create_device_async(ez::nort, sbox, plugin_id, fn); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_create_device_result fn) -> id::device {

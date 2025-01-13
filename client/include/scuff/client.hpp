@@ -233,15 +233,19 @@ auto connect(id::device dev_out, size_t port_out, id::device dev_in, size_t port
 //  - This involves a round-trip to the sandbox process.
 //  - If the device fails to load, it will still be created, but it will be in an unloaded
 //    state.
-//  - You can create a device with a plugin ID that hasn't been scanned yet. It will be
+//  - You can create a device with an ext::id that hasn't been scanned yet. It will be
 //    created in an unloaded state and will remain that way until the plugin is found by
 //    a future scan where the retry_failed_devices flag is set.
+[[nodiscard]]
+auto create_device(id::sandbox sbox, id::plugin plugin_id) -> create_device_result;
 [[nodiscard]]
 auto create_device(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id) -> create_device_result;
 
 // Create a device and add it to the sandbox asynchronously.
 //  - When the operation is complete, the callback will be called on the next call to ui_update(group).
 //  - Before the operation is complete, the returned device ID will be valid, but the device will be in an unloaded state.
+[[nodiscard]]
+auto create_device_async(id::sandbox sbox, id::plugin plugin_id, return_create_device_result fn) -> id::device;
 [[nodiscard]]
 auto create_device_async(id::sandbox sbox, plugin_type type, ext::id::plugin plugin_id, return_create_device_result fn) -> id::device;
 
