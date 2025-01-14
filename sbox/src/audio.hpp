@@ -104,6 +104,7 @@ auto stop_audio(ez::main_t, sbox::app* app) -> void {
 	fu::debug_log("INFO: stop_audio()");
 	if (app->audio_thread.joinable()) {
 		app->audio_thread.request_stop();
+		signaling::unblock_self(app->sandbox_signaler);
 		app->audio_thread.join();
 	}
 }

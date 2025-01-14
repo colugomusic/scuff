@@ -44,22 +44,34 @@ auto make_device_processing_order(immer::table<device> devices) -> immer::vector
 	return t.persistent();
 }
 
-static
-auto activate(sbox::app* app, const sbox::device& dev, double sr) -> void {
+[[nodiscard]] static
+auto get_latency(ez::main_t, const app& app, const device& dev) -> uint32_t {
+	if (dev.type == plugin_type::clap) {
+		return clap::get_latency(ez::main, app, dev.id);
+	}
+	throw std::runtime_error("Unsupported device type");
+}
+
+[[nodiscard]] static
+auto activate(ez::main_t, sbox::app* app, const sbox::device& dev, double sr) -> bool {
 	if (dev.type == plugin_type::clap) {
 		if (!clap::activate(ez::main, app, dev.id, sr)) {
 			app->msgs_out.lock()->push_back(scuff::msg::out::report_error{std::format("Failed to activate device {}", dev.id.value)});
+			return false;
 		}
-		return;
+		return true;
 	}
+	return false;
 }
 
 static
-auto activate(sbox::app* app, double sr) -> void {
+auto activate(ez::main_t, sbox::app* app, double sr) -> void {
 	start_audio(ez::main, app);
 	const auto m = app->model.read(ez::main);
 	for (const auto& dev : m.devices) {
-		activate(app, dev, sr);
+		if (activate(ez::main, app, dev, sr)) {
+			app->msgs_out.lock()->push_back(msg::out::device_latency{dev.id.value, get_latency(ez::main, *app, dev)});
+		}
 	}
 	app->msgs_out.lock()->push_back(msg::out::confirm_activated{});
 	app->sample_rate = sr;
@@ -67,24 +79,24 @@ auto activate(sbox::app* app, double sr) -> void {
 }
 
 static
-auto deactivate(sbox::app* app, const sbox::device& dev) -> void {
+auto deactivate(ez::main_t, sbox::app* app, const sbox::device& dev) -> void {
 	if (dev.type == plugin_type::clap) {
 		clap::deactivate(ez::main, app, dev.id);
 	}
 }
 
 static
-auto deactivate(sbox::app* app) -> void {
+auto deactivate(ez::main_t, sbox::app* app) -> void {
 	const auto m = app->model.read(ez::main);
 	for (const auto& dev : m.devices) {
-		deactivate(app, dev);
+		deactivate(ez::main, app, dev);
 	}
 	stop_audio(ez::main, app);
 	app->active = false;
 }
 
 static
-auto device_connect(sbox::app* app, id::device out_dev_id, size_t out_port, id::device in_dev_id, size_t in_port) -> void {
+auto device_connect(ez::main_t, sbox::app* app, id::device out_dev_id, size_t out_port, id::device in_dev_id, size_t in_port) -> void {
 	app->model.update_publish(ez::main, [out_dev_id, out_port, in_dev_id, in_port](model&& m){
 		auto in_dev_ptr  = m.devices.find(in_dev_id);
 		auto out_dev_ptr = m.devices.find(out_dev_id);
@@ -103,7 +115,7 @@ auto device_connect(sbox::app* app, id::device out_dev_id, size_t out_port, id::
 }
 
 static
-auto device_disconnect(sbox::app* app, id::device out_dev_id, size_t out_port, id::device in_dev_id, size_t in_port) -> void {
+auto device_disconnect(ez::main_t, sbox::app* app, id::device out_dev_id, size_t out_port, id::device in_dev_id, size_t in_port) -> void {
 	app->model.update_publish(ez::main, [out_dev_id, out_port, in_dev_id, in_port](model&& m) {
 		const auto in_dev_ptr  = m.devices.find(in_dev_id);
 		const auto out_dev_ptr = m.devices.find(out_dev_id);
@@ -126,7 +138,7 @@ auto device_disconnect(sbox::app* app, id::device out_dev_id, size_t out_port, i
 }
 
 static
-auto device_create(sbox::app* app, plugin_type type, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id) -> sbox::device {
+auto device_create(ez::main_t, sbox::app* app, plugin_type type, id::device dev_id, std::string_view plugfile_path, std::string_view plugin_id) -> sbox::device {
 	if (type == plugin_type::clap) {
 		clap::create_device(ez::main, app, dev_id, plugfile_path, plugin_id);
 		app->model.update_publish(ez::main, [dev_id](model&& m){
@@ -135,7 +147,9 @@ auto device_create(sbox::app* app, plugin_type type, id::device dev_id, std::str
 		});
 		const auto dev = app->model.read(ez::main).devices.at(dev_id);
 		if (app->active) {
-			activate(app, dev, app->sample_rate);
+			if (activate(ez::main, app, dev, app->sample_rate)) {
+				app->msgs_out.lock()->push_back(msg::out::device_latency{dev.id.value, get_latency(ez::main, *app, dev)});
+			}
 		}
 		return dev;
 	}
@@ -143,7 +157,7 @@ auto device_create(sbox::app* app, plugin_type type, id::device dev_id, std::str
 }
 
 static
-auto device_erase(sbox::app* app, id::device dev_id) -> void {
+auto device_erase(ez::main_t, sbox::app* app, id::device dev_id) -> void {
 	app->model.update_publish(ez::main, [app, dev_id](model&& m){
 		const auto devices = m.devices;
 		const auto dev = devices.at(dev_id);
@@ -167,7 +181,7 @@ auto device_erase(sbox::app* app, id::device dev_id) -> void {
 	});
 }
 
-auto panic(sbox::app* app, id::device dev_id, double sr) -> void {
+auto panic(ez::main_t, sbox::app* app, id::device dev_id, double sr) -> void {
 	const auto m = app->model.read(ez::main);
 	const auto dev = m.devices.at(dev_id);
 	const auto& service = dev.service;
@@ -185,7 +199,7 @@ auto panic(sbox::app* app, id::device dev_id, double sr) -> void {
 	}
 }
 
-auto set_render_mode(sbox::app* app, id::device dev_id, scuff::render_mode mode) -> void {
+auto set_render_mode(ez::main_t, sbox::app* app, id::device dev_id, scuff::render_mode mode) -> void {
 	const auto m = app->model.read(ez::main);
 	const auto dev = m.devices.at(dev_id);
 	switch (dev.type) {
@@ -211,7 +225,7 @@ auto make_client_param_info(const sbox::device& dev) -> std::vector<client_param
 }
 
 [[nodiscard]] static
-auto make_device_port_info(const sbox::app& app, const sbox::device& dev) -> device_port_info {
+auto make_device_port_info(ez::main_t, const sbox::app& app, const sbox::device& dev) -> device_port_info {
 	if (dev.type == plugin_type::clap) {
 		return clap::make_device_port_info(ez::main, app, dev.id);
 	}

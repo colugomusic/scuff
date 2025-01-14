@@ -232,8 +232,8 @@ auto do_sandbox_processing(ez::audio_t, const ez::immutable<model>& audio, const
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::confirm_activated& msg) -> void {
 	DATA_->model.update_publish(ez::nort, [sbox = sbox](model&& m) mutable {
-		sbox.flags.value |= sandbox_flags::confirmed_active;
-		m.sandboxes       = m.sandboxes.insert(sbox);
+		sbox.flags.value            |= sandbox_flags::confirmed_active;
+		m.sandboxes                  = m.sandboxes.insert(sbox);
 		auto group                   = m.groups.at(sbox.group);
 		group.total_active_sandboxes = get_active_sandbox_count(m, group);
 		m.groups                     = m.groups.insert(group);
@@ -290,7 +290,7 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_editor
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_flags& msg) -> void {
 	DATA_->model.update(ez::nort, [msg](model&& m) {
-		m.devices = m.devices.update({msg.dev_id}, [msg](device dev) {
+		m.devices = m.devices.update_if_exists({msg.dev_id}, [msg](device dev) {
 			if (msg.flags & device_flags::has_gui)    { dev.flags.value |= client_device_flags::has_gui; }
 			if (msg.flags & device_flags::has_params) { dev.flags.value |= client_device_flags::has_params; }
 			return dev;
@@ -298,6 +298,17 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_flags&
 		return m;
 	});
 	ui::send(sbox, ui::msg::device_flags_changed{{msg.dev_id}});
+}
+
+static
+auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_latency& msg) -> void {
+	DATA_->model.update(ez::nort, [msg](model&& m) {
+		m.devices = m.devices.update_if_exists({msg.dev_id}, [msg](device dev) {
+			dev.latency = msg.latency;
+			return dev;
+		});
+		return m;
+	});
 }
 
 static
@@ -500,6 +511,7 @@ auto poll_thread(std::stop_token stop_token) -> void {
 	auto next_dd = now + std::chrono::milliseconds{DIRTY_DEVICE_MS};
 	while (!stop_token.stop_requested()) {
 		now = std::chrono::steady_clock::now();
+		auto next_poll = now + std::chrono::milliseconds{POLL_INTERVAL_MS};
 		if (now > next_gc) {
 			DATA_->model.gc(ez::nort);
 			next_gc = now + std::chrono::milliseconds{GC_INTERVAL_MS};
@@ -513,7 +525,7 @@ auto poll_thread(std::stop_token stop_token) -> void {
 			save_dirty_device_states(poll);
 			next_dd = now + std::chrono::milliseconds{DIRTY_DEVICE_MS};
 		}
-		std::this_thread::sleep_for(std::chrono::milliseconds{POLL_SLEEP_MS});
+		std::this_thread::sleep_until(next_poll);
 	}
 }
 
@@ -1207,6 +1219,11 @@ auto get_ext_id(ez::nort_t, id::plugin plugin) -> ext::id::plugin {
 }
 
 [[nodiscard]] static
+auto get_latency(ez::nort_t, id::device dev_id) -> uint32_t {
+	return DATA_->model.read(ez::nort).devices.at(dev_id).latency;
+}
+
+[[nodiscard]] static
 auto get_name(ez::nort_t, id::plugin plugin) -> std::string_view {
 	return *DATA_->model.read(ez::nort).plugins.at({plugin}).name;
 }
@@ -1776,6 +1793,10 @@ auto get_port_info(id::device dev) -> device_port_info {
 
 auto get_info(id::device dev, idx::param param) -> client_param_info {
 	try { return impl::get_info(ez::nort, dev, param); } SCUFF_EXCEPTION_WRAPPER;
+}
+
+auto get_latency(id::device dev) -> uint32_t {
+	try { return impl::get_latency(ez::nort, dev); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto get_name(id::plugin plugin) -> std::string_view {

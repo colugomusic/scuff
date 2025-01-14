@@ -318,13 +318,6 @@ auto get_broken_plugins() -> std::vector<id::plugin>;
 [[nodiscard]]
 auto get_category(id::plugin plugin) -> std::string_view;
 
-// Return the subcategory of the plugin.
-// For CLAP plugins this is one of the CLAP_PLUGIN_FEATURE_* strings.
-// If the plugin has multiple subcategory strings then the first one is used.
-// For VST3 I have no idea yet.
-[[nodiscard]]
-auto get_subcategory(id::plugin plugin) -> std::string_view;
-
 [[nodiscard]]
 auto get_devices(id::sandbox sbox) -> std::vector<id::device>;
 
@@ -351,6 +344,10 @@ auto get_port_info(id::device dev) -> device_port_info;
 // Return the parameter info.
 [[nodiscard]]
 auto get_info(id::device dev, idx::param param) -> client_param_info;
+
+// Return the device latency in samples.
+[[nodiscard]]
+auto get_latency(id::device dev) -> uint32_t;
 
 // Returns the plugin name
 [[nodiscard]]
@@ -398,6 +395,13 @@ auto get_plugin(id::device dev) -> id::plugin;
 // Returns the plugin ID string for the given device.
 [[nodiscard]]
 auto get_plugin_ext_id(id::device dev) -> ext::id::plugin;
+
+// Return the subcategory of the plugin.
+// For CLAP plugins this is one of the CLAP_PLUGIN_FEATURE_* strings.
+// If the plugin has multiple subcategory strings then the first one is used.
+// For VST3 I have no idea yet.
+[[nodiscard]]
+auto get_subcategory(id::plugin plugin) -> std::string_view;
 
 // Return the plugin type.
 [[nodiscard]]

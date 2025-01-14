@@ -36,11 +36,11 @@ static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_create& msg) -> void {
 	fu::debug_log("INFO: msg::in::device_create");
 	try {
-		const auto dev = op::device_create(app, msg.type, id::device{msg.dev_id}, msg.plugfile_path, msg.plugin_id);
-		op::set_render_mode(app, dev.id, app->render_mode);
+		const auto dev = op::device_create(ez::main, app, msg.type, id::device{msg.dev_id}, msg.plugfile_path, msg.plugin_id);
+		op::set_render_mode(ez::main, app, dev.id, app->render_mode);
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_create_success{msg.dev_id, dev.service->shm.seg.id.data(), msg.callback});
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_flags{msg.dev_id, dev.flags.value});
-		app->msgs_out.lock()->push_back(scuff::msg::out::device_port_info{msg.dev_id, op::make_device_port_info(*app, dev)});
+		app->msgs_out.lock()->push_back(scuff::msg::out::device_port_info{msg.dev_id, op::make_device_port_info(ez::main, *app, dev)});
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_param_info{msg.dev_id, op::make_client_param_info(dev)});
 		fu::debug_log(std::format("INFO: Passing flags to client: {}", dev.flags.value));
 	}
@@ -52,19 +52,19 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_cr
 static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_connect& msg) -> void {
 	fu::debug_log("INFO: msg::in::device_connect");
-	op::device_connect(app, {msg.out_dev_id}, msg.out_port, {msg.in_dev_id}, msg.in_port);
+	op::device_connect(ez::main, app, {msg.out_dev_id}, msg.out_port, {msg.in_dev_id}, msg.in_port);
 }
 
 static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_disconnect& msg) -> void {
 	fu::debug_log("INFO: msg::in::device_disconnect");
-	op::device_disconnect(app, {msg.out_dev_id}, msg.out_port, {msg.in_dev_id}, msg.in_port);
+	op::device_disconnect(ez::main, app, {msg.out_dev_id}, msg.out_port, {msg.in_dev_id}, msg.in_port);
 }
 
 static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_erase& msg) -> void {
 	fu::debug_log("INFO: msg::in::device_erase");
-	op::device_erase(app, {msg.dev_id});
+	op::device_erase(ez::main, app, {msg.dev_id});
 }
 
 static
@@ -118,7 +118,7 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::panic& ms
 	fu::debug_log("INFO: msg::in::panic");
 	const auto& devices = app->model.read(ez::main).devices;
 	for (const auto& dev : devices) {
-		op::panic(app, dev.id, app->sample_rate);
+		op::panic(ez::main, app, dev.id, app->sample_rate);
 	}
 }
 
@@ -128,7 +128,7 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::set_rende
 	app->render_mode = msg.mode;
 	const auto& devices = app->model.read(ez::main).devices;
 	for (const auto& dev : devices) {
-		op::set_render_mode(app, dev.id, msg.mode);
+		op::set_render_mode(ez::main, app, dev.id, msg.mode);
 	}
 }
 
@@ -169,13 +169,13 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::get_param
 static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::activate& msg) -> void {
 	fu::debug_log(std::format("INFO: msg::in::activate: {}", msg.sr));
-	op::activate(app, msg.sr);
+	op::activate(ez::main, app, msg.sr);
 }
 
 static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::deactivate& msg) -> void {
 	fu::debug_log("INFO: msg::in::deactivate");
-	op::deactivate(app);
+	op::deactivate(ez::main, app);
 }
 
 static

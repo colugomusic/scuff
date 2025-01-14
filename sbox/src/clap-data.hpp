@@ -24,6 +24,7 @@ struct iface_plugin {
 	const clap_plugin_audio_ports_t* audio_ports   = nullptr;
 	const clap_plugin_context_menu_t* context_menu = nullptr;
 	const clap_plugin_gui_t* gui                   = nullptr;
+	const clap_plugin_latency_t* latency           = nullptr;
 	const clap_plugin_params_t* params             = nullptr;
 	const clap_plugin_render_t* render             = nullptr;
 	const clap_plugin_state_t* state               = nullptr;

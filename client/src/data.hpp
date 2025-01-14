@@ -112,6 +112,7 @@ struct device {
 	client_device_flags flags;
 	plugin_type type;
 	return_create_device_result creation_callback;
+	uint32_t latency = 0;
 	void* editor_window_native_handle = nullptr;
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;

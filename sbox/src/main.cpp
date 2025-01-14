@@ -105,11 +105,7 @@ auto sandbox(sbox::app* app) -> int {
 	fu::debug_log("INFO: Entering message loop...");
 	edwin::app_beg({frame}, {std::chrono::milliseconds{50}});
 	fu::debug_log("INFO: Cleanly exiting...");
-	if (app->audio_thread.joinable()) {
-		app->audio_thread.request_stop();
-		signaling::unblock_self(app->sandbox_signaler);
-		app->audio_thread.join();
-	}
+	stop_audio(ez::main, app);
 	destroy_all_editor_windows(*app);
 	edwin::process_messages();
 	return EXIT_SUCCESS;
@@ -122,7 +118,7 @@ auto gui_test(sbox::app* app) -> int {
 	auto on_window_closed = [app]{
 		app->schedule_terminate = true;
 	};
-	op::device_create(app, plugin_type::clap, id::device{1}, app->options.gui_file, app->options.gui_id);
+	op::device_create(ez::main, app, plugin_type::clap, id::device{1}, app->options.gui_file, app->options.gui_id);
 	gui::show(ez::main, app, id::device{1}, {on_window_closed});
 	auto frame = [app]{
 		do_scheduled_window_resizes(app);
@@ -206,7 +202,7 @@ auto go(int argc, char** argv) -> int {
 
 TEST_CASE("com.FabFilter.preset-discovery.Saturn.2") {
 	const auto plugfile_path = "C:\\Program Files\\Common Files\\CLAP\\FabFilter Saturn 2.clap";
-	op::device_create(app_, plugin_type::clap, id::device{1}, plugfile_path, "com.FabFilter.preset-discovery.Saturn.2");
+	op::device_create(ez::main, app_, plugin_type::clap, id::device{1}, plugfile_path, "com.FabFilter.preset-discovery.Saturn.2");
 }
 
 } // scuff::sbox::main

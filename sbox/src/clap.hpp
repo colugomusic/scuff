@@ -883,6 +883,7 @@ auto get_extensions(ez::main_t, clap::iface_plugin* iface) -> void {
 	iface->audio_ports  = scuff::get_plugin_ext<clap_plugin_audio_ports_t>(*iface->plugin, CLAP_EXT_AUDIO_PORTS);
 	iface->context_menu = scuff::get_plugin_ext<clap_plugin_context_menu_t>(*iface->plugin, CLAP_EXT_CONTEXT_MENU, CLAP_EXT_CONTEXT_MENU_COMPAT);
 	iface->gui          = scuff::get_plugin_ext<clap_plugin_gui_t>(*iface->plugin, CLAP_EXT_GUI);
+	iface->latency      = scuff::get_plugin_ext<clap_plugin_latency_t>(*iface->plugin, CLAP_EXT_LATENCY);
 	iface->params       = scuff::get_plugin_ext<clap_plugin_params_t>(*iface->plugin, CLAP_EXT_PARAMS);
 	iface->render       = scuff::get_plugin_ext<clap_plugin_render_t>(*iface->plugin, CLAP_EXT_RENDER);
 	iface->state        = scuff::get_plugin_ext<clap_plugin_state_t>(*iface->plugin, CLAP_EXT_STATE);
@@ -1126,10 +1127,21 @@ auto create_gui(ez::main_t, sbox::app* app, const sbox::device& dev) -> sbox::cr
 }
 
 [[nodiscard]] static
+auto get_latency(ez::main_t, const sbox::app& app, id::device dev_id) -> uint32_t {
+	const auto m         = app.model.read(ez::main);
+	const auto& clap_dev = m.clap_devices.at(dev_id);
+	const auto iface     = clap_dev.iface->plugin;
+	if (!iface.latency) {
+		return 0;
+	}
+	return iface.latency->get(iface.plugin);
+}
+
+[[nodiscard]] static
 auto setup_editor_window(ez::main_t, sbox::app* app, const sbox::device& dev) -> bool {
 	fu::debug_log("INFO: clap::main::setup_editor_window");
 	const auto m          = app->model.read(ez::main);
-	const auto clap_dev   = m.clap_devices.at(dev.id);
+	const auto& clap_dev  = m.clap_devices.at(dev.id);
 	const auto iface      = clap_dev.iface->plugin;
 	const auto window_ref = os::make_clap_window_ref(dev.ui.window);
 	if (!iface.gui->set_parent(iface.plugin, &window_ref)) {
