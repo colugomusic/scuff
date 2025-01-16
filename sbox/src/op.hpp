@@ -2,7 +2,9 @@
 
 #include "clap.hpp"
 #include <format>
+#pragma warning(push, 0)
 #include <immer/vector_transient.hpp>
+#pragma warning(pop)
 
 namespace scuff::sbox::op {
 
