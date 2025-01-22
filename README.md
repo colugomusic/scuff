@@ -10,7 +10,7 @@ Here is the interface of the client library in its current state: [client/includ
 ## Requirements
 
 - C++20
-- Boost v1.86.0 needs to be prebuilt and installed somewhere where find_package will find it.
+- [Boost v1.86.0](https://www.boost.org/users/history/version_1_86_0.html) needs to be prebuilt and installed somewhere where find_package will find it.
 
 ## Current status
 
