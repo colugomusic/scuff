@@ -7,6 +7,11 @@ I am working on a cross-platform CLAP/VST3 audio plugin sandboxing system for Wi
 
 Here is the interface of the client library in its current state: [client/include/scuff/client.hpp](client/include/scuff/client.hpp)
 
+## Requirements
+
+- C++20
+- Boost v1.86.0 needs to be prebuilt and installed somewhere where find_package will find it.
+
 ## Current status
 
 ### The scanner ✔️
