@@ -472,8 +472,7 @@ auto panic() -> void;
 auto push_event(id::device dev, const scuff::event& event) -> void;
 
 // Restart the sandbox.
-[[nodiscard]]
-auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool;
+auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void;
 
 // Save the device state.
 [[nodiscard]]

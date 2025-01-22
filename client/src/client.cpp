@@ -1895,8 +1895,8 @@ auto panic() -> void {
 	try { impl::panic(ez::nort); } SCUFF_EXCEPTION_WRAPPER;
 }
 
-auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> bool {
-	try { impl::restart(ez::nort, sbox, sbox_exe_path); return true; } SCUFF_EXCEPTION_WRAPPER;
+auto restart(id::sandbox sbox, std::string_view sbox_exe_path) -> void {
+	try { impl::restart(ez::nort, sbox, sbox_exe_path); return; } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto save(id::device dev) -> scuff::bytes {
