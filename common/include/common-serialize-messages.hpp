@@ -64,17 +64,6 @@ auto deserialize<scuff::msg::out::device_port_info>(std::span<const std::byte>* 
 }
 
 template <> inline
-auto deserialize<scuff::msg::out::device_load_fail>(std::span<const std::byte>* bytes, scuff::msg::out::device_load_fail* msg) -> void {
-	deserialize(bytes, &msg->dev_id);
-	deserialize(bytes, &msg->error);
-}
-
-template <> inline
-auto deserialize<scuff::msg::out::device_load_success>(std::span<const std::byte>* bytes, scuff::msg::out::device_load_success* msg) -> void {
-	deserialize(bytes, &msg->dev_id);
-}
-
-template <> inline
 auto deserialize<scuff::msg::out::device_param_info>(std::span<const std::byte>* bytes, scuff::msg::out::device_param_info* msg) -> void {
 	deserialize(bytes, &msg->dev_id);
 	deserialize(bytes, &msg->info);
@@ -171,17 +160,6 @@ auto serialize<scuff::msg::out::device_port_info>(const scuff::msg::out::device_
 	serialize(msg.dev_id, bytes);
 	serialize(msg.info.audio_input_port_count, bytes);
 	serialize(msg.info.audio_output_port_count, bytes);
-}
-
-template <> inline
-auto serialize<scuff::msg::out::device_load_fail>(const scuff::msg::out::device_load_fail& msg, std::vector<std::byte>* bytes) -> void {
-	serialize(msg.dev_id, bytes);
-	serialize(std::string_view{msg.error}, bytes);
-}
-
-template <> inline
-auto serialize<scuff::msg::out::device_load_success>(const scuff::msg::out::device_load_success& msg, std::vector<std::byte>* bytes) -> void {
-	serialize(msg.dev_id, bytes);
 }
 
 template <> inline

@@ -53,7 +53,6 @@ static auto cb_(const ui::msg::scan_complete& msg, const general_ui& ui) -> void
 static auto cb_(const ui::msg::scan_error& msg, const general_ui& ui) -> void            { if (ui.on_scan_error) { ui.on_scan_error(msg.error); } }
 static auto cb_(const ui::msg::scan_started& msg, const general_ui& ui) -> void          { if (ui.on_scan_started) { ui.on_scan_started(); } }
 static auto cb_(const ui::msg::scan_warning& msg, const general_ui& ui) -> void          { if (ui.on_scan_warning) { ui.on_scan_warning(msg.warning); } }
-static auto cb_(const ui::msg::device_state_load& msg, const group_ui& ui) -> void       { if (ui.on_device_state_load) { ui.on_device_state_load(msg.result); } }
 static auto cb_(const ui::msg::device_late_create& msg, const group_ui& ui) -> void      { if (ui.on_device_late_create) { ui.on_device_late_create(msg.result); } }
 static auto cb_(const ui::msg::device_flags_changed& msg, const group_ui& ui) -> void    { if (ui.on_device_flags_changed) { ui.on_device_flags_changed(msg.dev); } }
 static auto cb_(const ui::msg::device_ports_changed& msg, const group_ui& ui) -> void    { if (ui.on_device_ports_changed) { ui.on_device_ports_changed(msg.dev); } }
@@ -65,6 +64,7 @@ static auto cb_(const ui::msg::sbox_info& msg, const group_ui& ui) -> void      
 static auto cb_(const ui::msg::sbox_started& msg, const group_ui& ui) -> void            { if (ui.on_sbox_started) { ui.on_sbox_started(msg.sbox); } }
 static auto cb_(const ui::msg::sbox_warning& msg, const group_ui& ui) -> void            { if (ui.on_sbox_warning) { ui.on_sbox_warning(msg.sbox, msg.warning); } }
 static auto cb_(const ui::msg::device_create& msg, const group_ui& ui) -> void           { msg.callback(msg.result); }
+static auto cb_(const ui::msg::device_state_load& msg, const group_ui& ui) -> void       { msg.callback(msg.result); }
 static auto cb_(const ui::msg::return_device_state& msg, const group_ui& ui) -> void     { msg.callback(msg.state); }
 static auto cb_(const ui::msg::return_param_value& msg, const group_ui& ui) -> void      { msg.callback(msg.value); }
 static auto cb_(const ui::msg::return_param_value_text& msg, const group_ui& ui) -> void { msg.callback(msg.text); }

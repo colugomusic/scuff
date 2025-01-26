@@ -164,7 +164,6 @@ struct general_ui {
 
 struct group_ui {
 	scuff::on_device_editor_visible_changed on_device_editor_visible_changed;
-	scuff::on_device_state_load on_device_state_load;
 	scuff::on_device_flags_changed on_device_flags_changed;
 	scuff::on_device_ports_changed on_device_ports_changed;
 	scuff::on_device_params_changed on_device_params_changed;
@@ -430,6 +429,10 @@ auto gui_show(id::device dev) -> void;
 // Return true if the device has a GUI.
 [[nodiscard]]
 auto has_gui(id::device dev) -> bool;
+
+// Return true if the plugin has a GUI.
+[[nodiscard]]
+auto has_gui(id::plugin plugin) -> bool;
 
 // Return true if this plugin is suitable for use as an "instrument". Generally speaking
 // this means it produces sounds without any input audio.

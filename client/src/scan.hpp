@@ -252,6 +252,7 @@ auto read_plugin(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 			plugin.version       = version;
 			plugin.clap_features = to_immer(features);
 			plugin.plugfile      = find_plugfile_from_path(path);
+			plugin.has_gui       = has_gui;
 			m = DATA_->model.update(ez::nort, [plugin](model&& m) {
 				m.plugins = m.plugins.insert(plugin);
 				return m;

@@ -85,13 +85,16 @@ static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_load& msg) -> void {
 	fu::debug_log("INFO: msg::in::device_load");
 	const auto dev_id = id::device{msg.dev_id};
+	fu::debug_log("aaa");
 	const auto type = get_device_type(*app, dev_id);
+	fu::debug_log("bbb");
 	if (type == plugin_type::clap) {
+		fu::debug_log("ccc");
 		if (clap::load(ez::main, app, dev_id, msg.state)) {
-			app->msgs_out.lock()->push_back(scuff::msg::out::device_load_success{dev_id.value});
+			app->msgs_out.lock()->push_back(scuff::msg::out::device_load_success{dev_id.value, msg.callback});
 		}
 		else {
-			app->msgs_out.lock()->push_back(scuff::msg::out::device_load_fail{dev_id.value, "Failed to load device state for some unknown reason."});
+			app->msgs_out.lock()->push_back(scuff::msg::out::device_load_fail{dev_id.value, msg.callback});
 		}
 		return;
 	}

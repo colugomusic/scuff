@@ -168,6 +168,7 @@ struct plugin {
 	immer::box<std::string> name;
 	immer::box<std::string> vendor;
 	immer::box<std::string> version;
+	bool has_gui = false;
 };
 
 struct plugfile {

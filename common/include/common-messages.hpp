@@ -72,8 +72,8 @@ struct device_editor_visible_changed { id::device::type dev_id; bool visible; in
 struct device_flags                  { id::device::type dev_id; int flags; };
 struct device_port_info              { id::device::type dev_id; scuff::device_port_info info; };
 struct device_latency                { id::device::type dev_id; uint32_t latency; };
-struct device_load_fail              { id::device::type dev_id; std::string error; };
-struct device_load_success           { id::device::type dev_id; };
+struct device_load_fail              { id::device::type dev_id; size_t callback; };
+struct device_load_success           { id::device::type dev_id; size_t callback; };
 struct device_param_info             { id::device::type dev_id; std::vector<client_param_info> info; };
 struct report_error                  { std::string text; };
 struct report_info                   { std::string text; };

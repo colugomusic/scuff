@@ -18,7 +18,7 @@ struct device_flags_changed          { id::device dev; };
 struct device_late_create            { create_device_result result; };
 struct device_params_changed         { id::device dev; };
 struct device_ports_changed          { id::device dev; };
-struct device_state_load             { load_device_result result; };
+struct device_state_load             { load_device_result result; return_load_device_result callback; };
 struct error                         { std::string error; };
 struct plugfile_broken               { id::plugfile plugfile; };
 struct plugfile_scanned              { id::plugfile plugfile; };

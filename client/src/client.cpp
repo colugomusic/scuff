@@ -273,13 +273,12 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_create
 
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_load_fail& msg) -> void {
-	ui::send(sbox, ui::msg::device_state_load{{msg.dev_id, false}});
-	ui::send(sbox, ui::msg::sbox_error{sbox.id, "Failed to load device."});
+	sbox.service->return_buffers.device_load_results.take(msg.callback)({msg.dev_id, false});
 }
 
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_load_success& msg) -> void {
-	ui::send(sbox, ui::msg::device_state_load{{msg.dev_id, true}});
+	sbox.service->return_buffers.device_load_results.take(msg.callback)({msg.dev_id, true});
 }
 
 static
@@ -915,6 +914,13 @@ auto has_gui(ez::nort_t, id::device dev) -> bool {
 }
 
 [[nodiscard]] static
+auto has_gui(ez::nort_t, id::plugin id) -> bool {
+	const auto m       = DATA_->model.read(ez::nort);
+	const auto& plugin = m.plugins.at(id);
+	return plugin.has_gui;
+}
+
+[[nodiscard]] static
 auto has_params(ez::nort_t, id::device dev) -> bool {
 	const auto m       = DATA_->model.read(ez::nort);
 	const auto& device = m.devices.at(dev);
@@ -1279,6 +1285,11 @@ auto get_version(ez::nort_t, id::plugin plugin) -> std::string_view {
 static
 auto load_async(ez::nort_t, const model& m, const scuff::device& dev, const scuff::bytes& state, return_load_device_result fn) -> void {
 	const auto sbox = m.sandboxes.at(dev.sbox);
+	// The return callback will be called in the poll thread so this wrapper
+	// is to pass it back to the main thread to be called there instead.
+	const auto wrapper = [sbox, fn](load_device_result result) {
+		ui::send(sbox, ui::msg::device_state_load{result, fn});
+	};
 	sbox.service->enqueue(msg::in::device_load{dev.id.value, state, sbox.service->return_buffers.device_load_results.put(fn)});
 }
 
@@ -1849,6 +1860,10 @@ auto get_working_plugins() -> std::vector<id::plugin> {
 
 auto has_gui(id::device dev) -> bool {
 	try { return impl::has_gui(ez::nort, dev); } SCUFF_EXCEPTION_WRAPPER;
+}
+
+auto has_gui(id::plugin plugin) -> bool {
+	try { return impl::has_gui(ez::nort, plugin); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto has_instrument_features(id::plugin plugin) -> bool {
