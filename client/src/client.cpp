@@ -1551,21 +1551,6 @@ auto ref(ez::nort_t, id::sandbox id) -> void {
 	DATA_->model.read(ez::nort).sandboxes.at(id).service->ref_count++;
 }
 
-auto managed(ez::nort_t, id::device id) -> managed_device {
-	ref(ez::nort, id);
-	return managed_device{id};
-}
-
-auto managed(ez::nort_t, id::group id) -> managed_group {
-	ref(ez::nort, id);
-	return managed_group{id};
-}
-
-auto managed(ez::nort_t, id::sandbox id) -> managed_sandbox {
-	ref(ez::nort, id);
-	return managed_sandbox{id};
-}
-
 auto unref(ez::nort_t, id::device id) -> void {
 	if (!DATA_) { return; }
 	if (--DATA_->model.read(ez::nort).devices.at(id).service->ref_count <= 0) {
@@ -1940,18 +1925,6 @@ auto set_track_name(id::device dev, std::string_view name) -> void {
 
 auto was_created_successfully(id::device dev) -> bool {
 	try { return impl::was_created_successfully(ez::nort, dev); } SCUFF_EXCEPTION_WRAPPER;
-}
-
-auto managed(id::device id) -> managed_device {
-	try { return impl::managed(ez::nort, id); } SCUFF_EXCEPTION_WRAPPER;
-}
-
-auto managed(id::group id) -> managed_group {
-	try { return impl::managed(ez::nort, id); } SCUFF_EXCEPTION_WRAPPER;
-}
-
-auto managed(id::sandbox id) -> managed_sandbox {
-	try { return impl::managed(ez::nort, id); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto ref(id::device id) -> void {

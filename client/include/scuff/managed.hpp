@@ -78,8 +78,4 @@ using managed_device  = managed_t<id::device>;
 using managed_group   = managed_t<id::group>;
 using managed_sandbox = managed_t<id::sandbox>;
 
-[[nodiscard]] auto managed(id::device id) -> managed_device;
-[[nodiscard]] auto managed(id::group id) -> managed_group;
-[[nodiscard]] auto managed(id::sandbox id) -> managed_sandbox;
-
 } // scuff
