@@ -96,7 +96,7 @@ auto show(ez::main_t, sbox::app* app, scuff::id::device dev_id, edwin::fn::on_wi
 		return;
 	}
 	device.ui.window = wnd;
-	app->msgs_out.lock()->push_back(scuff::msg::out::device_editor_visible_changed{device.id.value, false, (int64_t)(edwin::get_native_handle(*wnd).value)});
+	app->msgs_out.lock()->push_back(scuff::msg::out::device_editor_visible_changed{device.id.value, true, (int64_t)(edwin::get_native_handle(*wnd).value)});
 	if (!setup_editor_window(ez::main, app, device)) {
 		fu::log(std::format("ERROR: Failed to setup clap editor window for device '{}'", dev_id.value));
 	}
