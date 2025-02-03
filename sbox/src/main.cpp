@@ -38,6 +38,7 @@ auto check_heartbeat(sbox::app* app) -> void {
 	const auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - app->last_heartbeat).count();
 	if (diff > HEARTBEAT_TIMEOUT_MS) {
 		fu::log("ERROR: Heartbeat timeout");
+		fu::debug_log("msg out -> report_error");
 		app->msgs_out.lock()->push_back(scuff::msg::out::report_error{"Heartbeat timeout"});
 		app->schedule_terminate = true;
 	}

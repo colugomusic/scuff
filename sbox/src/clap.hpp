@@ -125,6 +125,7 @@ auto get_extension(ez::safe_t, sbox::app* app, const clap::iface_host& iface_hos
 	}
 	// Doing a non-realtime-safe lock here. If this is actually a problem then the
 	// plugin is likely doing something completely insane anyway.
+	fu::debug_log("msg out -> report_warning");
 	app->msgs_out.lock()->push_back(msg::out::report_warning{std::format("Device '{}' requested an unsupported extension: {}", dev_id.value, extension_id)});
 	return nullptr;
 }
@@ -579,11 +580,13 @@ auto rescan_audio_ports(ez::main_t, sbox::app* app, id::device dev_id, uint32_t 
 	const auto dev = m.clap_devices.at(dev_id);
 	if (requires_not_active) {
 		if (is_active(ez::main, dev)) {
+			fu::debug_log("msg out -> report_warning");
 			app->msgs_out.lock()->push_back(scuff::msg::out::report_warning{std::format("Device '{}' tried to rescan audio ports while it is still active!", *dev.name)});
 			return;
 		}
 	}
 	init_audio(ez::main, app, dev_id);
+	fu::debug_log("msg out -> device_port_info");
 	app->msgs_out.lock()->push_back(scuff::msg::out::device_port_info{dev_id.value, make_device_port_info(ez::main, *app, dev_id)});
 }
 
@@ -703,6 +706,7 @@ auto process_msg_(ez::main_t, sbox::app* app, const device& dev, const clap::dev
 		default:
 		case CLAP_LOG_DEBUG:
 		case CLAP_LOG_INFO: {
+			fu::debug_log("msg out -> report_info");
 			app->msgs_out.lock()->push_back(scuff::msg::out::report_info{text});
 			break;
 		}
@@ -710,10 +714,12 @@ auto process_msg_(ez::main_t, sbox::app* app, const device& dev, const clap::dev
 		case CLAP_LOG_PLUGIN_MISBEHAVING:
 		case CLAP_LOG_ERROR:
 		case CLAP_LOG_FATAL: {
+			fu::debug_log("msg out -> report_error");
 			app->msgs_out.lock()->push_back(scuff::msg::out::report_error{text});
 			break;
 		}
 		case CLAP_LOG_WARNING: {
+			fu::debug_log("msg out -> report_warning");
 			app->msgs_out.lock()->push_back(scuff::msg::out::report_warning{text});
 			break;
 		}
@@ -729,6 +735,7 @@ auto process_msg_(ez::main_t, sbox::app* app, const device& dev, const clap::dev
 
 static
 auto process_msg_(ez::main_t, sbox::app* app, clap::device clap_dev, const clap::device_msg::params_rescan& msg) -> void {
+	fu::debug_log("clap::device_msg::params_rescan");
 	const auto m = app->model.read(ez::main);
 	auto dev = m.devices.at(clap_dev.id);
 	clap_dev = init_params(ez::main, std::move(clap_dev));
@@ -738,6 +745,11 @@ auto process_msg_(ez::main_t, sbox::app* app, clap::device clap_dev, const clap:
 		m.devices      = m.devices.insert(dev);
 		return m;
 	});
+	//while (!IsDebuggerPresent()) {
+	//	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	//}
+	//__debugbreak();
+	fu::debug_log("msg out -> device_param_info");
 	app->msgs_out.lock()->push_back(scuff::msg::out::device_param_info{dev.id.value, op::make_client_param_info(dev)});
 }
 

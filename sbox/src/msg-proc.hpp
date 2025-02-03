@@ -18,6 +18,7 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::close_all
 	for (const auto& dev : devices) {
 		if (dev.ui.window) {
 			edwin::set(dev.ui.window, edwin::hide);
+			fu::debug_log("msg out -> device_editor_visible_changed");
 			app->msgs_out.lock()->push_back(scuff::msg::out::device_editor_visible_changed{dev.id.value, false, (int64_t)(edwin::get_native_handle(*dev.ui.window).value)});
 		}
 	}
@@ -38,6 +39,10 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_cr
 	try {
 		const auto dev = op::device_create(ez::main, app, msg.type, id::device{msg.dev_id}, msg.plugfile_path, msg.plugin_id);
 		op::set_render_mode(ez::main, app, dev.id, app->render_mode);
+		fu::debug_log("msg out -> device_create_success");
+		fu::debug_log("msg out -> device_flags");
+		fu::debug_log("msg out -> device_port_info");
+		fu::debug_log("msg out -> device_param_info");
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_create_success{msg.dev_id, dev.service->shm.seg.id.data(), msg.callback});
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_flags{msg.dev_id, dev.flags.value});
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_port_info{msg.dev_id, op::make_device_port_info(ez::main, *app, dev)});
@@ -45,6 +50,7 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_cr
 		fu::debug_log(std::format("INFO: Passing flags to client: {}", dev.flags.value));
 	}
 	catch (const std::exception& err) {
+		fu::debug_log("msg out -> device_create_fail");
 		app->msgs_out.lock()->push_back(scuff::msg::out::device_create_fail{msg.dev_id, err.what(), msg.callback});
 	}
 }
@@ -88,9 +94,11 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_lo
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
 		if (clap::load(ez::main, app, dev_id, msg.state)) {
+			fu::debug_log("msg out -> device_load_success");
 			app->msgs_out.lock()->push_back(scuff::msg::out::device_load_success{dev_id.value, msg.callback});
 		}
 		else {
+			fu::debug_log("msg out -> device_load_fail");
 			app->msgs_out.lock()->push_back(scuff::msg::out::device_load_fail{dev_id.value, msg.callback});
 		}
 		return;
@@ -105,9 +113,11 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_sa
 	if (type == plugin_type::clap) {
 		const auto state = clap::save(ez::main, app, dev_id);
 		if (state.empty()) {
+			fu::debug_log("msg out -> report_error");
 			app->msgs_out.lock()->push_back(scuff::msg::out::report_error{"Failed to save device state"});
 			return;
 		}
+		fu::debug_log("msg out -> return_state");
 		app->msgs_out.lock()->push_back(scuff::msg::out::return_state{state, msg.callback});
 		return;
 	}
@@ -148,6 +158,7 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::get_param
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
 		if (const auto value = clap::get_param_value(ez::main, *app, dev_id, {msg.param_idx})) {
+			fu::debug_log("msg out -> return_param_value");
 			app->msgs_out.lock()->push_back(scuff::msg::out::return_param_value{*value, msg.callback});
 		}
 		return;
@@ -161,6 +172,7 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::get_param
 	const auto type = get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
 		const auto text = clap::get_param_value_text(ez::main, *app, dev_id, {msg.param_idx}, msg.value);
+		fu::debug_log("msg out -> return_param_value_text");
 		app->msgs_out.lock()->push_back(scuff::msg::out::return_param_value_text{text, msg.callback});
 		return;
 	}
@@ -232,6 +244,7 @@ auto process_client_messages(ez::main_t, sbox::app* app) -> void {
 	}
 	catch (const std::exception& err) {
 		fu::log(std::format("ERROR: {}", err.what()), std::source_location::current());
+		fu::debug_log("msg out -> report_error");
 		app->msgs_out.lock()->push_back(scuff::msg::out::report_error{err.what()});
 	}
 }

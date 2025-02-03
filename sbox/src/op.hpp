@@ -58,6 +58,7 @@ auto get_latency(ez::main_t, const app& app, const device& dev) -> uint32_t {
 auto activate(ez::main_t, sbox::app* app, const sbox::device& dev, double sr) -> bool {
 	if (dev.type == plugin_type::clap) {
 		if (!clap::activate(ez::main, app, dev.id, sr)) {
+			fu::debug_log("msg out -> report_error");
 			app->msgs_out.lock()->push_back(scuff::msg::out::report_error{std::format("Failed to activate device {}", dev.id.value)});
 			return false;
 		}
@@ -72,9 +73,11 @@ auto activate(ez::main_t, sbox::app* app, double sr) -> void {
 	const auto m = app->model.read(ez::main);
 	for (const auto& dev : m.devices) {
 		if (activate(ez::main, app, dev, sr)) {
+			fu::debug_log("msg out -> device_latency");
 			app->msgs_out.lock()->push_back(msg::out::device_latency{dev.id.value, get_latency(ez::main, *app, dev)});
 		}
 	}
+	fu::debug_log("msg out -> confirm_activated");
 	app->msgs_out.lock()->push_back(msg::out::confirm_activated{});
 	app->sample_rate = sr;
 	app->active      = true;
@@ -150,6 +153,7 @@ auto device_create(ez::main_t, sbox::app* app, plugin_type type, id::device dev_
 		const auto dev = app->model.read(ez::main).devices.at(dev_id);
 		if (app->active) {
 			if (activate(ez::main, app, dev, app->sample_rate)) {
+				fu::debug_log("msg out -> device_latency");
 				app->msgs_out.lock()->push_back(msg::out::device_latency{dev.id.value, get_latency(ez::main, *app, dev)});
 			}
 		}

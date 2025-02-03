@@ -84,6 +84,7 @@ auto thread_proc(std::stop_token stop_token, ez::audio_t, sbox::app* app) -> voi
 	}
 	catch (const std::exception& err) {
 		fu::log(std::format("ERROR: Audio thread is stopping because there was a fatal error: {}", err.what()));
+		fu::debug_log("msg out -> report_error");
 		app->msgs_out.lock()->push_back(msg::out::report_error{err.what()});
 		app->schedule_terminate = true;
 	}
