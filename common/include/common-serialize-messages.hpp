@@ -16,6 +16,7 @@ template <> inline
 auto deserialize<scuff::msg::in::device_load>(std::span<const std::byte>* bytes, scuff::msg::in::device_load* msg) -> void {
 	deserialize(bytes, &msg->dev_id);
 	deserialize(bytes, &msg->state);
+	deserialize(bytes, &msg->callback);
 }
 
 template <> inline
@@ -118,6 +119,7 @@ template <> inline
 auto serialize<scuff::msg::in::device_load>(const scuff::msg::in::device_load& msg, std::vector<std::byte>* bytes) -> void {
 	serialize(msg.dev_id, bytes);
 	serialize(msg.state, bytes);
+	serialize(msg.callback, bytes);
 }
 
 template <> inline
