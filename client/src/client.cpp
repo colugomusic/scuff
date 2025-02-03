@@ -323,22 +323,11 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_port_i
 }
 
 static
-auto echo(const client_param_info& info) -> void {
-	std::cout << "default_value = " << info.default_value << "\n";
-	std::cout << "max_value = " << info.max_value << "\n";
-	std::cout << "min_value = " << info.min_value << "\n";
-	std::cout << "name = " << info.name << "\n";
-	std::cout << "id = " << info.id.value << "\n";
-	std::cout << "flags = " << info.flags << "\n";
-}
-
-static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_param_info& msg) -> void {
 	DATA_->model.update_publish(ez::nort, [msg](model&& m) {
 		m.devices = m.devices.update_if_exists({msg.dev_id}, [msg](device dev) {
 			dev.param_info = {};
 			for (const auto& info : msg.info) {
-				echo(info);
 				dev.param_info = dev.param_info.push_back(info);
 			}
 			return dev;
