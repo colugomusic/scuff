@@ -214,6 +214,14 @@ auto cb_get_track_info(ez::main_t, sbox::app* app, id::device dev_id, clap_track
 }
 
 static
+auto cb_state_mark_dirty(ez::main_t, sbox::app* app, id::device dev_id) -> void {
+	fu::debug_log("Plugin explicitly indicated that the plugin state is dirty");
+	if (const auto dev = app->model.read(ez::main).devices.find(dev_id)) {
+		dev->service->dirty_marker++;
+	}
+}
+
+static
 auto convert_input_events(ez::safe_t, const sbox::device& dev, const clap::device& clap_dev) -> void {
 	auto get_cookie = [dev](idx::param param) -> void* {
 		return dev.param_info[param.value].clap.cookie;
@@ -224,6 +232,10 @@ auto convert_input_events(ez::safe_t, const sbox::device& dev, const clap::devic
 	auto fns = scuff::events::clap::scuff_to_clap_conversion_fns{get_cookie, get_id};
 	scuff::events::clap::event_buffer input_clap_events;
 	for (const auto& event : dev.service->shm.data->events_in) {
+		// If a parameter is changing, mark the device state as dirty
+		if (std::holds_alternative<scuff::events::param_value>(event)) {
+			dev.service->dirty_marker++;
+		}
 		input_clap_events.push_back(scuff::events::clap::from_scuff(event, fns));
 	}
 	clap_dev.service.data->input_event_buffer = std::move(input_clap_events);
@@ -245,6 +257,10 @@ auto convert_output_events(ez::safe_t, const sbox::device& dev, const clap::devi
 	auto fns = scuff::events::clap::clap_to_scuff_conversion_fns{find_param};
 	scuff::event_buffer output_scuff_events;
 	for (const auto& event : clap_dev.service.data->output_event_buffer) {
+		// If a parameter changed, mark the device state as dirty
+		if (std::holds_alternative<clap_event_param_value_t>(event)) {
+			dev.service->dirty_marker++;
+		}
 		output_scuff_events.push_back(scuff::events::clap::to_scuff(event, fns));
 	}
 	dev.service->shm.data->events_out = std::move(output_scuff_events);
@@ -766,6 +782,9 @@ auto update(ez::main_t, sbox::app* app) -> void {
 		while (dev.service.data->msg_q.try_dequeue(msg)) {
 			process_msg(ez::main, app, dev, msg);
 		}
+		if (!is_active(ez::main, dev)) {
+			flush_device_events(ez::main, m.devices.at(dev.id), dev);
+		}
 	}
 }
 
@@ -871,7 +890,8 @@ auto make_host_for_instance(ez::main_t, device_host_data* host_data) -> void {
 	};
 	// STATE ____________________________________________________________________
 	host_data->iface.state.mark_dirty = [](const clap_host* host) -> void {
-		// I don't do anything with this yet
+		const auto& hd = get_host_data(host);
+		cb_state_mark_dirty(ez::main, hd.app, hd.dev_id);
 	};
 	// THREAD CHECK _____________________________________________________________
 	host_data->iface.thread_check.is_audio_thread = [](const clap_host* host) -> bool {

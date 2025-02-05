@@ -8,6 +8,7 @@
 #include "common-plugin-type.hpp"
 #include "common-render-mode.hpp"
 #include "common-types.hpp"
+#include <chrono>
 #include <functional>
 #include <optional>
 #include <stdexcept>
@@ -489,6 +490,16 @@ auto save_async(id::device dev, return_bytes fn) -> void;
 // Scan the system for plugins. If the scanner process is already
 // running, it is restarted.
 auto scan(std::string_view scan_exe_path, scan_flags flags) -> void;
+
+// Set a function to call each time the device is autosaved.
+// This can be set to nullptr.
+auto set_autosave_callback(id::device dev, return_bytes bytes) -> void;
+
+// Set the autosave interval for the device.
+// Devices will be automatically saved at regular intervals but only if their
+// parameters have changed since the previous save.
+// The default autosave interval in milliseconds is scuff::DEFAULT_AUTOSAVE_MS.
+auto set_autosave_interval(id::device dev, std::chrono::steady_clock::duration interval) -> void;
 
 // Set the render mode for the given group.
 auto set_render_mode(id::group group, render_mode mode) -> void;

@@ -33,6 +33,11 @@ auto find_insertion_index(const std::vector<device>& order, const device& dev) -
 }
 
 [[nodiscard]] static
+auto get_device_type(const sbox::app& app, id::device dev_id) -> plugin_type {
+	return app.model.read(ez::main).devices.at(dev_id).type;
+}
+
+[[nodiscard]] static
 auto make_device_processing_order(immer::table<device> devices) -> immer::vector<id::device> {
 	std::vector<device> order;
 	for (const auto& dev : devices) {
@@ -234,6 +239,15 @@ auto make_client_param_info(const sbox::device& dev) -> std::vector<client_param
 auto make_device_port_info(ez::main_t, const sbox::app& app, const sbox::device& dev) -> device_port_info {
 	if (dev.type == plugin_type::clap) {
 		return clap::make_device_port_info(ez::main, app, dev.id);
+	}
+	throw std::runtime_error("Unsupported device type");
+}
+
+[[nodiscard]] static
+auto save(ez::main_t, sbox::app* app, id::device dev_id) -> std::vector<std::byte> {
+	const auto type = get_device_type(*app, dev_id);
+	if (type == plugin_type::clap) {
+		return clap::save(ez::main, app, dev_id);
 	}
 	throw std::runtime_error("Unsupported device type");
 }

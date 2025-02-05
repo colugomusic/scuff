@@ -80,6 +80,35 @@ auto send_msgs_out(sbox::app* app) -> void {
 	}
 }
 
+static
+auto autosave(ez::main_t, sbox::app* app, const sbox::device& dev) -> void {
+	const auto now = std::chrono::steady_clock::now();
+	if (now < dev.service->next_save) {
+		return;
+	}
+	dev.service->next_save = now + dev.autosave_interval;
+	const auto dirty_marker    = dev.service->dirty_marker.load();
+	const auto autosave_marker = dev.service->autosave_marker.load();
+	if (dirty_marker <= autosave_marker) {
+		return;
+	}
+	if (auto state = op::save(ez::main, app, dev.id); !state.empty()) {
+		dev.service->autosave_marker = dirty_marker;
+		fu::debug_log("msg out -> device_autosave");
+		app->msgs_out.lock()->push_back(scuff::msg::out::device_autosave{dev.id.value, std::move(state)});
+		return;
+	}
+	// FIXME: handle case where state fails to save?
+}
+
+static
+auto autosave(ez::main_t, sbox::app* app) -> void {
+	const auto m = app->model.read(ez::main);
+	for (const auto& dev : m.devices) {
+		autosave(ez::main, app, dev);
+	}
+}
+
 auto sandbox(sbox::app* app) -> int {
 	fu::log(std::format("INFO: client PID: {}", app->options.client_pid));
 	fu::log(std::format("INFO: group: {}", app->options.group_shmid));
@@ -98,6 +127,7 @@ auto sandbox(sbox::app* app) -> int {
 		edwin::process_messages();
 		check_heartbeat(app);
 		clap::update(ez::main, app);
+		autosave(ez::main, app);
 		send_msgs_out(app);
 		if (app->schedule_terminate) {
 			edwin::app_end();

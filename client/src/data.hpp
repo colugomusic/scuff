@@ -99,10 +99,7 @@ struct device_service {
 	// Increment this any time a parameter change output
 	// event is received, to signal that the last saved
 	// state is now dirty.
-	std::atomic_int dirty_marker = 0;
-	std::atomic_int autosave_marker = 0;
 	std::atomic_int ref_count = 0;
-	std::chrono::steady_clock::time_point next_save = std::chrono::steady_clock::now();
 	shm::device shm;
 };
 
@@ -114,7 +111,7 @@ struct device {
 	plugin_type type;
 	return_create_device_result creation_callback;
 	uint32_t latency = 0;
-	std::chrono::system_clock::duration autosave_interval = std::chrono::milliseconds{AUTOSAVE_MS};
+	std::chrono::system_clock::duration autosave_interval = std::chrono::milliseconds{DEFAULT_AUTOSAVE_MS};
 	return_bytes autosave_callback;
 	void* editor_window_native_handle = nullptr;
 	ext::id::plugin plugin_ext_id;

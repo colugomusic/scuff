@@ -45,6 +45,9 @@ struct device_service {
 	shm::device shm;
 	std::optional<window_size_f> scheduled_window_resize;
 	rwq<scuff::event> input_events_from_main = rwq<scuff::event>(EVENT_PORT_SIZE);
+	std::chrono::steady_clock::time_point next_save = std::chrono::steady_clock::now();
+	std::atomic_int dirty_marker    = 0;
+	std::atomic_int autosave_marker = 0;
 };
 
 struct device {
@@ -53,6 +56,7 @@ struct device {
 	device_ui ui;
 	plugin_type type;
 	double sample_rate = 0.0;
+	std::chrono::steady_clock::duration autosave_interval = std::chrono::milliseconds{DEFAULT_AUTOSAVE_MS};
 	std::optional<rgba32> track_color;
 	immer::box<std::string> track_name;
 	immer::box<std::string> name;

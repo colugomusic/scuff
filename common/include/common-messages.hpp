@@ -26,12 +26,13 @@ struct device_erase           { id::device::type dev_id; };
 struct device_gui_hide        { id::device::type dev_id; };
 struct device_gui_show        { id::device::type dev_id; };
 struct device_load            { id::device::type dev_id; std::vector<std::byte> state; size_t callback; };
-struct device_save            { id::device::type dev_id; size_t callback; };
+struct device_request_state   { id::device::type dev_id; size_t callback; };
 struct event                  { id::device::type dev_id; scuff::event event; };
 struct get_param_value        { id::device::type dev_id; size_t param_idx; size_t callback; };
 struct get_param_value_text   { id::device::type dev_id; size_t param_idx; double value; size_t callback; };
 struct heartbeat              {}; // Sandbox shuts itself down if this isn't received within a certain time.
-struct panic				  {}; // "Panic" all devices.
+struct panic                  {}; // "Panic" all devices.
+struct set_autosave_interval  { id::device::type dev_id; double interval_in_ms; };
 struct set_render_mode        { render_mode mode; };
 struct set_track_color        { id::device::type dev_id; std::optional<rgba32> color; };
 struct set_track_name         { id::device::type dev_id; std::string name; };
@@ -48,12 +49,13 @@ using msg = std::variant<
 	device_gui_hide,
 	device_gui_show,
 	device_load,
-	device_save,
+	device_request_state,
 	event,
 	get_param_value,
 	get_param_value_text,
 	heartbeat,
 	panic,
+	set_autosave_interval,
 	set_render_mode,
 	set_track_color,
 	set_track_name
@@ -66,6 +68,7 @@ namespace scuff::msg::out {
 // These messages are sent back from a sandbox process to the client.
 
 struct confirm_activated             {};
+struct device_autosave               { id::device::type dev_id; std::vector<std::byte> bytes; };
 struct device_create_fail            { id::device::type dev_id; std::string error; size_t callback; };
 struct device_create_success         { id::device::type dev_id; std::string ports_shmid; size_t callback; };
 struct device_editor_visible_changed { id::device::type dev_id; bool visible; int64_t native_handle; };
@@ -80,10 +83,11 @@ struct report_info                   { std::string text; };
 struct report_warning                { std::string text; };
 struct return_param_value            { double value; size_t callback; };
 struct return_param_value_text       { std::string text; size_t callback; };
-struct return_state                  { std::vector<std::byte> bytes; size_t callback; };
+struct return_requested_state        { std::vector<std::byte> bytes; size_t callback; };
 
 using msg = std::variant<
 	confirm_activated,
+	device_autosave,
 	device_create_fail,
 	device_create_success,
 	device_editor_visible_changed,
@@ -98,7 +102,7 @@ using msg = std::variant<
 	report_warning,
 	return_param_value,
 	return_param_value_text,
-	return_state
+	return_requested_state
 >;
 
 using buf = std::vector<msg>;

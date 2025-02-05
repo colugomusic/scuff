@@ -44,6 +44,12 @@ auto deserialize<scuff::msg::in::event>(std::span<const std::byte>* bytes, scuff
 }
 
 template <> inline
+auto deserialize<scuff::msg::out::device_autosave>(std::span<const std::byte>* bytes, scuff::msg::out::device_autosave* msg) -> void {
+	deserialize(bytes, &msg->dev_id);
+	deserialize(bytes, &msg->bytes);
+}
+
+template <> inline
 auto deserialize<scuff::msg::out::device_create_fail>(std::span<const std::byte>* bytes, scuff::msg::out::device_create_fail* msg) -> void {
 	deserialize(bytes, &msg->dev_id);
 	deserialize(bytes, &msg->error);
@@ -92,7 +98,7 @@ auto deserialize<scuff::msg::out::return_param_value_text>(std::span<const std::
 }
 
 template <> inline
-auto deserialize<scuff::msg::out::return_state>(std::span<const std::byte>* bytes, scuff::msg::out::return_state* msg) -> void {
+auto deserialize<scuff::msg::out::return_requested_state>(std::span<const std::byte>* bytes, scuff::msg::out::return_requested_state* msg) -> void {
 	deserialize(bytes, &msg->bytes);
 	deserialize(bytes, &msg->callback);
 }
@@ -144,6 +150,12 @@ auto serialize<scuff::msg::in::event>(const scuff::msg::in::event& msg, std::vec
 }
 
 template <> inline
+auto serialize<scuff::msg::out::device_autosave>(const scuff::msg::out::device_autosave& msg, std::vector<std::byte>* bytes) -> void {
+	serialize(msg.dev_id, bytes);
+	serialize(msg.bytes, bytes);
+}
+
+template <> inline
 auto serialize<scuff::msg::out::device_create_fail>(const scuff::msg::out::device_create_fail& msg, std::vector<std::byte>* bytes) -> void {
 	serialize(msg.dev_id, bytes);
 	serialize(std::string_view{msg.error}, bytes);
@@ -192,7 +204,7 @@ auto serialize<scuff::msg::out::return_param_value_text>(const scuff::msg::out::
 }
 
 template <> inline
-auto serialize<scuff::msg::out::return_state>(const scuff::msg::out::return_state& msg, std::vector<std::byte>* bytes) -> void {
+auto serialize<scuff::msg::out::return_requested_state>(const scuff::msg::out::return_requested_state& msg, std::vector<std::byte>* bytes) -> void {
 	serialize(msg.bytes, bytes);
 	serialize(msg.callback, bytes);
 }

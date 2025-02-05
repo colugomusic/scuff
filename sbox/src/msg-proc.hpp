@@ -6,11 +6,6 @@
 
 namespace scuff::sbox {
 
-[[nodiscard]] static
-auto get_device_type(const sbox::app& app, id::device dev_id) -> plugin_type {
-	return app.model.read(ez::main).devices.at(dev_id).type;
-}
-
 static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::close_all_editors& msg) -> void {
 	fu::debug_log("INFO: msg::in::close_all_editors");
@@ -91,7 +86,7 @@ static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_load& msg) -> void {
 	fu::debug_log("INFO: msg::in::device_load");
 	const auto dev_id = id::device{msg.dev_id};
-	const auto type = get_device_type(*app, dev_id);
+	const auto type = op::get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
 		if (clap::load(ez::main, app, dev_id, msg.state)) {
 			fu::debug_log("msg out -> device_load_success");
@@ -106,21 +101,16 @@ auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_lo
 }
 
 static
-auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_save& msg) -> void {
-	fu::debug_log("INFO: msg::in::device_save");
-	const auto dev_id = id::device{msg.dev_id};
-	const auto type = get_device_type(*app, dev_id);
-	if (type == plugin_type::clap) {
-		const auto state = clap::save(ez::main, app, dev_id);
-		if (state.empty()) {
-			fu::debug_log("msg out -> report_error");
-			app->msgs_out.lock()->push_back(scuff::msg::out::report_error{"Failed to save device state"});
-			return;
-		}
-		fu::debug_log("msg out -> return_state");
-		app->msgs_out.lock()->push_back(scuff::msg::out::return_state{state, msg.callback});
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::device_request_state& msg) -> void {
+	fu::debug_log("INFO: msg::in::device_request_state");
+	auto state = op::save(ez::main, app, id::device{msg.dev_id});
+	if (state.empty()) {
+		fu::debug_log("msg out -> report_error");
+		app->msgs_out.lock()->push_back(scuff::msg::out::report_error{"Failed to save device state"});
 		return;
 	}
+	fu::debug_log("msg out -> return_requested_state");
+	app->msgs_out.lock()->push_back(scuff::msg::out::return_requested_state{std::move(state), msg.callback});
 }
 
 static
@@ -155,7 +145,7 @@ static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::get_param_value& msg) -> void {
 	fu::debug_log("INFO: msg::in::get_param_value");
 	const auto dev_id = id::device{msg.dev_id};
-	const auto type = get_device_type(*app, dev_id);
+	const auto type = op::get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
 		if (const auto value = clap::get_param_value(ez::main, *app, dev_id, {msg.param_idx})) {
 			fu::debug_log("msg out -> return_param_value");
@@ -169,7 +159,7 @@ static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::get_param_value_text& msg) -> void {
 	fu::debug_log("INFO: msg::in::get_param_value_text");
 	const auto dev_id = id::device{msg.dev_id};
-	const auto type = get_device_type(*app, dev_id);
+	const auto type = op::get_device_type(*app, dev_id);
 	if (type == plugin_type::clap) {
 		const auto text = clap::get_param_value_text(ez::main, *app, dev_id, {msg.param_idx}, msg.value);
 		fu::debug_log("msg out -> return_param_value_text");
@@ -194,6 +184,20 @@ static
 auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::heartbeat& msg) -> void {
 	//app->logger->debug("msg::in::heartbeat:");
 	app->last_heartbeat = std::chrono::steady_clock::now();
+}
+
+static
+auto msg_from_client(ez::main_t, sbox::app* app, const scuff::msg::in::set_autosave_interval& msg) -> void {
+	fu::debug_log("INFO: msg::in::set_autosave_interval");
+	const auto dev_id = id::device{msg.dev_id};
+	app->model.update(ez::main, [dev_id, interval = msg.interval_in_ms](scuff::sbox::model m) {
+		m.devices = m.devices.update_if_exists(dev_id, [interval](scuff::sbox::device dev) {
+			dev.autosave_interval =
+				std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double, std::milli>{interval});
+			return dev;
+		});
+		return m;
+	});
 }
 
 static
