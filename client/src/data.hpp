@@ -78,7 +78,7 @@ struct group_flags {
 };
 
 struct group_service {
-	ui::msg::group_q ui;
+	ui::group_q ui;
 	shm::group shm;
 	signaling::group_local_data signaling;
 	signaling::clientside_group signaler;
@@ -100,8 +100,9 @@ struct device_service {
 	// event is received, to signal that the last saved
 	// state is now dirty.
 	std::atomic_int dirty_marker = 0;
-	std::atomic_int saved_marker = 0;
+	std::atomic_int autosave_marker = 0;
 	std::atomic_int ref_count = 0;
+	std::chrono::steady_clock::time_point next_save = std::chrono::steady_clock::now();
 	shm::device shm;
 };
 
@@ -113,6 +114,8 @@ struct device {
 	plugin_type type;
 	return_create_device_result creation_callback;
 	uint32_t latency = 0;
+	std::chrono::system_clock::duration autosave_interval = std::chrono::milliseconds{AUTOSAVE_MS};
+	return_bytes autosave_callback;
 	void* editor_window_native_handle = nullptr;
 	ext::id::plugin plugin_ext_id;
 	immer::box<std::string> error;
@@ -192,7 +195,7 @@ struct data {
 	std::jthread           scan_thread;
 	std::thread::id        ui_thread_id;
 	std::atomic_bool       scanning = false;
-	ui::msg::general_q     ui;
+	ui::general_q          ui;
 	ez::sync<scuff::model> model;
 };
 

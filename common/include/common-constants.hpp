@@ -7,7 +7,7 @@ namespace scuff {
 static constexpr auto CHANNEL_COUNT         = 2;            // Hard-coded for now just to make things easier.
 static constexpr auto CLAP_EXT              = ".clap";
 static constexpr auto CLAP_SYMBOL_ENTRY     = "clap_entry";
-static constexpr auto DIRTY_DEVICE_MS       = 1000;         // How often to save dirty device states.
+static constexpr auto AUTOSAVE_MS           = 1000;         // How often to save dirty device states.
 static constexpr auto EVENT_PORT_SIZE       = 128;          // Max number of audio events per vector.
 static constexpr auto GC_INTERVAL_MS        = 1000;
 static constexpr auto HEARTBEAT_INTERVAL_MS = 1000;

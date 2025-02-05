@@ -14,6 +14,18 @@ struct device_state {
 	device_state(device_state&& rhs) noexcept = default;
 	device_state& operator=(device_state&& rhs) noexcept = default;
 	device_state(scuff::bytes&& bytes) : body_{std::make_shared<body>()} { body_->bytes = std::move(bytes); }
+	static auto save_async(id::device id) -> device_state { return device_state{id}; }
+	// Will have to block if we are still waiting for the data to be returned.
+	auto get_bytes() const -> const scuff::bytes& {
+		auto lock  = std::unique_lock{body_->mutex};
+		auto ready = [this] { return !body_->awaiting; };
+		if (!ready()) {
+			body_->cv.wait(lock, ready);
+		}
+		return body_->bytes;
+	}
+	explicit operator bool() const { return bool(body_); }
+private:
 	// Asynchronous save
 	device_state(id::device id)
 		: body_{std::make_shared<body>()}
@@ -32,17 +44,6 @@ struct device_state {
 		body_->awaiting = true;
 		scuff::save_async(id, fn);
 	}
-	// Will have to block if we are still waiting for the data to be returned.
-	auto get_bytes() const -> const scuff::bytes& {
-		auto lock  = std::unique_lock{body_->mutex};
-		auto ready = [this] { return !body_->awaiting; };
-		if (!ready()) {
-			body_->cv.wait(lock, ready);
-		}
-		return body_->bytes;
-	}
-	explicit operator bool() const { return bool(body_); }
-private:
 	struct body {
 		std::mutex mutex;
 		std::condition_variable cv;

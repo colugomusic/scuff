@@ -283,7 +283,7 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_load_s
 
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_editor_visible_changed& msg) -> void {
-	ui::send(sbox, ui::msg::device_editor_visible_changed{{msg.dev_id}, msg.visible, msg.native_handle});
+	ui::on_device_editor_visible_changed(poll, sbox, {msg.dev_id}, msg.native_handle);
 }
 
 static
@@ -296,7 +296,7 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_flags&
 		});
 		return m;
 	});
-	ui::send(sbox, ui::msg::device_flags_changed{{msg.dev_id}});
+	ui::on_device_flags_changed(poll, sbox, {msg.dev_id});
 }
 
 static
@@ -319,7 +319,7 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_port_i
 		});
 		return m;
 	});
-	ui::send(sbox, ui::msg::device_ports_changed{{msg.dev_id}});
+	ui::on_device_ports_changed(poll, sbox, {msg.dev_id});
 }
 
 static
@@ -334,22 +334,22 @@ auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::device_param_
 		});
 		return m;
 	});
-	ui::send(sbox, ui::msg::device_params_changed{{msg.dev_id}});
+	ui::on_device_params_changed(poll, sbox, {msg.dev_id});
 }
 
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::report_error& msg) -> void {
-	ui::send(sbox, ui::msg::sbox_error{sbox.id, msg.text});
+	ui::on_sbox_error(poll, sbox, {msg.text});
 }
 
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::report_info& msg) -> void {
-	ui::send(sbox, ui::msg::sbox_info{sbox.id, msg.text});
+	ui::on_sbox_info(poll, sbox, {msg.text});
 }
 
 static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::report_warning& msg) -> void {
-	ui::send(sbox, ui::msg::sbox_warning{sbox.id, msg.text});
+	ui::on_sbox_warning(poll, sbox, {msg.text});
 }
 
 static
@@ -371,7 +371,7 @@ static
 auto msg_from_sandbox(poll_t, const sandbox& sbox, const msg::out::msg& msg) -> void {
 	 const auto proc = [sbox](const auto& msg) -> void { msg_from_sandbox(poll, sbox, msg); };
 	 try                               { fast_visit(proc, msg); }
-	 catch (const std::exception& err) { ui::send(sbox, ui::msg::error{err.what()}); }
+	 catch (const std::exception& err) { ui::error(poll, err.what()); }
 }
 
 static
@@ -397,7 +397,7 @@ auto process_sandbox_messages(poll_t, const sandbox& sbox) -> void {
 		if (const auto group = m.groups.find(sbox.group)) {
 			signaling::unblock_self(group->service->signaler);
 		}
-		ui::send(sbox, ui::msg::sbox_crashed{sbox.id, "Sandbox process stopped unexpectedly."});
+		ui::on_sbox_crashed(poll, sbox, "Sandbox process stopped unexpectedly.");
 		return;
 	}
 	if (sbox.service) {
@@ -430,12 +430,12 @@ auto update_saved_state_with_returned_bytes(ez::nort_t, id::device dev_id, const
 }
 
 static
-auto save_async(ez::nort_t, const scuff::device& dev, return_bytes fn) -> void {
+auto save_async(ez::nort_t, const scuff::device& dev, return_bytes return_bytes_fn) -> void {
 	const auto m = DATA_->model.read(ez::nort);
 	const auto sbox = m.sandboxes.at(dev.sbox);
-	auto wrapper_fn = [dev_id = dev.id, sbox, fn](const scuff::bytes& bytes){
+	auto wrapper_fn = [dev_id = dev.id, sbox, return_bytes_fn](const scuff::bytes& bytes){
 		update_saved_state_with_returned_bytes(ez::nort, dev_id, bytes);
-		ui::send(sbox, ui::msg::return_device_state{bytes, fn});
+		ui::enqueue(ez::nort, sbox, [bytes, return_bytes_fn](const group_ui&){ return_bytes_fn(bytes); });
 	};
 	sbox.service->enqueue(msg::in::device_save{dev.id.value, sbox.service->return_buffers.states.put(wrapper_fn)});
 }
@@ -447,38 +447,48 @@ auto save_async(ez::nort_t, id::device dev_id, return_bytes fn) -> void {
 }
 
 static
-auto save_dirty_device_state(poll_t, const scuff::device& dev) -> void {
-	const auto dirty_marker = dev.service->dirty_marker.load();
-	const auto saved_marker = dev.service->saved_marker.load();
-	if (dirty_marker > saved_marker) {
-		auto with_bytes = [dev_id = dev.id, dirty_marker](const scuff::bytes& bytes){
-			DATA_->model.update(poll, [dev_id, dirty_marker, &bytes](model&& m){
-				if (const auto ptr = m.devices.find(dev_id)) {
-					if (ptr->service->dirty_marker.load() > dirty_marker) {
-						// These bytes are already out of date
-						return m;
-					}
-					auto dev = *ptr;
-					dev.last_saved_state = bytes;
-					dev.service->saved_marker = dirty_marker;
-					m.devices = m.devices.insert(dev);
-				}
-				return m;
-			});
-		};
-		save_async(poll, dev.id, with_bytes);
+auto device_autosave(poll_t, const scuff::device& dev) -> void {
+	const auto now = std::chrono::steady_clock::now();
+	if (now < dev.service->next_save) {
+		return;
 	}
+	dev.service->next_save = now + dev.autosave_interval;
+	const auto dirty_marker    = dev.service->dirty_marker.load();
+	const auto autosave_marker = dev.service->autosave_marker.load();
+	if (dirty_marker <= autosave_marker) {
+		return;
+	}
+	auto with_bytes = [dev_id = dev.id, dirty_marker](const scuff::bytes& bytes){
+		DATA_->model.update(poll, [dev_id, dirty_marker, &bytes](model&& m){
+			if (const auto ptr = m.devices.find(dev_id)) {
+				if (ptr->service->dirty_marker.load() > dirty_marker) {
+					// These bytes are already out of date
+					return m;
+				}
+				auto dev = *ptr;
+				// this already happens in save_async wrapper?
+				//     dev.last_saved_state = bytes;
+				dev.service->autosave_marker = dirty_marker;
+				m.devices = m.devices.insert(dev);
+				if (dev.autosave_callback) {
+					dev.autosave_callback(dev.last_saved_state);
+				}
+			}
+			return m;
+		});
+	};
+	save_async(poll, dev.id, with_bytes);
 }
 
 static
-auto save_dirty_device_states(poll_t) -> void {
+auto device_autosave(poll_t) -> void {
 	try {
 		const auto m = DATA_->model.read(poll);
 		for (const auto& dev : m.devices) {
-			save_dirty_device_state(poll, dev);
+			device_autosave(poll, dev);
 		}
 	} catch (const std::exception& err) {
-		ui::send(ui::msg::error{std::format("save_dirty_device_states: {}", err.what())});
+		ui::error(poll, std::format("device_autosave: {}", err.what()));
 	}
 }
 
@@ -507,7 +517,6 @@ auto poll_thread(std::stop_token stop_token) -> void {
 	auto now     = std::chrono::steady_clock::now();
 	auto next_gc = now + std::chrono::milliseconds{GC_INTERVAL_MS};
 	auto next_hb = now + std::chrono::milliseconds{HEARTBEAT_INTERVAL_MS};
-	auto next_dd = now + std::chrono::milliseconds{DIRTY_DEVICE_MS};
 	while (!stop_token.stop_requested()) {
 		now = std::chrono::steady_clock::now();
 		auto next_poll = now + std::chrono::milliseconds{POLL_INTERVAL_MS};
@@ -520,10 +529,7 @@ auto poll_thread(std::stop_token stop_token) -> void {
 			next_hb = now + std::chrono::milliseconds{HEARTBEAT_INTERVAL_MS};
 		}
 		process_sandbox_messages(poll);
-		if (now > next_dd) {
-			save_dirty_device_states(poll);
-			next_dd = now + std::chrono::milliseconds{DIRTY_DEVICE_MS};
-		}
+		device_autosave(poll);
 		std::this_thread::sleep_until(next_poll);
 	}
 }
@@ -663,7 +669,7 @@ auto create_device_async(ez::nort_t, id::sandbox sbox_id, id::plugin plugin_id, 
 		// The return callback will be called in the poll thread so this wrapper
 		// is to pass it back to the main thread to be called there instead.
 		const auto wrapper = [sbox, return_fn](create_device_result result) {
-			ui::send(sbox, ui::msg::device_create{result, return_fn});
+			ui::enqueue(ez::nort, sbox, [result, return_fn](const group_ui&){ return_fn(result); });
 		};
 		return create_plugin_device_async(std::move(m), dev_id, sbox, m.plugins.at(plugin_id), wrapper);
 	});
@@ -679,7 +685,7 @@ auto create_device_async(ez::nort_t, id::sandbox sbox_id, plugin_type type, ext:
 		// The return callback will be called in the poll thread so this wrapper
 		// is to pass it back to the main thread to be called there instead.
 		const auto wrapper = [sbox, return_fn](create_device_result result) {
-			ui::send(sbox, ui::msg::device_create{result, return_fn});
+			ui::enqueue(ez::nort, sbox, [result, return_fn](const group_ui&){ return_fn(result); });
 		};
 		if (!plugin_id) {
 			return create_unknown_plugin_device(std::move(m), dev_id, sbox, type, plugin_ext_id, wrapper);
@@ -806,7 +812,7 @@ auto duplicate_async(ez::nort_t, id::device src_dev_id, id::sandbox dst_sbox_id,
 	const auto type          = src_dev.type;
 	if (return_to_ui) {
 		return_fn = [dst_sbox, return_fn](create_device_result result) {
-			ui::send(dst_sbox, ui::msg::device_create{result, return_fn});
+			ui::enqueue(ez::nort, dst_sbox, [result, return_fn](const group_ui&){ return_fn(result); });
 		};
 	}
 	if (!plugin) {
@@ -1143,7 +1149,7 @@ auto get_value_async(ez::nort_t, id::device dev_id, idx::param param, return_dou
 	const auto& device  = m.devices.at(dev_id);
 	const auto& sbox    = m.sandboxes.at(device.sbox);
 	const auto wrapper = [sbox, fn](double value) -> void {
-		ui::send(sbox, ui::msg::return_param_value{value, fn});
+		ui::enqueue(ez::nort, sbox, [value, fn](const group_ui&){ fn(value); });
 	};
 	const auto callback = sbox.service->return_buffers.doubles.put(wrapper);
 	sbox.service->enqueue(scuff::msg::in::get_param_value{dev_id.value, param.value, callback});
@@ -1245,7 +1251,7 @@ auto get_value_text_async(ez::nort_t, id::device dev_id, idx::param param, doubl
 	const auto& dev  = m.devices.at(dev_id);
 	const auto& sbox = m.sandboxes.at(dev.sbox);
 	const auto wrapper = [sbox, fn](std::string_view text) -> void {
-		ui::send(sbox, ui::msg::return_param_value_text{std::string{text}, fn});
+		ui::enqueue(ez::nort, sbox, [text = std::string{text}, fn](const group_ui&){ fn(text); });
 	};
 	const auto callback = sbox.service->return_buffers.strings.put(wrapper);
 	sbox.service->enqueue(scuff::msg::in::get_param_value_text{dev_id.value, param.value, value, callback});
@@ -1288,7 +1294,7 @@ auto load_async(ez::nort_t, const model& m, const scuff::device& dev, const scuf
 	// The return callback will be called in the poll thread so this wrapper
 	// is to pass it back to the main thread to be called there instead.
 	const auto wrapper = [sbox, fn](load_device_result result) {
-		ui::send(sbox, ui::msg::device_state_load{result, fn});
+		ui::enqueue(ez::nort, sbox, [result, fn](const group_ui&){ fn(result); });
 	};
 	sbox.service->enqueue(msg::in::device_load{dev.id.value, state, sbox.service->return_buffers.device_load_results.put(fn)});
 }
@@ -1330,12 +1336,12 @@ auto restart(ez::nort_t, id::sandbox sbox, std::string_view sbox_exe_path) -> vo
 		const auto& dev = m.devices.at(dev_id);
 		const auto with_created_device = [m, dev](create_device_result result){
 			const auto sbox = m.sandboxes.at(dev.sbox);
-			ui::send(sbox, ui::msg::device_late_create{result});
+			ui::on_device_late_create(ez::nort, sbox, result);
 			if (result.success) {
 				load_async(ez::nort, m, dev, dev.last_saved_state, [](load_device_result){});
 			}
 			else {
-				ui::send(ui::msg::error{std::format("Failed to restore device {} after sandbox restart.", dev.id.value)});
+				ui::error(ez::nort, std::format("Failed to restore device {} after sandbox restart.", dev.id.value));
 			}
 		};
 		const auto callback = sandbox.service->return_buffers.device_create_results.put(with_created_device);
@@ -1642,11 +1648,6 @@ auto audio_process(const group_process& process) -> void {
 	}
 }
 
-[[nodiscard]] static
-auto api_error(std::string_view what, const std::source_location& location = std::source_location::current()) -> ui::msg::error {
-	return ui::msg::error{std::format("Scuff API error in {}: {}", location.function_name(), what)};
-}
-
 auto init() -> void {
 	try { impl::init(); } SCUFF_EXCEPTION_WRAPPER;
 }
@@ -1884,11 +1885,11 @@ auto push_event(id::device dev, const scuff::event& event) -> void {
 }
 
 auto ui_update(const general_ui& ui) -> void {
-	try { ui::call_callbacks(ui); } SCUFF_EXCEPTION_WRAPPER;
+	try { ui::process(ez::ui, ui); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto ui_update(id::group group_id, const group_ui& ui) -> void {
-	try { ui::call_callbacks(group_id, ui); } SCUFF_EXCEPTION_WRAPPER;
+	try { ui::process(ez::ui, group_id, ui); } SCUFF_EXCEPTION_WRAPPER;
 }
 
 auto panic() -> void {

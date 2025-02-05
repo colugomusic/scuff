@@ -105,7 +105,7 @@ auto read_broken_plugfile(const nlohmann::json& j) -> void {
 		m.plugfiles = m.plugfiles.insert(pf);
 		return m;
 	});
-	ui::send(ui::msg::plugfile_broken{pf.id});
+	ui::on_plugfile_broken(ez::nort, pf.id);
 }
 
 [[nodiscard]] static
@@ -144,7 +144,7 @@ auto read_broken_plugin(const nlohmann::json& j) -> void {
 			m.plugins = m.plugins.insert(plugin);
 			return m;
 		});
-		ui::send(ui::msg::plugin_broken{plugin.id});
+		ui::on_plugin_broken(ez::nort, plugin.id);
 	}
 }
 
@@ -168,7 +168,7 @@ auto read_plugfile(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 		m.plugfiles = m.plugfiles.insert(pf);
 		return m;
 	});
-	ui::send(ui::msg::plugfile_scanned{pf.id});
+	ui::on_plugfile_scanned(ez::nort, pf.id);
 	basio::post(scanner->context, [scanner, path] { async_scan_clap_file(scanner, path); });
 }
 
@@ -203,7 +203,7 @@ auto retry_failed_devices(scuff::plugin plugin, scuff::scan_flags flags) -> void
 					if (cb) {
 						cb(result);
 					}
-					ui::send(group, ui::msg::device_late_create{result});
+					ui::on_device_late_create(ez::nort, group, result);
 				};
 				const auto callback = sbox.service->return_buffers.device_create_results.put(fn);
 				dev.plugin            = plugin.id;
@@ -238,7 +238,7 @@ auto read_plugin(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 			// If it isn't ignore this plugin.
 			auto m = DATA_->model.read(ez::nort);
 			if (const auto existing_plugin = find_existing_plugin(m, id)) {
-				ui::send(ui::msg::scan_warning{std::format("The scanner found multiple plugins with the same id: '{}'", id)});
+				ui::scan_warning(ez::nort, std::format("The scanner found multiple plugins with the same id: '{}'", id));
 				if (version.compare(existing_plugin->version) <= 0) {
 					return;
 				}
@@ -257,7 +257,7 @@ auto read_plugin(scan_::scanner* scanner, const nlohmann::json& j) -> void {
 				m.plugins = m.plugins.insert(plugin);
 				return m;
 			});
-			ui::send(ui::msg::plugin_scanned{plugin.id});
+			ui::on_plugin_scanned(ez::nort, plugin.id);
 			retry_failed_devices(plugin, scanner->flags);
 			return;
 		}
@@ -296,8 +296,7 @@ auto join(const std::vector<std::string>& strings) -> std::string {
 
 static
 auto report_exception(const std::vector<std::string>& args, const std::exception& err) -> void {
-	const auto msg = std::format("{} (args: {})", err.what(), join(args));
-	ui::send(ui::msg::scan_error{msg});
+	ui::scan_error(ez::nort, std::format("{} (args: {})", err.what(), join(args)));
 }
 
 auto read_lines(scan_::scanner* scanner, const std::vector<std::string>& args, scan_::reader reader, const bsys::error_code& ec, size_t bytes_transferred, respond_fn respond) -> void {
@@ -330,8 +329,7 @@ auto read_stdout_lines(scan_::scanner* scanner, const std::vector<std::string>& 
 static
 auto scan_system_for_installed_plugins(scan_::scanner* scanner) -> void {
 	if (!(std::filesystem::exists(scanner->exe_path) && std::filesystem::is_regular_file(scanner->exe_path))) {
-		const auto err = std::format("Scanner executable not found: {}", scanner->exe_path);
-		ui::send(ui::msg::scan_error{err});
+		ui::error(ez::nort, std::format("Scanner executable not found: {}", scanner->exe_path));
 		return;
 	}
 	const auto exe_args = make_exe_args_for_plugin_listing();
@@ -346,12 +344,12 @@ auto thread(std::stop_token token, std::string scan_exe_path, scan_flags flags) 
 	scan_::scanner scanner;
 	scanner.exe_path = scan_exe_path;
 	scanner.flags    = flags;
-	ui::send(ui::msg::scan_started{});
+	ui::scan_started(ez::nort);
 	basio::post(scanner.context, [&scanner] { scan_system_for_installed_plugins(&scanner); });
 	while (!(token.stop_requested() || scanner.context.stopped())) {
 		scanner.context.run_one();
 	}
-	ui::send(ui::msg::scan_complete{});
+	ui::scan_complete(ez::nort);
 }
 
 static
