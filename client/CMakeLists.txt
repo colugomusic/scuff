@@ -1,10 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(scuff-client)
 include(../common/util.cmake)
-set(immer_BUILD_TESTS OFF)
-set(immer_BUILD_EXAMPLES OFF)
-set(immer_BUILD_DOCS OFF)
-set(immer_BUILD_EXTRAS OFF)
 if (APPLE)
 set(Boost_USE_STATIC_LIBS ON)
 endif()
@@ -13,7 +9,6 @@ add_subdirectory_if_target_doesnt_already_exist(common                   scuff::
 add_subdirectory_if_target_doesnt_already_exist(sbox                     scuff::sbox)
 add_subdirectory_if_target_doesnt_already_exist(scan                     scuff::scan)
 add_subdirectory_if_target_doesnt_already_exist(extern/ez                ez::ez)
-add_subdirectory_if_target_doesnt_already_exist(extern/immer             immer)
 add_subdirectory_if_target_doesnt_already_exist(extern/json              nlohmann_json::nlohmann_json)
 add_subdirectory_if_target_doesnt_already_exist(extern/readerwriterqueue readerwriterqueue)
 add_subdirectory_if_target_doesnt_already_exist(extern/PlatformFolders   sago::platform_folders)
@@ -39,6 +34,7 @@ target_include_directories(scuff-client INTERFACE
 target_include_directories(scuff-client PRIVATE
 	include/scuff
 	../extern/clap/include
+	../extern/immer
 	${CMAKE_CURRENT_LIST_DIR}/..
 	${CMAKE_CURRENT_LIST_DIR}/../common
 )
@@ -46,7 +42,6 @@ target_link_libraries(scuff-client PRIVATE
 	Boost::filesystem
 	Boost::headers
 	ez::ez
-	immer
 	nlohmann_json::nlohmann_json
 	readerwriterqueue
 	sago::platform_folders

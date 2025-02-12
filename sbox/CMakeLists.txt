@@ -22,17 +22,12 @@ list (APPEND scuff-sbox-res
 )
 set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)
 set(Boost_USE_STATIC_LIBS ON)
-set(immer_BUILD_TESTS OFF)
-set(immer_BUILD_EXAMPLES OFF)
-set(immer_BUILD_DOCS OFF)
-set(immer_BUILD_EXTRAS OFF)
 find_package(Boost COMPONENTS headers program_options REQUIRED)
 add_subdirectory_if_target_doesnt_already_exist(common                   scuff::common::sources)
 add_subdirectory_if_target_doesnt_already_exist(extern/fulog             fulog::fulog)
 add_subdirectory_if_target_doesnt_already_exist(extern/tga               tga::tga)
 add_subdirectory_if_target_doesnt_already_exist(extern/edwin             edwin::edwin)
 add_subdirectory_if_target_doesnt_already_exist(extern/ez                ez::ez)
-add_subdirectory_if_target_doesnt_already_exist(extern/immer             immer)
 add_subdirectory_if_target_doesnt_already_exist(extern/PlatformFolders   sago::platform_folders)
 add_subdirectory_if_target_doesnt_already_exist(extern/readerwriterqueue readerwriterqueue)
 add_executable(scuff-sbox WIN32 ${scuff-sbox-src})
@@ -41,7 +36,7 @@ include(../extern/cmrc/CMakeRC.cmake)
 cmrc_add_resource_library(scuff-sbox-resources ALIAS scuff::sbox::rc NAMESPACE scuff::sbox ${scuff-sbox-res})
 target_include_directories(scuff-sbox PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/..
-	${clap_SOURCE_DIR}/include
+	../extern/immer
 )
 target_link_libraries(scuff-sbox PRIVATE
 	Boost::headers
@@ -49,7 +44,6 @@ target_link_libraries(scuff-sbox PRIVATE
 	edwin::edwin
 	ez::ez
 	fulog::fulog
-	immer
 	readerwriterqueue
 	sago::platform_folders
 	scuff::common::headers
