@@ -1,31 +1,24 @@
 cmake_minimum_required(VERSION 3.20)
 project(scuff-client)
+include(../common/util.cmake)
 set(immer_BUILD_TESTS OFF)
 set(immer_BUILD_EXAMPLES OFF)
 set(immer_BUILD_DOCS OFF)
 set(immer_BUILD_EXTRAS OFF)
-if (NOT TARGET scuff::common::sources)
-	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../common ${CMAKE_BINARY_DIR}/common)
-endif()
-if (NOT TARGET scuff::sbox)
-	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../sbox ${CMAKE_BINARY_DIR}/sbox)
-endif()
-if (NOT TARGET scuff::scan)
-	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../scan ${CMAKE_BINARY_DIR}/scan)
-endif()
-set(sbox_target_file $<TARGET_FILE:scuff::sbox>)	
-set(scan_target_file $<TARGET_FILE:scuff::scan>)
-include(../CPM.cmake)
 if (APPLE)
 set(Boost_USE_STATIC_LIBS ON)
 endif()
 find_package(Boost 1.86.0 COMPONENTS filesystem headers program_options REQUIRED)
-CPMAddPackage(NAME clap              GITHUB_REPOSITORY free-audio/clap              GIT_TAG c2c1dea DOWNLOAD_ONLY YES)
-CPMAddPackage(NAME ez                GITHUB_REPOSITORY colugomusic/ez               GIT_TAG master                   )
-CPMAddPackage(NAME immer             GITHUB_REPOSITORY arximboldi/immer             GIT_TAG v0.8.1                   )
-CPMAddPackage(NAME json              GITHUB_REPOSITORY nlohmann/json                GIT_TAG v3.11.3                  )
-CPMAddPackage(NAME PlatformFolders   GITHUB_REPOSITORY sago007/PlatformFolders      GIT_TAG 4.2.0                    )
-CPMAddPackage(NAME readerwriterqueue GITHUB_REPOSITORY cameron314/readerwriterqueue GIT_TAG v1.0.6                   )
+add_subdirectory_if_target_doesnt_already_exist(common                   scuff::common::sources)
+add_subdirectory_if_target_doesnt_already_exist(sbox                     scuff::sbox)
+add_subdirectory_if_target_doesnt_already_exist(scan                     scuff::scan)
+add_subdirectory_if_target_doesnt_already_exist(extern/ez                ez::ez)
+add_subdirectory_if_target_doesnt_already_exist(extern/immer             immer)
+add_subdirectory_if_target_doesnt_already_exist(extern/json              nlohmann_json::nlohmann_json)
+add_subdirectory_if_target_doesnt_already_exist(extern/readerwriterqueue readerwriterqueue)
+add_subdirectory_if_target_doesnt_already_exist(extern/PlatformFolders   sago::platform_folders)
+set(sbox_target_file $<TARGET_FILE:scuff::sbox>)	
+set(scan_target_file $<TARGET_FILE:scuff::scan>)
 source_group(common REGULAR_EXPRESSION [[scuff/common/]])
 # Library ######################################################################
 list (APPEND scuff-client-src
@@ -45,7 +38,7 @@ target_include_directories(scuff-client INTERFACE
 )
 target_include_directories(scuff-client PRIVATE
 	include/scuff
-	${clap_SOURCE_DIR}/include
+	../extern/clap/include
 	${CMAKE_CURRENT_LIST_DIR}/..
 	${CMAKE_CURRENT_LIST_DIR}/../common
 )

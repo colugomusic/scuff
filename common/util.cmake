@@ -1,0 +1,5 @@
+function (add_subdirectory_if_target_doesnt_already_exist dir target)
+	if (NOT TARGET ${target})
+		add_subdirectory(../${dir} ${CMAKE_BINARY_DIR}/${dir})
+	endif()
+endfunction()

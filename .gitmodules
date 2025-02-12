@@ -10,3 +10,27 @@
 [submodule "extern/edwin"]
 	path = extern/edwin
 	url = https://github.com/colugomusic/edwin
+[submodule "extern/cmrc"]
+	path = extern/cmrc
+	url = https://github.com/vector-of-bool/cmrc
+[submodule "extern/clap"]
+	path = extern/clap
+	url = https://github.com/free-audio/clap
+[submodule "extern/immer"]
+	path = extern/immer
+	url = https://github.com/arximboldi/immer
+[submodule "extern/PlatformFolders"]
+	path = extern/PlatformFolders
+	url = https://github.com/sago007/PlatformFolders
+[submodule "extern/readerwriterqueue"]
+	path = extern/readerwriterqueue
+	url = https://github.com/cameron314/readerwriterqueue
+[submodule "extern/json"]
+	path = extern/json
+	url = https://github.com/nlohmann/json
+[submodule "extern/flux"]
+	path = extern/flux
+	url = https://github.com/tcbrindle/flux
+[submodule "extern/cs_libguarded"]
+	path = extern/cs_libguarded
+	url = https://github.com/copperspice/cs_libguarded
