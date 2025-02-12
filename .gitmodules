@@ -1,0 +1,12 @@
+[submodule "extern/tga"]
+	path = extern/tga
+	url = https://github.com/colugomusic/tga
+[submodule "extern/fulog"]
+	path = extern/fulog
+	url = https://github.com/colugomusic/fulog
+[submodule "extern/ez"]
+	path = extern/ez
+	url = https://github.com/colugomusic/ez
+[submodule "extern/edwin"]
+	path = extern/edwin
+	url = https://github.com/colugomusic/edwin
