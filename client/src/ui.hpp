@@ -70,7 +70,7 @@ auto invoke_if_not_null(const UI& ui, Fn fn, Args&&... args) -> void {
 
 static
 auto error(ez::nort_t, std::string_view error) -> void {
-	enqueue(ez::nort, [error](const general_ui& ui) {
+	enqueue(ez::nort, [error = std::string{error}](const general_ui& ui) {
 		invoke_if_not_null(ui, &general_ui::on_error, error);
 	});
 }
@@ -148,28 +148,28 @@ auto on_plugin_scanned(ez::nort_t, id::plugin plugin_id) -> void {
 
 static
 auto on_sbox_crashed(ez::nort_t, const sandbox& sbox, std::string_view error) -> void {
-	enqueue(ez::nort, sbox, [sbox_id = sbox.id, error](const group_ui& ui) {
+	enqueue(ez::nort, sbox, [sbox_id = sbox.id, error = std::string{error}](const group_ui& ui) {
 		invoke_if_not_null(ui, &group_ui::on_sbox_crashed, sbox_id, error);
 	});
 }
 
 static
 auto on_sbox_error(ez::nort_t, const sandbox& sbox, std::string_view error) -> void {
-	enqueue(ez::nort, sbox, [sbox_id = sbox.id, error](const group_ui& ui) {
+	enqueue(ez::nort, sbox, [sbox_id = sbox.id, error = std::string{error}](const group_ui& ui) {
 		invoke_if_not_null(ui, &group_ui::on_sbox_error, sbox_id, error);
 	});
 }
 
 static
 auto on_sbox_info(ez::nort_t, const sandbox& sbox, std::string_view info) -> void {
-	enqueue(ez::nort, sbox, [sbox_id = sbox.id, info](const group_ui& ui) {
+	enqueue(ez::nort, sbox, [sbox_id = sbox.id, info = std::string{info}](const group_ui& ui) {
 		invoke_if_not_null(ui, &group_ui::on_sbox_info, sbox_id, info);
 	});
 }
 
 static
 auto on_sbox_warning(ez::nort_t, const sandbox& sbox, std::string_view warning) -> void {
-	enqueue(ez::nort, sbox, [sbox_id = sbox.id, warning](const group_ui& ui) {
+	enqueue(ez::nort, sbox, [sbox_id = sbox.id, warning = std::string{warning}](const group_ui& ui) {
 		invoke_if_not_null(ui, &group_ui::on_sbox_warning, sbox_id, warning);
 	});
 }
@@ -183,7 +183,7 @@ auto scan_complete(ez::nort_t) -> void {
 
 static
 auto scan_error(ez::nort_t, std::string_view msg) -> void {
-	enqueue(ez::nort, [msg](const general_ui& ui) {
+	enqueue(ez::nort, [msg = std::string{msg}](const general_ui& ui) {
 		invoke_if_not_null(ui, &general_ui::on_scan_error, msg);
 	});
 }
@@ -197,7 +197,7 @@ auto scan_started(ez::nort_t) -> void {
 
 static
 auto scan_warning(ez::nort_t, std::string_view msg) -> void {
-	enqueue(ez::nort, [msg](const general_ui& ui) {
+	enqueue(ez::nort, [msg = std::string{msg}](const general_ui& ui) {
 		invoke_if_not_null(ui, &general_ui::on_scan_warning, msg);
 	});
 }
