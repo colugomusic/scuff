@@ -209,7 +209,7 @@ static auto clap_host_request_restart(const clap_host* host) -> void {}
 
 static
 auto scan_clap_plugin(const plugfile& pf, const clap_plugin_factory_t& factory, uint32_t index) -> void {
-	const auto desc = factory.get_plugin_descriptor(&factory, index);
+	const auto desc = stream_redirector::invoke(factory, &clap_plugin_factory_t::get_plugin_descriptor, &factory, index);
 	if (!desc) {
 		return;
 	}
@@ -230,19 +230,19 @@ auto scan_clap_plugin(const plugfile& pf, const clap_plugin_factory_t& factory, 
 	}
 	if (!stream_redirector::invoke(*device, &clap_plugin_t::init, device)) {
 		report_broken_plugin(pf, *desc, "clap_plugin.init failed");
-		device->destroy(device);
+		stream_redirector::invoke(*device, &clap_plugin_t::destroy, device);
 		return;
 	}
 	if (!stream_redirector::invoke(*device, &clap_plugin_t::activate, device, 48000, 32, 4096)) {
 		report_broken_plugin(pf, *desc, "clap_plugin.activate failed");
-		device->destroy(device);
+		stream_redirector::invoke(*device, &clap_plugin_t::destroy, device);
 		return;
 	}
 	const auto has_gui    = scuff::has_gui(*device);
 	const auto has_params = scuff::has_params(*device);
 	report_plugin(pf, *desc, has_gui, has_params);
-	device->deactivate(device);
-	device->destroy(device);
+	stream_redirector::invoke(*device, &clap_plugin_t::deactivate, device);
+	stream_redirector::invoke(*device, &clap_plugin_t::destroy, device);
 }	
 
 static
@@ -252,21 +252,22 @@ auto scan_clap_plugfile_full(const plugfile& pf) -> void {
 		report_broken_plugfile(pf, "Couldn't resolve clap_entry");
 		return;
 	}
-	if (!entry->init(pf.path.string().c_str())) {
+	if (!stream_redirector::invoke(*entry, &clap_plugin_entry_t::init, pf.path.string().c_str())) {
 		report_broken_plugfile(pf, "clap_plugin_entry.init failed");
 		return;
 	}
-	const auto factory = reinterpret_cast<const clap_plugin_factory_t*>(entry->get_factory(CLAP_PLUGIN_FACTORY_ID));
+	const auto factory = reinterpret_cast<const clap_plugin_factory_t*>(
+		stream_redirector::invoke(*entry, &clap_plugin_entry_t::get_factory, CLAP_PLUGIN_FACTORY_ID));
 	if (!factory) {
 		report_broken_plugfile(pf, "clap_plugin_entry.get_factory failed");
-		entry->deinit();
+		stream_redirector::invoke(*entry, &clap_plugin_entry_t::deinit);
 		return;
 	}
-	const auto plugin_count = factory->get_plugin_count(factory);
+	const auto plugin_count = stream_redirector::invoke(*factory, &clap_plugin_factory::get_plugin_count, factory);
 	for (uint32_t i = 0; i < plugin_count; i++) {
 		scan_clap_plugin(pf, *factory, i);
 	}
-	entry->deinit();
+	stream_redirector::invoke(*entry, &clap_plugin_entry_t::deinit);
 }
 
 static
@@ -318,17 +319,13 @@ auto scan_system_for_plugfiles(const options& opts) -> int {
 
 auto main(int argc, const char* argv[]) -> int {
 	auto options = scanner::parse_options(argc, argv);
-	if (!options.file_to_scan.empty()) {
-		return scanner::scan_plugfile_full(options);
-	}
-	else {
-		return scanner::scan_system_for_plugfiles(options);
-	}
+	if (!options.file_to_scan.empty()) { return scanner::scan_plugfile_full(options); }
+	else                               { return scanner::scan_system_for_plugfiles(options); }
 }
 
 } // scanner
 
-#if defined(_WIN32)
+#if defined(_WIN32) && !SCUFF_SCAN_CONSOLE
 #include <Windows.h>
 int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	int argc = __argc;
