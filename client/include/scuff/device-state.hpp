@@ -17,6 +17,9 @@ struct device_state {
 	static auto save_async(id::device id) -> device_state { return device_state{id}; }
 	// Will have to block if we are still waiting for the data to be returned.
 	auto get_bytes() const -> const scuff::bytes& {
+		if (!body_) {
+			throw std::runtime_error("Device state is invalid.");
+		}
 		auto lock  = std::unique_lock{body_->mutex};
 		auto ready = [this] { return !body_->awaiting; };
 		if (!ready()) {
