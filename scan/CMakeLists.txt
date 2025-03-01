@@ -5,9 +5,9 @@ list (APPEND src
 	src/main.cpp
 )
 set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost COMPONENTS headers program_options REQUIRED)
-add_subdirectory_if_target_doesnt_already_exist(common                   scuff::common::sources)
-add_subdirectory_if_target_doesnt_already_exist(extern/json              nlohmann_json::nlohmann_json)
+find_package(Boost REQUIRED COMPONENTS headers program_options CONFIG)
+add_subdirectory_if_target_doesnt_already_exist(common      scuff::common::sources)
+add_subdirectory_if_target_doesnt_already_exist(extern/json nlohmann_json::nlohmann_json)
 add_executable(scuff-scan WIN32 ${src})
 add_executable(scuff::scan ALIAS scuff-scan)
 set_target_properties(scuff-scan PROPERTIES CXX_STANDARD 20)

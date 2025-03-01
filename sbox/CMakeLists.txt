@@ -22,7 +22,7 @@ list (APPEND scuff-sbox-res
 )
 set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)
 set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost COMPONENTS headers program_options REQUIRED)
+find_package(Boost REQUIRED COMPONENTS headers program_options CONFIG)
 add_subdirectory_if_target_doesnt_already_exist(common                   scuff::common::sources)
 add_subdirectory_if_target_doesnt_already_exist(extern/fulog             fulog::fulog)
 add_subdirectory_if_target_doesnt_already_exist(extern/tga               tga::tga)
