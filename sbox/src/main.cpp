@@ -10,7 +10,6 @@
 #include <fulog.hpp>
 #include <iostream>
 #include <optional>
-#include <platform_folders.h>
 #include <string_view>
 #include <tga.h>
 
@@ -242,12 +241,12 @@ namespace boost::interprocess::ipcdetail {
 
 auto get_shared_dir(std::string& shared_dir) -> void  {
 	const auto pid = scuff::sbox::main::app_->options.client_pid;
-	shared_dir = scuff::shm::get_shm_emulation_process_dir(sago::getDataHome(), pid).string();
+	shared_dir = scuff::shm::get_shm_emulation_process_dir(fu::detail::os::get_data_home_dir(), pid).string();
 } 
 
 auto get_shared_dir(std::wstring& shared_dir) -> void {
 	const auto pid = scuff::sbox::main::app_->options.client_pid;
-	shared_dir = scuff::shm::get_shm_emulation_process_dir(sago::getDataHome(), pid).wstring();
+	shared_dir = scuff::shm::get_shm_emulation_process_dir(fu::detail::os::get_data_home_dir(), pid).wstring();
 } 
 
 } // namespace boost::interprocess::ipcdetail

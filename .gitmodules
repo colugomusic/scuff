@@ -19,9 +19,6 @@
 [submodule "extern/immer"]
 	path = extern/immer
 	url = https://github.com/arximboldi/immer
-[submodule "extern/PlatformFolders"]
-	path = extern/PlatformFolders
-	url = https://github.com/sago007/PlatformFolders
 [submodule "extern/readerwriterqueue"]
 	path = extern/readerwriterqueue
 	url = https://github.com/cameron314/readerwriterqueue

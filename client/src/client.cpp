@@ -6,8 +6,8 @@
 #include "managed.hpp"
 #include "scan.hpp"
 #include <clap/plugin-features.h>
+#include <fulog.hpp>
 #include <mutex>
-#include <platform_folders.h>
 #include <readerwriterqueue.h>
 #include <source_location>
 #include <string>
@@ -1531,13 +1531,13 @@ auto unref(ez::nort_t, id::sandbox id) -> void {
 }
 
 auto make_shm_emulation_process_folder() -> void {
-	fs::create_directories(shm::get_shm_emulation_process_dir(sago::getDataHome(), std::to_string(os::get_process_id())));
+	fs::create_directories(shm::get_shm_emulation_process_dir(fu::detail::os::get_data_home_dir(), std::to_string(os::get_process_id())));
 }
 
 auto cleanup_shm_emulation_folders() -> void {
 	try {
-		const auto root_dir = shm::get_shm_emulation_root_dir(sago::getDataHome());
-		const auto proc_dir = shm::get_shm_emulation_process_dir(sago::getDataHome(), std::to_string(os::get_process_id()));
+		const auto root_dir = shm::get_shm_emulation_root_dir(fu::detail::os::get_data_home_dir());
+		const auto proc_dir = shm::get_shm_emulation_process_dir(fu::detail::os::get_data_home_dir(), std::to_string(os::get_process_id()));
 		for (const auto& entry : fs::directory_iterator(root_dir)) {
 			if (entry.is_directory() && entry.path() != proc_dir) {
 				const auto pid_str = entry.path().filename().string();
@@ -1909,11 +1909,11 @@ auto unref(id::sandbox id) -> void {
 namespace boost::interprocess::ipcdetail {
 
 auto get_shared_dir(std::string& shared_dir) -> void  {
-	shared_dir = scuff::shm::get_shm_emulation_process_dir(sago::getDataHome(), std::to_string(scuff::os::get_process_id())).string();
+	shared_dir = scuff::shm::get_shm_emulation_process_dir(fu::detail::os::get_data_home_dir(), std::to_string(scuff::os::get_process_id())).string();
 } 
 
 auto get_shared_dir(std::wstring& shared_dir) -> void {
-	shared_dir = scuff::shm::get_shm_emulation_process_dir(sago::getDataHome(), std::to_string(scuff::os::get_process_id())).wstring();
+	shared_dir = scuff::shm::get_shm_emulation_process_dir(fu::detail::os::get_data_home_dir(), std::to_string(scuff::os::get_process_id())).wstring();
 } 
 
 } // namespace boost::interprocess::ipcdetail

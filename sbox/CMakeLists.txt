@@ -28,7 +28,6 @@ add_subdirectory_if_target_doesnt_already_exist(extern/fulog             fulog::
 add_subdirectory_if_target_doesnt_already_exist(extern/tga               tga::tga)
 add_subdirectory_if_target_doesnt_already_exist(extern/edwin             edwin::edwin)
 add_subdirectory_if_target_doesnt_already_exist(extern/ez                ez::ez)
-add_subdirectory_if_target_doesnt_already_exist(extern/PlatformFolders   sago::platform_folders)
 add_subdirectory_if_target_doesnt_already_exist(extern/readerwriterqueue readerwriterqueue)
 add_executable(scuff-sbox WIN32 ${scuff-sbox-src})
 add_executable(scuff::sbox ALIAS scuff-sbox)
@@ -45,7 +44,6 @@ target_link_libraries(scuff-sbox PRIVATE
 	ez::ez
 	fulog::fulog
 	readerwriterqueue
-	sago::platform_folders
 	scuff::common::headers
 	scuff::common::sources
 	scuff::sbox::rc

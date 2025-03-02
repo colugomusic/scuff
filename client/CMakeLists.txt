@@ -6,12 +6,12 @@ set(Boost_USE_STATIC_LIBS ON)
 endif()
 find_package(Boost 1.86.0 REQUIRED COMPONENTS filesystem headers program_options CONFIG)
 add_subdirectory_if_target_doesnt_already_exist(common                   scuff::common::sources)
+add_subdirectory_if_target_doesnt_already_exist(extern/fulog             fulog::fulog)
 add_subdirectory_if_target_doesnt_already_exist(sbox                     scuff::sbox)
 add_subdirectory_if_target_doesnt_already_exist(scan                     scuff::scan)
 add_subdirectory_if_target_doesnt_already_exist(extern/ez                ez::ez)
 add_subdirectory_if_target_doesnt_already_exist(extern/json              nlohmann_json::nlohmann_json)
 add_subdirectory_if_target_doesnt_already_exist(extern/readerwriterqueue readerwriterqueue)
-add_subdirectory_if_target_doesnt_already_exist(extern/PlatformFolders   sago::platform_folders)
 set(sbox_target_file $<TARGET_FILE:scuff::sbox>)	
 set(scan_target_file $<TARGET_FILE:scuff::scan>)
 source_group(common REGULAR_EXPRESSION [[scuff/common/]])
@@ -42,9 +42,9 @@ target_link_libraries(scuff-client PRIVATE
 	Boost::filesystem
 	Boost::headers
 	ez::ez
+	fulog::fulog
 	nlohmann_json::nlohmann_json
 	readerwriterqueue
-	sago::platform_folders
 	scuff::common::sources
 )
 target_link_libraries(scuff-client PUBLIC
