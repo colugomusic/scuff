@@ -1,6 +1,7 @@
 #pragma once
 
 #include "client.hpp"
+#include <compare>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -27,6 +28,7 @@ struct device_state {
 		}
 		return body_->bytes;
 	}
+	auto operator<=>(const device_state&) const = default;
 	explicit operator bool() const { return bool(body_); }
 private:
 	// Asynchronous save
