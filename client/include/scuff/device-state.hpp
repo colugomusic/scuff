@@ -28,8 +28,10 @@ struct device_state {
 		}
 		return body_->bytes;
 	}
-	auto operator<=>(const device_state&) const = default;
-	explicit operator bool() const { return bool(body_); }
+	auto operator<=>(const device_state& rhs) const {
+		return body_ <=> rhs.body_;
+	}
+	operator bool() const { return bool(body_); }
 private:
 	// Asynchronous save
 	device_state(id::device id)
