@@ -28,7 +28,7 @@ struct device_state {
 		}
 		return body_->bytes;
 	}
-	constexpr auto operator<=>(const device_state& rhs) const {
+	auto operator<=>(const device_state& rhs) const {
 		return body_ <=> rhs.body_;
 	}
 	operator bool() const { return bool(body_); }
