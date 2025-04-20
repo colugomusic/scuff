@@ -47,6 +47,7 @@ struct ref_counted {
 		}
 		return *this;
 	}
+	auto operator==(const ref_counted& rhs) const { return counter_ == rhs.counter_; }
 	[[nodiscard]] auto get_counter() const -> RefCounter { return counter_; }
 private:
 	RefCounter counter_;
@@ -60,6 +61,7 @@ struct ref_counter {
 	auto unref_() const -> void { if (id_) { unref(id_); } }
 	[[nodiscard]] auto id() const -> ID { return id_; }
 	explicit operator bool() const { return bool(id_); }
+	auto operator==(const ref_counter<ID>& rhs) const { return id_ == rhs.id_; }
 private:
 	ID id_;
 };
@@ -70,6 +72,7 @@ struct managed_t {
 	explicit managed_t(ID id) : deleter_{RefCounter{id}} {}
 	[[nodiscard]] auto id() const -> ID { return deleter_.get_counter().id(); }
 	explicit operator bool() const { return bool(deleter_.get_counter()); }
+	auto operator==(const managed_t& rhs) const { return deleter_ == rhs.deleter_; }
 private:
 	ref_counted<RefCounter> deleter_;
 };
