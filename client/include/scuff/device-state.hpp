@@ -16,7 +16,9 @@ struct device_state {
 	device_state& operator=(device_state&& rhs) noexcept = default;
 	device_state(scuff::bytes&& bytes) : body_{std::make_shared<body>()} { body_->bytes = std::move(bytes); }
 	static auto save_async(id::device id) -> device_state { return device_state{id}; }
-	// Will have to block if we are still waiting for the data to be returned.
+	// Will have to block if we are still waiting
+	// for the data to be returned from the sandbox.
+	// To avoid this, check is_ready() first.
 	auto get_bytes() const -> const scuff::bytes& {
 		if (!body_) {
 			throw std::runtime_error("Device state is invalid.");
@@ -27,6 +29,13 @@ struct device_state {
 			body_->cv.wait(lock, ready);
 		}
 		return body_->bytes;
+	}
+	auto is_ready() const -> bool {
+		if (!body_) {
+			return false;
+		}
+		auto lock  = std::unique_lock{body_->mutex};
+		return !body_->awaiting;
 	}
 	auto operator<=>(const device_state& rhs) const {
 		return body_ <=> rhs.body_;
