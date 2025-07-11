@@ -37,8 +37,8 @@ struct device_state {
 		auto lock  = std::unique_lock{body_->mutex};
 		return !body_->awaiting;
 	}
-	auto operator<=>(const device_state& rhs) const {
-		return body_ <=> rhs.body_;
+	friend auto operator==(const device_state& lhs, const device_state& rhs) -> bool {
+		return lhs.body_ == rhs.body_;
 	}
 	operator bool() const { return bool(body_); }
 private:
