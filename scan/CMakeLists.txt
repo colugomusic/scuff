@@ -18,6 +18,11 @@ target_link_libraries(scuff-scan
 	scuff::common::headers
 	scuff::common::sources
 )
+
+if (APPLE)
+	target_link_libraries(scuff-scan "-framework Foundation" "-framework CoreFoundation")
+endif()
+
 target_compile_options(scuff-scan PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
 )
