@@ -1282,7 +1282,7 @@ auto restart(ez::nort_t, id::sandbox sbox, std::string_view sbox_exe_path) -> vo
 	const auto group_shmid   = group.service->shm.seg.id;
 	const auto sandbox_shmid = sandbox.service->get_shmid();
 	const auto exe_args      = make_sbox_exe_args(std::to_string(os::get_process_id()), group_shmid, sandbox_shmid, reinterpret_cast<uint64_t>(group.parent_window_handle));
-	sandbox.service->proc   = bp::child{std::string{sbox_exe_path}, exe_args};
+	sandbox.service->proc   = bp::v1::child{std::string{sbox_exe_path}, exe_args};
 	sandbox.flags.value     |= sandbox_flags::launched;
 	for (const auto dev_id : sandbox.devices) {
 		const auto& dev = m.devices.at(dev_id);
@@ -1390,7 +1390,7 @@ auto create_sandbox(ez::nort_t, id::group group_id, std::string_view sbox_exe_pa
 		const auto group_shmid   = group.service->shm.seg.id;
 		const auto sandbox_shmid = shm::make_sandbox_id(DATA_->instance_id, sbox.id);
 		const auto exe_args      = make_sbox_exe_args(std::to_string(os::get_process_id()), group_shmid, sandbox_shmid, reinterpret_cast<uint64_t>(group.parent_window_handle));
-		auto proc                = bp::child{std::string{sbox_exe_path}, exe_args};
+		auto proc                = bp::v1::child{std::string{sbox_exe_path}, exe_args};
 		if (!proc.running()) {
 			throw std::runtime_error("Failed to launch sandbox process.");
 		}
