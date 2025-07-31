@@ -4,7 +4,6 @@
 #include "common-plugin-type.hpp"
 #include "data.hpp"
 #include "ui.hpp"
-#include <boost/process.hpp>
 #include <deque>
 #include <format>
 #include <nlohmann/json.hpp>
@@ -12,7 +11,7 @@
 #include <immer/vector_transient.hpp>
 #pragma warning(pop)
 
-namespace bp   = boost::process;
+namespace bp   = boost::process::v1;
 namespace bsys = boost::system;
 
 namespace scuff {
