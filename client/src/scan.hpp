@@ -11,7 +11,7 @@
 #include <immer/vector_transient.hpp>
 #pragma warning(pop)
 
-namespace bp   = boost::process::v1;
+namespace bp   = boost::process;
 namespace bsys = boost::system;
 
 namespace scuff {
@@ -22,7 +22,7 @@ struct scanner {
 	std::string_view exe_path;
 	std::deque<basio::streambuf> buffers;
 	std::deque<bp::async_pipe> pipes;
-	std::deque<bp::child> procs;
+	std::deque<bp::v1::child> procs;
 	scan_flags flags;
 };
 
