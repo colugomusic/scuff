@@ -18,7 +18,7 @@ namespace scuff::os {
 
 template<typename... BoostArgs> [[nodiscard]] static
 auto start_child_process(const std::string& exe, const std::vector<std::string>& args, BoostArgs&&... boost_args) -> bp::v1::child {
-	return bp::v1::child{exe, args, bp::windows::hide, std::forward<BoostArgs>(boost_args)...};
+	return bp::v1::child{exe, args, bp::v1::windows::hide, std::forward<BoostArgs>(boost_args)...};
 }
 
 } // scuff::os
