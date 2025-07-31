@@ -56,7 +56,7 @@ auto add_pipe(scan_::scanner* scanner) -> bp::v1::async_pipe* {
 
 static
 auto start_scanner_process(scan_::scanner* scanner, const std::vector<std::string>& args, bp::v1::async_pipe* pipe_out, bp::v1::async_pipe* pipe_err) -> void {
-	scanner->procs.emplace_back(os::start_child_process(scanner->exe_path.data(), args, bp::std_out > *pipe_out, bp::std_err > *pipe_err, scanner->context));
+	scanner->procs.emplace_back(os::start_child_process(scanner->exe_path.data(), args, bp::v1::std_out > *pipe_out, bp::v1::std_err > *pipe_err, scanner->context));
 }
 
 [[nodiscard]] static
