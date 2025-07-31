@@ -4,6 +4,7 @@
 #include "common-plugin-type.hpp"
 #include "data.hpp"
 #include "ui.hpp"
+#include <boost/process/v1/async_pipe.hpp>
 #include <deque>
 #include <format>
 #include <nlohmann/json.hpp>
@@ -21,14 +22,14 @@ struct scanner {
 	basio::io_context context;
 	std::string_view exe_path;
 	std::deque<basio::streambuf> buffers;
-	std::deque<bp::async_pipe> pipes;
+	std::deque<bp::v1::async_pipe> pipes;
 	std::deque<bp::v1::child> procs;
 	scan_flags flags;
 };
 
 struct reader {
 	basio::streambuf* buffer;
-	bp::async_pipe* pipe;
+	bp::v1::async_pipe* pipe;
 };
 
 struct scanner_process {
@@ -48,13 +49,13 @@ auto add_buffer(scan_::scanner* scanner) -> basio::streambuf* {
 }
 
 [[nodiscard]] static
-auto add_pipe(scan_::scanner* scanner) -> bp::async_pipe* {
-	scanner->pipes.push_back(bp::async_pipe{scanner->context});
+auto add_pipe(scan_::scanner* scanner) -> bp::v1::async_pipe* {
+	scanner->pipes.push_back(bp::v1::async_pipe{scanner->context});
 	return &scanner->pipes.back();
 }
 
 static
-auto start_scanner_process(scan_::scanner* scanner, const std::vector<std::string>& args, bp::async_pipe* pipe_out, bp::async_pipe* pipe_err) -> void {
+auto start_scanner_process(scan_::scanner* scanner, const std::vector<std::string>& args, bp::v1::async_pipe* pipe_out, bp::v1::async_pipe* pipe_err) -> void {
 	scanner->procs.emplace_back(os::start_child_process(scanner->exe_path.data(), args, bp::std_out > *pipe_out, bp::std_err > *pipe_err, scanner->context));
 }
 
