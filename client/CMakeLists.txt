@@ -4,7 +4,7 @@ include(../common/util.cmake)
 if (APPLE)
 set(Boost_USE_STATIC_LIBS ON)
 endif()
-find_package(Boost 1.86.0 REQUIRED COMPONENTS filesystem headers program_options CONFIG)
+find_package(Boost 1.86.0 REQUIRED COMPONENTS filesystem headers process program_options CONFIG)
 add_subdirectory_if_target_doesnt_already_exist(common                   scuff::common::sources)
 add_subdirectory_if_target_doesnt_already_exist(extern/fulog             fulog::fulog)
 add_subdirectory_if_target_doesnt_already_exist(sbox                     scuff::sbox)
@@ -41,6 +41,7 @@ target_include_directories(scuff-client PRIVATE
 target_link_libraries(scuff-client PRIVATE
 	Boost::filesystem
 	Boost::headers
+	Boost::process
 	ez::ez
 	fulog::fulog
 	nlohmann_json::nlohmann_json
