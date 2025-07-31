@@ -8,7 +8,7 @@
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
-#include <boost/process.hpp>
+#include <boost/process/v1/child.hpp>
 #include <boost/process/v1/windows.hpp>
 
 namespace bp = boost::process;
@@ -25,7 +25,7 @@ auto start_child_process(const std::string& exe, const std::vector<std::string>&
 #elif defined(__APPLE__)
 
 #include <unistd.h>
-#include <boost/process.hpp>
+#include <boost/process/v1/child.hpp>
 
 namespace bp = boost::process;
 
@@ -41,7 +41,7 @@ auto start_child_process(const std::string& exe, const std::vector<std::string>&
 #elif defined(__linux__)
 
 #include <unistd.h>
-#include <boost/process.hpp>
+#include <boost/process/v1/child.hpp>
 
 namespace bp = boost::process;
 
