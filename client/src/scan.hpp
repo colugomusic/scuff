@@ -5,6 +5,7 @@
 #include "data.hpp"
 #include "ui.hpp"
 #include <boost/process/v1/async_pipe.hpp>
+#include <boost/process/v1/io.hpp>
 #include <deque>
 #include <format>
 #include <nlohmann/json.hpp>
