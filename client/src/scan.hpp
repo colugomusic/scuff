@@ -346,9 +346,17 @@ auto thread(std::stop_token token, std::string scan_exe_path, scan_flags flags) 
 	scanner.exe_path = scan_exe_path;
 	scanner.flags    = flags;
 	ui::scan_started(ez::nort);
-	basio::post(scanner.context, [&scanner] { scan_system_for_installed_plugins(&scanner); });
-	while (!(token.stop_requested() || scanner.context.stopped())) {
-		scanner.context.run_one();
+	try {
+		basio::post(scanner.context, [&scanner] { scan_system_for_installed_plugins(&scanner); });
+		while (!(token.stop_requested() || scanner.context.stopped())) {
+			scanner.context.run_one();
+		}
+	}
+	catch (const std::exception& err) {
+		std::cerr << "Error in scan thread: " << err.what() << std::endl;
+	}
+	catch (...) {
+		std::cerr << "Unknown error in scan thread" << std::endl;
 	}
 	ui::scan_complete(ez::nort);
 }
