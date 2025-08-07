@@ -35,6 +35,7 @@ target_include_directories(scuff-client PRIVATE
 	include/scuff
 	../extern/clap/include
 	../extern/immer
+	../extern/subprocess
 	${CMAKE_CURRENT_LIST_DIR}/..
 	${CMAKE_CURRENT_LIST_DIR}/../common
 )

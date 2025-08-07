@@ -54,4 +54,5 @@ target_include_directories(scuff-common-sources INTERFACE
 	../extern/clap/include
 	../extern/cs_libguarded/src
 	../extern/flux/include
+	../extern/subprocess
 )
