@@ -1,7 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
 project(scuff-sbox)
 include(../common/util.cmake)
-list (APPEND scuff-sbox-src
+set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)
+find_package(Boost REQUIRED COMPONENTS headers program_options CONFIG)
+find_package(edwin REQUIRED CONFIG)
+find_package(ez REQUIRED CONFIG)
+find_package(fulog REQUIRED CONFIG)
+find_package(readerwriterqueue REQUIRED CONFIG)
+find_package(tga REQUIRED CONFIG)
+add_subdirectory_if_target_doesnt_already_exist(common scuff::common::sources)
+add_executable(scuff-sbox WIN32 ${scuff-sbox-src})
+add_executable(scuff::sbox ALIAS scuff-sbox)
+target_sources(scuff-sbox PRIVATE
 	src/audio.hpp
 	src/clap.hpp
 	src/clap-data.hpp
@@ -20,44 +30,25 @@ list (APPEND scuff-sbox-src
 list (APPEND scuff-sbox-res
 	res/clap-icon-256.tga
 )
-set(CMAKE_OSX_ARCHITECTURES arm64;x86_64)
-set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost REQUIRED COMPONENTS headers program_options CONFIG)
-add_subdirectory_if_target_doesnt_already_exist(common                   scuff::common::sources)
-add_subdirectory_if_target_doesnt_already_exist(extern/fulog             fulog::fulog)
-add_subdirectory_if_target_doesnt_already_exist(extern/tga               tga::tga)
-add_subdirectory_if_target_doesnt_already_exist(extern/edwin             edwin::edwin)
-add_subdirectory_if_target_doesnt_already_exist(extern/ez                ez::ez)
-add_subdirectory_if_target_doesnt_already_exist(extern/readerwriterqueue readerwriterqueue)
-add_executable(scuff-sbox WIN32 ${scuff-sbox-src})
-add_executable(scuff::sbox ALIAS scuff-sbox)
-include(../extern/cmrc/CMakeRC.cmake)
+include(../extern/CMakeRC.cmake)
 cmrc_add_resource_library(scuff-sbox-resources ALIAS scuff::sbox::rc NAMESPACE scuff::sbox ${scuff-sbox-res})
-target_include_directories(scuff-sbox PRIVATE
-	${CMAKE_CURRENT_LIST_DIR}/..
-	../extern/immer
-)
+target_include_directories(scuff-sbox PRIVATE ${CMAKE_CURRENT_LIST_DIR}/..)
 target_link_libraries(scuff-sbox PRIVATE
 	Boost::headers
 	Boost::program_options
 	edwin::edwin
 	ez::ez
 	fulog::fulog
+	immer
 	readerwriterqueue
 	scuff::common::headers
 	scuff::common::sources
 	scuff::sbox::rc
-	tga::tga
+	tga::tga-lib
 )
-target_compile_options(scuff-sbox PRIVATE
-	$<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>
-)
-set_target_properties(scuff-sbox-resources PROPERTIES
-	CXX_STANDARD 20
-)
-set_target_properties(scuff-sbox PROPERTIES
-	CXX_STANDARD 20
-)
+target_compile_options(scuff-sbox PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>)
+set_target_properties(scuff-sbox-resources PROPERTIES CXX_STANDARD 20)
+set_target_properties(scuff-sbox PROPERTIES CXX_STANDARD 20)
 target_compile_definitions(scuff-sbox PRIVATE
 	BOOST_INTERPROCESS_SHARED_DIR_FUNC 
 	LOGURU_WITH_STREAMS=1

@@ -1,22 +1,23 @@
 cmake_minimum_required(VERSION 3.20)
 project(scuff-client)
 include(../common/util.cmake)
-if (APPLE)
-set(Boost_USE_STATIC_LIBS ON)
-endif()
 find_package(Boost 1.86.0 REQUIRED COMPONENTS filesystem headers process program_options CONFIG)
-add_subdirectory_if_target_doesnt_already_exist(common                   scuff::common::sources)
-add_subdirectory_if_target_doesnt_already_exist(extern/fulog             fulog::fulog)
-add_subdirectory_if_target_doesnt_already_exist(sbox                     scuff::sbox)
-add_subdirectory_if_target_doesnt_already_exist(scan                     scuff::scan)
-add_subdirectory_if_target_doesnt_already_exist(extern/ez                ez::ez)
-add_subdirectory_if_target_doesnt_already_exist(extern/json              nlohmann_json::nlohmann_json)
-add_subdirectory_if_target_doesnt_already_exist(extern/readerwriterqueue readerwriterqueue)
+find_package(clap REQUIRED CONFIG)
+find_package(ez REQUIRED CONFIG)
+find_package(fulog REQUIRED CONFIG)
+find_package(immer REQUIRED CONFIG)
+find_package(nlohmann_json REQUIRED CONFIG)
+find_package(readerwriterqueue REQUIRED CONFIG)
+add_subdirectory_if_target_doesnt_already_exist(common scuff::common::sources)
+add_subdirectory_if_target_doesnt_already_exist(sbox   scuff::sbox)
+add_subdirectory_if_target_doesnt_already_exist(scan   scuff::scan)
 set(sbox_target_file $<TARGET_FILE:scuff::sbox>)	
 set(scan_target_file $<TARGET_FILE:scuff::scan>)
 source_group(common REGULAR_EXPRESSION [[scuff/common/]])
 # Library ######################################################################
-list (APPEND scuff-client-src
+add_library(scuff-client STATIC ${scuff-client-src})
+add_library(scuff::client ALIAS scuff-client)
+target_sources(scuff-client PRIVATE
 	include/scuff/client.hpp
 	include/scuff/device-state.hpp
 	include/scuff/managed.hpp
@@ -26,15 +27,9 @@ list (APPEND scuff-client-src
 	src/ui.hpp
 	src/ui-types.hpp
 )
-add_library(scuff-client STATIC ${scuff-client-src})
-add_library(scuff::client ALIAS scuff-client)
-target_include_directories(scuff-client INTERFACE
-	include
-)
+target_include_directories(scuff-client INTERFACE include)
 target_include_directories(scuff-client PRIVATE
 	include/scuff
-	../extern/clap/include
-	../extern/immer
 	../extern/subprocess
 	${CMAKE_CURRENT_LIST_DIR}/..
 	${CMAKE_CURRENT_LIST_DIR}/../common
@@ -43,8 +38,10 @@ target_link_libraries(scuff-client PRIVATE
 	Boost::filesystem
 	Boost::headers
 	Boost::process
+	clap
 	ez::ez
 	fulog::fulog
+	immer
 	nlohmann_json::nlohmann_json
 	readerwriterqueue
 	scuff::common::sources

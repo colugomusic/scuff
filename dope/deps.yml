@@ -1,0 +1,35 @@
+- name:                cs_libguarded
+  git:                 https://github.com/colugomusic/cs_libguarded.git
+  find-package-name:   CsLibGuarded
+
+- name:                tga
+  git:                 https://github.com/colugomusic/tga.git
+
+- name:                edwin
+  git:                 https://github.com/colugomusic/edwin.git
+
+- name:                fulog
+  git:                 https://github.com/colugomusic/fulog.git
+
+- name:                ez
+  git:                 https://github.com/colugomusic/ez.git
+
+- name:                clap
+  url:                 https://github.com/free-audio/clap/archive/refs/tags/1.2.6.zip
+
+- name:                immer
+  git:                 https://github.com/arximboldi/immer.git
+  tag:                 v0.8.1
+  cmake-options:       -Dimmer_BUILD_DOCS=OFF -Dimmer_BUILD_TESTS=OFF -Dimmer_BUILD_EXAMPLES=OFF -Dimmer_BUILD_EXTRAS=OFF
+
+- name:                readerwriterqueue
+  url:                 https://github.com/cameron314/readerwriterqueue/archive/refs/tags/v1.0.7.zip
+
+- name:                json
+  url:                 https://github.com/nlohmann/json/archive/refs/tags/v3.12.0.zip
+  cmake-options:       -DJSON_BuildTests=OFF
+  find-package-name:   nlohmann_json
+
+- name:                flux
+  url:                 https://github.com/tcbrindle/flux/archive/refs/tags/v0.4.0.zip
+  cmake-options:       -DFLUX_BUILD_EXAMPLES=OFF -DFLUX_BUILD_TESTS=OFF
