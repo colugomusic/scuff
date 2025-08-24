@@ -64,6 +64,5 @@ target_include_directories(scuff-common-sources INTERFACE
 target_link_libraries(scuff-common-sources INTERFACE
 	clap
 	CsLibGuarded::CsLibGuarded
-	flux
-	subprocess
+	flux::flux
 )

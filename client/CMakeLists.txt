@@ -43,7 +43,7 @@ target_link_libraries(scuff-client PRIVATE
 	fulog::fulog
 	immer
 	nlohmann_json::nlohmann_json
-	readerwriterqueue
+	readerwriterqueue::readerwriterqueue
 	scuff::common::sources
 )
 target_link_libraries(scuff-client PUBLIC

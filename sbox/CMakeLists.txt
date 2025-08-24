@@ -40,7 +40,7 @@ target_link_libraries(scuff-sbox PRIVATE
 	ez::ez
 	fulog::fulog
 	immer
-	readerwriterqueue
+	readerwriterqueue::readerwriterqueue
 	scuff::common::headers
 	scuff::common::sources
 	scuff::sbox::rc
