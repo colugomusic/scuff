@@ -48,9 +48,18 @@ target_link_libraries(scuff-sbox PRIVATE
 )
 target_compile_options(scuff-sbox PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/W3 /WX>)
 set_target_properties(scuff-sbox-resources PROPERTIES CXX_STANDARD 20)
-set_target_properties(scuff-sbox PROPERTIES CXX_STANDARD 20)
+set_target_properties(scuff-sbox PROPERTIES CXX_STANDARD 20 EXPORT_NAME sbox)
 target_compile_definitions(scuff-sbox PRIVATE
 	BOOST_INTERPROCESS_SHARED_DIR_FUNC 
 	LOGURU_WITH_STREAMS=1
 )
 source_group(common REGULAR_EXPRESSION [[scuff/common/]])
+include(CMakePackageConfigHelpers)
+install(TARGETS scuff-sbox EXPORT scuff-sbox-targets DESTINATION bin)
+install(EXPORT scuff-sbox-targets FILE scuff-sbox.cmake NAMESPACE scuff:: DESTINATION lib/cmake/scuff-sbox)
+configure_package_config_file(
+    "${CMAKE_CURRENT_LIST_DIR}/cmake/scuff-sbox-config.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/scuff-sbox-config.cmake"
+    INSTALL_DESTINATION lib/cmake/scuff-sbox
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/scuff-sbox-config.cmake" DESTINATION lib/cmake/scuff-sbox)
