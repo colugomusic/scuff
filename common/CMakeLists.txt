@@ -20,12 +20,23 @@ target_sources(scuff-common-headers INTERFACE
 	BASE_DIRS
 		${CMAKE_CURRENT_LIST_DIR}/include
 	FILES
-		${CMAKE_CURRENT_LIST_DIR}/include/common-clap.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-colors.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-constants.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-device-info.hpp
-		${CMAKE_CURRENT_LIST_DIR}/include/common-event-buffer.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-events.hpp
+		${CMAKE_CURRENT_LIST_DIR}/include/common-param-info.hpp
+		${CMAKE_CURRENT_LIST_DIR}/include/common-plugin-type.hpp
+		${CMAKE_CURRENT_LIST_DIR}/include/common-render-mode.hpp
+		${CMAKE_CURRENT_LIST_DIR}/include/common-types.hpp
+)
+
+target_sources(scuff-common-sources INTERFACE
+	FILE_SET HEADERS
+	BASE_DIRS
+		${CMAKE_CURRENT_LIST_DIR}/include
+	FILES
+		${CMAKE_CURRENT_LIST_DIR}/include/common-clap.hpp
+		${CMAKE_CURRENT_LIST_DIR}/include/common-event-buffer.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-events-clap.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-ipc-event.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-messages.hpp
@@ -33,9 +44,6 @@ target_sources(scuff-common-headers INTERFACE
 		${CMAKE_CURRENT_LIST_DIR}/include/common-os.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-os-child-proc.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-os-dso.hpp
-		${CMAKE_CURRENT_LIST_DIR}/include/common-param-info.hpp
-		${CMAKE_CURRENT_LIST_DIR}/include/common-plugin-type.hpp
-		${CMAKE_CURRENT_LIST_DIR}/include/common-render-mode.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-serialize.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-serialize-events.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-serialize-messages.hpp
@@ -43,19 +51,16 @@ target_sources(scuff-common-headers INTERFACE
 		${CMAKE_CURRENT_LIST_DIR}/include/common-shm.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-signaling.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-slot-buffer.hpp
-		${CMAKE_CURRENT_LIST_DIR}/include/common-types.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-util.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/common-visit.hpp
 		${CMAKE_CURRENT_LIST_DIR}/include/jthread.hpp
-	)
+)
+
 target_sources(scuff-common-sources INTERFACE
 	$<$<BOOL:${APPLE}>:${CMAKE_CURRENT_LIST_DIR}/src/common-os-mac.mm>
 	$<$<BOOL:${LINUX}>:${CMAKE_CURRENT_LIST_DIR}/src/common-os-lin.cpp>
 	$<$<BOOL:${WIN32}>:${CMAKE_CURRENT_LIST_DIR}/src/common-os-win.cpp>
 )
-
-target_compile_features(scuff-common-headers INTERFACE cxx_std_20)
-target_compile_features(scuff-common-sources INTERFACE cxx_std_20)
 
 target_include_directories(scuff-common-sources INTERFACE
 	../extern/subprocess
@@ -66,3 +71,16 @@ target_link_libraries(scuff-common-sources INTERFACE
 	CsLibGuarded::CsLibGuarded
 	flux::flux
 )
+
+set_target_properties(scuff-common-headers PROPERTIES EXPORT_NAME common-headers)
+
+# Install ######################################################################
+include(CMakePackageConfigHelpers)
+install(TARGETS scuff-common-headers EXPORT scuff-common-headers-targets FILE_SET HEADERS DESTINATION include/scuff)
+install(EXPORT scuff-common-headers-targets FILE scuff-common-headers-targets.cmake NAMESPACE scuff:: DESTINATION lib/cmake/scuff-common-headers)
+configure_package_config_file(
+	"${CMAKE_CURRENT_LIST_DIR}/cmake/scuff-common-headers-config.cmake.in"
+	"${CMAKE_CURRENT_BINARY_DIR}/scuff-common-headers-config.cmake"
+	INSTALL_DESTINATION lib/cmake/scuff-common-headers
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/scuff-common-headers-config.cmake" DESTINATION lib/cmake/scuff-common-headers)

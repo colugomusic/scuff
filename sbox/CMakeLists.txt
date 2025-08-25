@@ -56,7 +56,7 @@ target_compile_definitions(scuff-sbox PRIVATE
 source_group(common REGULAR_EXPRESSION [[scuff/common/]])
 include(CMakePackageConfigHelpers)
 install(TARGETS scuff-sbox EXPORT scuff-sbox-targets DESTINATION bin)
-install(EXPORT scuff-sbox-targets FILE scuff-sbox.cmake NAMESPACE scuff:: DESTINATION lib/cmake/scuff-sbox)
+install(EXPORT scuff-sbox-targets FILE scuff-sbox-targets.cmake NAMESPACE scuff:: DESTINATION lib/cmake/scuff-sbox)
 configure_package_config_file(
     "${CMAKE_CURRENT_LIST_DIR}/cmake/scuff-sbox-config.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/scuff-sbox-config.cmake"

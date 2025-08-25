@@ -39,6 +39,9 @@ target_include_directories(scuff-client PRIVATE
 	${CMAKE_CURRENT_LIST_DIR}/..
 	${CMAKE_CURRENT_LIST_DIR}/../common
 )
+target_link_libraries(scuff-client INTERFACE
+	scuff::common::headers
+)
 target_link_libraries(scuff-client PRIVATE
 	$<BUILD_INTERFACE:
 		Boost::filesystem
@@ -51,7 +54,6 @@ target_link_libraries(scuff-client PRIVATE
 		nlohmann_json::nlohmann_json
 		readerwriterqueue::readerwriterqueue
 		scuff::common::sources
-		scuff::common::headers
 	>
 )
 target_compile_features(scuff-client PUBLIC
@@ -63,10 +65,11 @@ target_compile_options(scuff-client PRIVATE
 target_compile_definitions(scuff-client PRIVATE
 	BOOST_INTERPROCESS_SHARED_DIR_FUNC 
 )
+set_target_properties(scuff-client PROPERTIES EXPORT_NAME client)
 # Install ######################################################################
 include(CMakePackageConfigHelpers)
 install(TARGETS scuff-client EXPORT scuff-client-targets FILE_SET HEADERS DESTINATION include/scuff)
-install(EXPORT scuff-client-targets FILE scuff-client-targets.cmake NAMESPACE scuff-client:: DESTINATION lib/cmake/scuff-client)
+install(EXPORT scuff-client-targets FILE scuff-client-targets.cmake NAMESPACE scuff:: DESTINATION lib/cmake/scuff-client)
 configure_package_config_file(
 	"${CMAKE_CURRENT_LIST_DIR}/cmake/scuff-client-config.cmake.in"
 	"${CMAKE_CURRENT_BINARY_DIR}/scuff-client-config.cmake"
