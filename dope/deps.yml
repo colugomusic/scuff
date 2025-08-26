@@ -23,7 +23,7 @@
 - name:                clap
   url:                 https://github.com/free-audio/clap/archive/refs/tags/1.2.6.zip
 
-- name:                immer
+- name:                Immer
   git:                 https://github.com/arximboldi/immer.git
   tag:                 v0.8.1
   cmake-options:       -Dimmer_BUILD_DOCS=OFF -Dimmer_BUILD_TESTS=OFF -Dimmer_BUILD_EXAMPLES=OFF -Dimmer_BUILD_EXTRAS=OFF
