@@ -6,7 +6,7 @@ find_package(Boost 1.86.0 REQUIRED COMPONENTS filesystem headers process program
 find_package(clap REQUIRED CONFIG)
 find_package(ez REQUIRED CONFIG)
 find_package(fulog REQUIRED CONFIG)
-find_package(immer REQUIRED CONFIG)
+find_package(Immer REQUIRED CONFIG)
 find_package(nlohmann_json REQUIRED CONFIG)
 find_package(readerwriterqueue REQUIRED CONFIG)
 add_subdirectory_if_target_doesnt_already_exist(common scuff::common::sources)
